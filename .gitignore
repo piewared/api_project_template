@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.env
+.venv/
+venv/
+ENV/
+
+# Database
+*.db
+*.sqlite3
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Misc
+*.bak
+*.tmp
+
+# FastAPI/SQLModel
+*.lock
+
+# PyCharm
+*.iml
+
+# Test coverage
+htmlcov/
+.coverage
+
+# Others
+*.orig
+
+# Node/npm (if present)
+node_modules/
+

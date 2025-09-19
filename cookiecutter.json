@@ -11,5 +11,5 @@
     "use_postgres": "n",
     "include_example_routes": "y",
     "license": ["MIT", "Apache-2.0", "GPL-3.0", "BSD-3-Clause", "None"],
-    "_template": "https://github.com/YOUR_ORG/fastapi-hexagonal-template"
+    "_template": "https://github.com/piewared/api_project_template"
 }

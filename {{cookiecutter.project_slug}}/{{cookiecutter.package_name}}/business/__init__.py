@@ -1,0 +1,1 @@
+"""Business domain package for {{cookiecutter.project_name}}."""

@@ -10,9 +10,6 @@ from pathlib import Path
 
 def copy_infrastructure():
     """Copy infrastructure code from template's src/ to the generated project."""
-    # When running from cookiecutter, we need to find the template's src directory
-    # The template is temporarily cloned by cookiecutter to a temp directory
-    
     project_root = Path(".").absolute()
     package_name = "{{cookiecutter.package_name}}"
     template_path = "{{cookiecutter._template}}"
@@ -20,55 +17,110 @@ def copy_infrastructure():
     print("🔧 Merging infrastructure with business logic...")
     print(f"📁 Template path: {template_path}")
     print(f"📁 Current directory: {project_root}")
+    print(f"📁 Package name: {package_name}")
     
-    # Strategy 1: Look for environment variables set by cookiecutter
+    # Strategy: Look for the template's src directory in multiple locations
     src_dir = None
-    template_root = None
-    
-    # Try to find the cookiecutter template directory
-    # When cookiecutter runs, the template is cloned to a temporary directory
-    # and the hook runs from within the generated project directory
-    
-    # Look for the template in common locations relative to current project
     search_paths = []
     
-    # Add potential paths based on cookiecutter's typical behavior
+    # Strategy 1: Check if this is a local template (direct path)
+    if not template_path.startswith(('git@', 'https://', 'http://')):
+        local_template = Path(template_path).resolve()
+        if local_template.exists():
+            potential_src = local_template / "src"
+            if potential_src.exists():
+                search_paths.append(potential_src)
+    
+    # Strategy 2: Look in parent directories (cookiecutter's typical behavior)
+    # When cookiecutter clones a remote repo, it usually places it near the output
     current = project_root
-    for _ in range(5):  # Search up to 5 levels up
-        current = current.parent
+    for level in range(6):  # Search up to 6 levels up
+        if level > 0:
+            current = current.parent
+        
+        # Look for src directory directly
         potential_src = current / "src"
         if potential_src.exists():
             search_paths.append(potential_src)
         
-        # Also check for template directory patterns
-        for item in current.iterdir():
-            if item.is_dir() and (item / "src").exists():
-                # Verify this looks like our template by checking structure
-                potential_src = item / "src"
-                if any((potential_src / subdir).exists() for subdir in ['api', 'core', 'runtime']):
+        # Look for template-like directories that contain src
+        try:
+            for item in current.iterdir():
+                if item.is_dir():
+                    potential_src = item / "src"
+                    if potential_src.exists():
+                        search_paths.append(potential_src)
+        except (PermissionError, OSError):
+            continue
+    
+    # Strategy 3: Check common cookiecutter temp directory patterns
+    temp_dirs = ["/tmp", "/var/tmp", Path.home() / ".cache"]
+    for temp_dir in temp_dirs:
+        if Path(temp_dir).exists():
+            try:
+                for item in Path(temp_dir).iterdir():
+                    if item.is_dir() and "cookiecutter" in item.name.lower():
+                        try:
+                            potential_src = item / "src"
+                            if potential_src.exists():
+                                search_paths.append(potential_src)
+                        except (PermissionError, OSError):
+                            continue
+            except (PermissionError, OSError):
+                continue
+    
+    # Strategy 4: Check environment variables
+    for env_var in ['COOKIECUTTER_REPO_DIR', 'TMPDIR', 'TEMP']:
+        if env_var in os.environ:
+            env_path = Path(os.environ[env_var])
+            if env_path.exists():
+                potential_src = env_path / "src"
+                if potential_src.exists():
                     search_paths.append(potential_src)
     
-    # Check each potential src directory
-    for potential_src in search_paths:
-        if potential_src.exists() and potential_src.is_dir():
-            # Verify this is our template by checking for expected structure
-            required_dirs = ['api', 'core', 'runtime']
-            if all((potential_src / subdir).exists() for subdir in required_dirs):
-                src_dir = potential_src
-                template_root = src_dir.parent
-                print(f"📁 Found template src at: {src_dir}")
-                break
+    print(f"🔍 Searching for template src directory...")
+    print(f"   Found {len(search_paths)} potential locations")
+    
+    # Validate each potential src directory
+    for i, potential_src in enumerate(search_paths):
+        print(f"   [{i+1}] Checking: {potential_src}")
+        
+        if not potential_src.exists() or not potential_src.is_dir():
+            print(f"       ❌ Not a directory")
+            continue
+        
+        # Verify this looks like our template by checking for required structure
+        required_dirs = ['api', 'core', 'runtime']
+        missing_dirs = [d for d in required_dirs if not (potential_src / d).exists()]
+        
+        if missing_dirs:
+            print(f"       ❌ Missing required directories: {missing_dirs}")
+            continue
+        
+        # Additional validation: check for key files
+        key_files = [
+            'api/http/app.py',
+            'runtime/db.py',
+            'core/entities/__init__.py'
+        ]
+        missing_files = [f for f in key_files if not (potential_src / f).exists()]
+        
+        if missing_files:
+            print(f"       ❌ Missing key files: {missing_files}")
+            continue
+        
+        print(f"       ✅ Valid template src directory found!")
+        src_dir = potential_src
+        break
     
     if src_dir is None:
         print("❌ Infrastructure source directory not found!")
-        print("❌ Checked locations:")
-        for path in search_paths:
-            print(f"   - {path}")
-        print("❌ This may be due to:")
-        print("   - Template structure changed")
-        print("   - Cookiecutter cleanup behavior")
-        print("   - Different cookiecutter version behavior")
-        print("⚠️  Skipping infrastructure merge - project will still work")
+        print("❌ This means the generated project will be missing core infrastructure.")
+        print("❌ The project may not work correctly without manual setup.")
+        print("⚠️  Possible solutions:")
+        print("   1. Use a local template: cruft create /path/to/local/template")
+        print("   2. Manual setup may be required")
+        print("   3. Check cookiecutter/cruft version compatibility")
         return False
 
     # Copy all infrastructure code to the package

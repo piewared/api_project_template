@@ -120,7 +120,112 @@ your-project/
 └── .env.example             # Environment template
 ```
 
-## 📚 Documentation
+## �️ Roadmap & Planned Features
+
+We're continuously improving this template to provide the most comprehensive FastAPI development experience. Here's what's coming:
+
+### 🔐 Enhanced Security & Authentication
+- [ ] **Multi-Factor Authentication (MFA)** - TOTP and SMS-based 2FA support
+- [ ] **OAuth2 Provider Templates** - Ready-to-use integration with Google, GitHub, Microsoft
+- [ ] **API Key Management** - Built-in API key generation, rotation, and scoping
+- [ ] **Advanced RBAC** - Fine-grained permissions with resource-based access control
+- [ ] **Security Audit Logging** - Comprehensive audit trails for compliance requirements
+- [ ] **Rate Limiting Strategies** - Multiple rate limiting algorithms (sliding window, token bucket)
+
+### 📊 Observability & Monitoring
+- [ ] **OpenTelemetry Integration** - Distributed tracing with Jaeger/Zipkin support
+- [ ] **Prometheus Metrics** - Built-in application and business metrics collection
+- [ ] **Health Check Dashboard** - Advanced health monitoring with dependency checks
+- [ ] **Error Tracking** - Integration with Sentry, Rollbar, or Bugsnag
+- [ ] **Performance Profiling** - Built-in APM with request profiling capabilities
+- [ ] **Custom Alerting** - Configurable alerts for critical application events
+
+### 🗄️ Database & Storage Enhancements
+- [ ] **Multi-Database Support** - MongoDB, DynamoDB, and other NoSQL options
+- [ ] **Database Migrations** - Alembic integration with automated migration workflows
+- [ ] **Connection Pooling** - Advanced connection pool management and monitoring
+- [ ] **Read/Write Splitting** - Automatic routing for read replicas and write masters
+- [ ] **Caching Strategies** - Redis caching patterns with cache-aside, write-through
+- [ ] **Event Sourcing Support** - Event store integration for audit and replay capabilities
+
+### 🚀 Performance & Scalability
+- [ ] **Async Task Processing** - Celery/RQ integration for background job processing
+- [ ] **GraphQL Support** - Strawberry GraphQL integration with the existing REST API
+- [ ] **WebSocket Templates** - Real-time communication patterns and connection management
+- [ ] **API Gateway Integration** - Kong, Ambassador, or Istio service mesh templates
+- [ ] **Auto-scaling Configs** - Kubernetes HPA and Docker Swarm scaling configurations
+- [ ] **Circuit Breaker Pattern** - Resilient external service integration
+
+### 🧪 Testing & Quality Assurance
+- [ ] **Contract Testing** - Pact-based consumer-driven contract testing
+- [ ] **Load Testing Templates** - Locust and Artillery test scenarios
+- [ ] **Mutation Testing** - Code quality validation with mutation testing tools
+- [ ] **Security Testing** - OWASP ZAP integration for automated security scanning
+- [ ] **Property-Based Testing** - Hypothesis integration for robust test generation
+- [ ] **Visual Regression Testing** - Automated UI testing for API documentation
+
+### 🏗️ Development Experience
+- [ ] **IDE Integration** - VS Code/PyCharm project templates and debugging configs
+- [ ] **Hot Reloading** - Advanced development server with instant API updates
+- [ ] **API Versioning** - Built-in versioning strategies (header, URL, content negotiation)
+- [ ] **Documentation Generation** - Enhanced OpenAPI docs with examples and tutorials
+- [ ] **CLI Tools** - Project-specific CLI for common development tasks
+- [ ] **Template Customization** - Plugin system for extending template functionality
+
+### ☁️ Cloud & Deployment
+- [ ] **Cloud Provider Templates** - AWS, GCP, Azure deployment configurations
+- [ ] **Serverless Support** - AWS Lambda, Google Cloud Functions deployment options
+- [ ] **Container Orchestration** - Advanced Kubernetes manifests with Helm charts
+- [ ] **Infrastructure as Code** - Terraform/Pulumi modules for complete stack deployment
+- [ ] **CI/CD Pipelines** - GitHub Actions, GitLab CI, Jenkins templates
+- [ ] **Blue-Green Deployments** - Zero-downtime deployment strategies
+
+### 🔌 Integration & Ecosystem
+- [ ] **Message Queue Integration** - RabbitMQ, Apache Kafka, AWS SQS templates
+- [ ] **External API Clients** - Type-safe client generation for common APIs
+- [ ] **Webhook Handlers** - Secure webhook processing with signature validation
+- [ ] **File Upload/Storage** - S3, MinIO, local storage with image processing
+- [ ] **Email Service Integration** - SendGrid, Mailgun, AWS SES template configurations
+- [ ] **Search Integration** - Elasticsearch, Solr, or Algolia search capabilities
+
+### 📱 API Client Generation
+- [ ] **TypeScript/JavaScript SDK** - Auto-generated client libraries
+- [ ] **Python Client Library** - Type-safe Python SDK for API consumption
+- [ ] **Mobile SDK Templates** - React Native, Flutter API client generation
+- [ ] **Postman Collections** - Auto-generated API testing collections
+- [ ] **OpenAPI Generator Integration** - Multi-language client generation
+
+### 🎯 Specialized Templates
+- [ ] **E-commerce APIs** - Product catalog, cart, payment processing templates
+- [ ] **Content Management** - CMS APIs with media handling and content workflows
+- [ ] **IoT Data Processing** - Time-series data ingestion and processing patterns
+- [ ] **Financial Services** - Payment processing, compliance, and audit-ready templates
+- [ ] **Healthcare APIs** - HIPAA-compliant templates with data privacy features
+- [ ] **Real-time Analytics** - Stream processing and dashboard APIs
+
+### 📈 Business Intelligence
+- [ ] **Analytics Dashboard** - Built-in analytics for API usage and performance
+- [ ] **A/B Testing Framework** - Feature flag management and experiment tracking
+- [ ] **User Behavior Tracking** - Anonymous usage analytics and insights
+- [ ] **Business Metrics** - Automated reporting for KPIs and business metrics
+- [ ] **Data Export APIs** - Scheduled data exports in multiple formats
+
+## 🤝 Contributing to the Roadmap
+
+We welcome community input on our roadmap! Here's how you can contribute:
+
+- **🗳️ Vote on Features**: Comment on [GitHub Issues](https://github.com/piewared/api_template/issues) with 👍 for features you want
+- **💡 Suggest Features**: Open a feature request with detailed use cases
+- **🔧 Submit PRs**: Help implement roadmap items or propose new ones
+- **📖 Documentation**: Help improve docs and examples for new features
+- **🧪 Beta Testing**: Test pre-release features and provide feedback
+
+### Priority Levels
+- **🔥 High Priority**: Core functionality improvements (Security, Performance, Testing)
+- **⭐ Medium Priority**: Developer experience enhancements (IDE, CLI, Documentation)
+- **💡 Future Exploration**: Advanced features (Specialized templates, BI features)
+
+## �📚 Documentation
 
 - **[Features](FEATURES.md)** - Complete feature list and capabilities
 - **[Architecture](ARCHITECTURE.md)** - Hexagonal architecture details and design patterns

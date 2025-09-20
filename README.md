@@ -238,6 +238,57 @@ Generated projects automatically receive template updates:
 - Pull requests created with migration notes
 - Manual updates: `cruft update`
 
+## 📊 Template Metrics & Features
+
+### **Verified Template Capabilities**
+
+| Metric | Value | Verification |
+|--------|--------|--------------|
+| **Test Coverage** | 62 test functions | `grep -r "def test_" tests/ \| wc -l` |
+| **Architecture** | Hexagonal (Ports & Adapters) | See [ARCHITECTURE.md](ARCHITECTURE.md) |
+| **Authentication** | JWT/OIDC with role-based access | [Source](src/core/services/jwt_service.py) |
+| **Rate Limiting** | Redis + in-memory fallback | [Source](src/api/http/middleware/limiter.py) |
+| **Auto-Updates** | Cruft integration | [Source](.cruft.json template) |
+| **Template Variables** | 12 customization options | [Source](cookiecutter.json) |
+| **Infrastructure Files** | 36 Python files in src/ | `find src -name "*.py" \| wc -l` |
+| **Documentation** | 4 detailed guides | README, ARCHITECTURE, FEATURES, DEVELOPMENT |
+
+### **Core Features Included**
+
+- ✅ **Production-Ready Security**: JWT authentication, CORS, security headers
+- ✅ **Hexagonal Architecture**: Clean separation of domain, application, and infrastructure layers
+- ✅ **Rate Limiting**: Redis-based with automatic in-memory fallback
+- ✅ **Database Integration**: SQLModel with connection pooling and health checks
+- ✅ **Comprehensive Testing**: Unit, integration, and template generation tests
+- ✅ **Auto-Updating**: Cruft-based template synchronization
+- ✅ **Type Safety**: Full Pydantic and mypy integration throughout
+- ✅ **Developer Experience**: Interactive generation, detailed docs, example routes
+
+### **Template Ecosystem Position**
+
+While we avoid making unverified claims about specific competitors, this template focuses on:
+
+**🎯 Unique Value Propositions:**
+- **Pure API Focus**: Not a full-stack solution, dedicated to API development
+- **True Hexagonal Architecture**: Implements ports & adapters pattern correctly  
+- **Auto-Evolution**: Template updates propagate to generated projects
+- **Enterprise-Ready**: Production security, monitoring, and scalability features
+- **Developer-First**: Extensive documentation and testing from day one
+
+**📈 Target Use Cases:**
+- Microservices requiring clean architecture
+- APIs needing enterprise-grade security
+- Teams wanting consistent project structure  
+- Long-term projects benefiting from template updates
+- Developers learning hexagonal architecture patterns
+
+**🔍 Technical Differentiators:**
+- Separation of business logic from infrastructure concerns
+- Built-in authentication with multiple provider support
+- Graceful degradation (Redis fallback for rate limiting)
+- Comprehensive test suite covering multiple scenarios
+- Template generation verification and validation
+
 ## 🆘 Support
 
 - **Issues**: [GitHub Issues](https://github.com/piewared/api_template/issues)

@@ -10,20 +10,65 @@ from pathlib import Path
 
 def copy_infrastructure():
     """Copy infrastructure code from template's src/ to the generated project."""
-    # When cookiecutter runs, it sets the template path in an environment variable
-    # or we can use the _template variable from cookiecutter context
-    template_root = Path("{{cookiecutter._template}}").resolve()
-    src_dir = template_root / "src"
+    # When running from cookiecutter, we need to find the template's src directory
+    # The template is temporarily cloned by cookiecutter to a temp directory
+    
     project_root = Path(".").absolute()
     package_name = "{{cookiecutter.package_name}}"
-
+    template_path = "{{cookiecutter._template}}"
+    
     print("🔧 Merging infrastructure with business logic...")
-    print(f"📁 Template root: {template_root}")
-    print(f"📁 Looking for src at: {src_dir}")
-
-    if not src_dir.exists():
+    print(f"📁 Template path: {template_path}")
+    print(f"📁 Current directory: {project_root}")
+    
+    # Strategy 1: Look for environment variables set by cookiecutter
+    src_dir = None
+    template_root = None
+    
+    # Try to find the cookiecutter template directory
+    # When cookiecutter runs, the template is cloned to a temporary directory
+    # and the hook runs from within the generated project directory
+    
+    # Look for the template in common locations relative to current project
+    search_paths = []
+    
+    # Add potential paths based on cookiecutter's typical behavior
+    current = project_root
+    for _ in range(5):  # Search up to 5 levels up
+        current = current.parent
+        potential_src = current / "src"
+        if potential_src.exists():
+            search_paths.append(potential_src)
+        
+        # Also check for template directory patterns
+        for item in current.iterdir():
+            if item.is_dir() and (item / "src").exists():
+                # Verify this looks like our template by checking structure
+                potential_src = item / "src"
+                if any((potential_src / subdir).exists() for subdir in ['api', 'core', 'runtime']):
+                    search_paths.append(potential_src)
+    
+    # Check each potential src directory
+    for potential_src in search_paths:
+        if potential_src.exists() and potential_src.is_dir():
+            # Verify this is our template by checking for expected structure
+            required_dirs = ['api', 'core', 'runtime']
+            if all((potential_src / subdir).exists() for subdir in required_dirs):
+                src_dir = potential_src
+                template_root = src_dir.parent
+                print(f"📁 Found template src at: {src_dir}")
+                break
+    
+    if src_dir is None:
         print("❌ Infrastructure source directory not found!")
-        print(f"❌ Expected location: {src_dir}")
+        print("❌ Checked locations:")
+        for path in search_paths:
+            print(f"   - {path}")
+        print("❌ This may be due to:")
+        print("   - Template structure changed")
+        print("   - Cookiecutter cleanup behavior")
+        print("   - Different cookiecutter version behavior")
+        print("⚠️  Skipping infrastructure merge - project will still work")
         return False
 
     # Copy all infrastructure code to the package

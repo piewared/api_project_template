@@ -43,6 +43,10 @@ init-db = "generator.runtime.init_db:init_db"
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+exclude = [
+    "*/cookiecutter.*/*",
+    "*cookiecutter*",
+]
 
 [tool.ruff.lint]
 select = [
@@ -75,6 +79,9 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_return_any = true
 strict_optional = true
+exclude = [
+    ".*cookiecutter.*",
+]
 
 [[tool.mypy.overrides]]
 module = "tests.*"

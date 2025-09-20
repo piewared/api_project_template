@@ -51,3 +51,6 @@ htmlcov/
 # Node/npm (if present)
 node_modules/
 
+# Cookiecutter template directory
+{{cookiecutter.project_slug}}/
+

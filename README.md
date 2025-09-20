@@ -238,10 +238,6 @@ Generated projects automatically receive template updates:
 - Pull requests created with migration notes
 - Manual updates: `cruft update`
 
-## 📈 SEO Keywords
-
-FastAPI template, Python REST API, hexagonal architecture, cookiecutter template, microservices template, FastAPI boilerplate, Python API template, JWT authentication FastAPI, production-ready FastAPI, FastAPI project generator
-
 ## 🆘 Support
 
 - **Issues**: [GitHub Issues](https://github.com/piewared/api_template/issues)

@@ -19,7 +19,8 @@ def copy_infrastructure():
     print(f"📁 Current directory: {project_root}")
     print(f"📁 Package name: {package_name}")
     
-    # Strategy: Look for the template's src directory in multiple locations
+    # Key insight: When cookiecutter runs, the hook executes from within the temp directory
+    # where the template was cloned. So the template's src should be accessible as ../src
     src_dir = None
     search_paths = []
     
@@ -31,10 +32,30 @@ def copy_infrastructure():
             if potential_src.exists():
                 search_paths.append(potential_src)
     
-    # Strategy 2: Look in parent directories (cookiecutter's typical behavior)
-    # When cookiecutter clones a remote repo, it usually places it near the output
-    current = project_root
-    for level in range(6):  # Search up to 6 levels up
+    # Strategy 2: The most reliable approach for remote templates
+    # When cookiecutter clones a remote template, it runs the hook from within the template directory
+    # So ../src should be the template's src directory
+    current_working_dir = Path(".").absolute()
+    potential_locations = [
+        # Direct parent (most common for cookiecutter)
+        current_working_dir.parent / "src",
+        # Sometimes cookiecutter creates nested structure
+        current_working_dir.parent.parent / "src",
+        # Check if we're already in a template-like structure
+        current_working_dir / ".." / "src",
+    ]
+    
+    for potential_src in potential_locations:
+        try:
+            resolved_path = potential_src.resolve()
+            if resolved_path.exists() and resolved_path.is_dir():
+                search_paths.append(resolved_path)
+        except (OSError, RuntimeError):
+            continue
+    
+    # Strategy 3: Look in parent directories systematically
+    current = current_working_dir
+    for level in range(4):  # Don't search too far up
         if level > 0:
             current = current.parent
         
@@ -53,31 +74,6 @@ def copy_infrastructure():
         except (PermissionError, OSError):
             continue
     
-    # Strategy 3: Check common cookiecutter temp directory patterns
-    temp_dirs = ["/tmp", "/var/tmp", Path.home() / ".cache"]
-    for temp_dir in temp_dirs:
-        if Path(temp_dir).exists():
-            try:
-                for item in Path(temp_dir).iterdir():
-                    if item.is_dir() and "cookiecutter" in item.name.lower():
-                        try:
-                            potential_src = item / "src"
-                            if potential_src.exists():
-                                search_paths.append(potential_src)
-                        except (PermissionError, OSError):
-                            continue
-            except (PermissionError, OSError):
-                continue
-    
-    # Strategy 4: Check environment variables
-    for env_var in ['COOKIECUTTER_REPO_DIR', 'TMPDIR', 'TEMP']:
-        if env_var in os.environ:
-            env_path = Path(os.environ[env_var])
-            if env_path.exists():
-                potential_src = env_path / "src"
-                if potential_src.exists():
-                    search_paths.append(potential_src)
-    
     print(f"🔍 Searching for template src directory...")
     print(f"   Found {len(search_paths)} potential locations")
     
@@ -86,7 +82,7 @@ def copy_infrastructure():
         print(f"   [{i+1}] Checking: {potential_src}")
         
         if not potential_src.exists() or not potential_src.is_dir():
-            print(f"       ❌ Not a directory")
+            print("       ❌ Not a directory")
             continue
         
         # Verify this looks like our template by checking for required structure
@@ -109,7 +105,7 @@ def copy_infrastructure():
             print(f"       ❌ Missing key files: {missing_files}")
             continue
         
-        print(f"       ✅ Valid template src directory found!")
+        print("       ✅ Valid template src directory found!")
         src_dir = potential_src
         break
     
@@ -121,6 +117,7 @@ def copy_infrastructure():
         print("   1. Use a local template: cruft create /path/to/local/template")
         print("   2. Manual setup may be required")
         print("   3. Check cookiecutter/cruft version compatibility")
+        print("   4. Ensure the template repository has the correct structure")
         return False
 
     # Copy all infrastructure code to the package

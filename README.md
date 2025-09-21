@@ -1,6 +1,54 @@
 # FastAPI Hexagonal Architecture Template
 
+⚠️ **Alpha Release**: This project is currently in alpha. While functional and tested, APIs and structure may change. Use in production at your own discretion and expect potential breaking changes.
+
 A modern, production-ready [Cookiecutter](https://cookiecutter.readthedocs.io/) template for creating FastAPI applications with hexagonal (ports and adapters) architecture. Build scalable REST APIs with built-in authentication, authorization, rate limiting, and automated template updates.
+
+## 🎯 Motivation
+
+This project exists to **accelerate the development of production-enabled microservices and SaaS APIs** by providing all the necessary primitives, components, and architectural templates that adhere to industry best practices.
+
+### 🎯 Intended Use Cases
+
+This template is specifically designed for:
+
+✅ **User-to-Service Microservices** - Backend APIs that serve client applications (web, mobile, desktop)  
+✅ **SaaS Backend Development** - Multi-tenant service APIs with authentication and rate limiting  
+✅ **REST API Services** - Standalone API services that integrate with existing systems  
+✅ **Microservice Architecture** - Individual services within a larger distributed system  
+✅ **Backend-as-a-Service** - APIs that provide core functionality to frontend applications  
+
+### ❌ What This Template Is NOT
+
+This template is **not intended** for:
+
+❌ **Full-Stack Applications** - Does not include frontend frameworks, UI components, or client-side code  
+❌ **Monolithic Web Applications** - Not designed for traditional server-rendered web apps  
+❌ **Turnkey Complete Solutions** - Requires integration with your chosen frontend and infrastructure  
+❌ **All-in-One Platforms** - Focuses purely on API development, not complete application stacks  
+
+**Focus**: This template excels at creating the **backend API layer** that powers modern applications, leaving frontend technology choices and infrastructure decisions to you.
+
+### The Problem This Template Solves
+
+Building production-ready APIs from scratch involves solving the same challenges repeatedly:
+- **Authentication & Authorization**: JWT handling, role-based access control, security middleware
+- **Architectural Decisions**: Clean separation of concerns, testable code structure
+- **Infrastructure Integration**: Database connections, caching, rate limiting, health checks
+- **Developer Experience**: Type safety, testing frameworks, documentation generation
+- **Operational Readiness**: Monitoring, logging, error handling, graceful degradation
+
+### The Solution Provided
+
+Instead of rebuilding these foundational elements for every project, this template provides:
+
+✅ **Complete API Primitives** - Authentication, rate limiting, database integration, and security middleware  
+✅ **Hexagonal Architecture** - Clean, testable code structure with proper separation of concerns  
+✅ **Production Components** - Health checks, error handling, logging, and monitoring hooks  
+✅ **Best Practices** - Type safety, comprehensive testing, documentation, and CI/CD pipelines  
+✅ **Developer Velocity** - Skip the boilerplate and focus on your unique business logic  
+
+**Result**: Transform weeks of setup and architectural decisions into minutes of configuration, allowing you to focus on building features that matter to your users.
 
 ## 🎯 Why Use This Template?
 
@@ -238,56 +286,6 @@ Generated projects automatically receive template updates:
 - Pull requests created with migration notes
 - Manual updates: `cruft update`
 
-## 📊 Template Metrics & Features
-
-### **Verified Template Capabilities**
-
-| Metric | Value | Verification |
-|--------|--------|--------------|
-| **Test Coverage** | 62 test functions | `grep -r "def test_" tests/ \| wc -l` |
-| **Architecture** | Hexagonal (Ports & Adapters) | See [ARCHITECTURE.md](ARCHITECTURE.md) |
-| **Authentication** | JWT/OIDC with role-based access | [Source](src/core/services/jwt_service.py) |
-| **Rate Limiting** | Redis + in-memory fallback | [Source](src/api/http/middleware/limiter.py) |
-| **Auto-Updates** | Cruft integration | [Source](.cruft.json template) |
-| **Template Variables** | 12 customization options | [Source](cookiecutter.json) |
-| **Infrastructure Files** | 36 Python files in src/ | `find src -name "*.py" \| wc -l` |
-| **Documentation** | 4 detailed guides | README, ARCHITECTURE, FEATURES, DEVELOPMENT |
-
-### **Core Features Included**
-
-- ✅ **Production-Ready Security**: JWT authentication, CORS, security headers
-- ✅ **Hexagonal Architecture**: Clean separation of domain, application, and infrastructure layers
-- ✅ **Rate Limiting**: Redis-based with automatic in-memory fallback
-- ✅ **Database Integration**: SQLModel with connection pooling and health checks
-- ✅ **Comprehensive Testing**: Unit, integration, and template generation tests
-- ✅ **Auto-Updating**: Cruft-based template synchronization
-- ✅ **Type Safety**: Full Pydantic and mypy integration throughout
-- ✅ **Developer Experience**: Interactive generation, detailed docs, example routes
-
-### **Template Ecosystem Position**
-
-While we avoid making unverified claims about specific competitors, this template focuses on:
-
-**🎯 Unique Value Propositions:**
-- **Pure API Focus**: Not a full-stack solution, dedicated to API development
-- **True Hexagonal Architecture**: Implements ports & adapters pattern correctly  
-- **Auto-Evolution**: Template updates propagate to generated projects
-- **Enterprise-Ready**: Production security, monitoring, and scalability features
-- **Developer-First**: Extensive documentation and testing from day one
-
-**📈 Target Use Cases:**
-- Microservices requiring clean architecture
-- APIs needing enterprise-grade security
-- Teams wanting consistent project structure  
-- Long-term projects benefiting from template updates
-- Developers learning hexagonal architecture patterns
-
-**🔍 Technical Differentiators:**
-- Separation of business logic from infrastructure concerns
-- Built-in authentication with multiple provider support
-- Graceful degradation (Redis fallback for rate limiting)
-- Comprehensive test suite covering multiple scenarios
-- Template generation verification and validation
 
 ## 🆘 Support
 

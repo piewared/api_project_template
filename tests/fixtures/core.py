@@ -15,7 +15,7 @@ from src.api.http.deps import get_session
 from src.api.http.middleware.limiter import configure_rate_limiter
 from src.core.services import jwt_service
 from src.runtime.config import OIDCProviderConfig
-from src.runtime.settings import settings
+from src.runtime.settings import EnvironmentSettings, settings
 from tests.utils import oct_jwk
 
 # Models will be imported within fixtures to control timing
@@ -45,6 +45,7 @@ def oidc_provider_config() -> OIDCProviderConfig:
             scopes=["openid", "profile", "email"],
             redirect_uri="http://localhost/callback",
         )
+
 
 @pytest.fixture
 def request_factory() -> Callable[[Dict[str, str]], Request]:

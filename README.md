@@ -131,15 +131,16 @@ touch your_package/core/entities/product.py
 ```python
 # your_package/core/entities/product.py
 from decimal import Decimal
-from typing import Optional
+from pydantic import Field
 from your_package.core.entities._base import Entity
 
 class Product(Entity):
-    id: Optional[int] = None
-    name: str
-    price: Decimal
-    description: Optional[str] = None
-    in_stock: bool = True
+    """Product entity representing an item for sale."""
+    
+    name: str = Field(description="Product name")
+    price: Decimal = Field(description="Product price")
+    description: str | None = Field(default=None, description="Product description")
+    in_stock: bool = Field(default=True, description="Whether product is in stock")
 ```
 
 #### 2. Create Database Model
@@ -147,16 +148,15 @@ class Product(Entity):
 ```python
 # your_package/core/rows/product_row.py
 from decimal import Decimal
-from typing import Optional
 from sqlmodel import SQLModel, Field
 
 class ProductRow(SQLModel, table=True):
     __tablename__ = "products"
     
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: str = Field(primary_key=True, max_length=36)
     name: str = Field(max_length=255)
     price: Decimal = Field(decimal_places=2)
-    description: Optional[str] = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=1000)
     in_stock: bool = Field(default=True)
 ```
 
@@ -164,7 +164,6 @@ class ProductRow(SQLModel, table=True):
 
 ```python
 # your_package/core/repositories/product_repo.py
-from typing import List, Optional
 from sqlmodel import Session, select
 from your_package.core.entities.product import Product
 from your_package.core.rows.product_row import ProductRow
@@ -176,15 +175,13 @@ class ProductRepository:
     def create(self, product: Product) -> Product:
         row = ProductRow.model_validate(product)
         self._session.add(row)
-        self._session.flush()
-        self._session.refresh(row)
-        return Product.model_validate(row, from_attributes=True)
+        return product
 
-    def get(self, product_id: int) -> Optional[Product]:
+    def get(self, product_id: str) -> Product | None:
         row = self._session.get(ProductRow, product_id)
         return Product.model_validate(row, from_attributes=True) if row else None
 
-    def list(self, in_stock_only: bool = False) -> List[Product]:
+    def list(self, in_stock_only: bool = False) -> list[Product]:
         query = select(ProductRow)
         if in_stock_only:
             query = query.where(ProductRow.in_stock == True)

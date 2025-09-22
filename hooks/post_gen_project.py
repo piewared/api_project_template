@@ -13,25 +13,25 @@ def copy_infrastructure():
     project_root = Path(".").absolute()
     package_name = "{{cookiecutter.package_name}}"
     template_path = "{{cookiecutter._template}}"
-    
+
     print("🔧 Merging infrastructure with business logic...")
     print(f"📁 Template path: {template_path}")
     print(f"📁 Current directory: {project_root}")
     print(f"📁 Package name: {package_name}")
-    
+
     # Key insight: When cookiecutter runs, the hook executes from within the temp directory
     # where the template was cloned. So the template's src should be accessible as ../src
     src_dir = None
     search_paths = []
-    
+
     # Strategy 1: Check if this is a local template (direct path)
-    if not template_path.startswith(('git@', 'https://', 'http://')):
+    if not template_path.startswith(("git@", "https://", "http://")):
         local_template = Path(template_path).resolve()
         if local_template.exists():
             potential_src = local_template / "src"
             if potential_src.exists():
                 search_paths.append(potential_src)
-    
+
     # Strategy 2: The most reliable approach for remote templates
     # When cookiecutter clones a remote template, it runs the hook from within the template directory
     # So ../src should be the template's src directory
@@ -44,7 +44,7 @@ def copy_infrastructure():
         # Check if we're already in a template-like structure
         current_working_dir / ".." / "src",
     ]
-    
+
     for potential_src in potential_locations:
         try:
             resolved_path = potential_src.resolve()
@@ -52,18 +52,18 @@ def copy_infrastructure():
                 search_paths.append(resolved_path)
         except (OSError, RuntimeError):
             continue
-    
+
     # Strategy 3: Look in parent directories systematically
     current = current_working_dir
     for level in range(4):  # Don't search too far up
         if level > 0:
             current = current.parent
-        
+
         # Look for src directory directly
         potential_src = current / "src"
         if potential_src.exists():
             search_paths.append(potential_src)
-        
+
         # Look for template-like directories that contain src
         try:
             for item in current.iterdir():
@@ -73,45 +73,43 @@ def copy_infrastructure():
                         search_paths.append(potential_src)
         except (PermissionError, OSError):
             continue
-    
+
     print(f"🔍 Searching for template src directory...")
     print(f"   Found {len(search_paths)} potential locations")
-    
+
     # Validate each potential src directory
     for i, potential_src in enumerate(search_paths):
-        print(f"   [{i+1}] Checking: {potential_src}")
-        
+        print(f"   [{i + 1}] Checking: {potential_src}")
+
         if not potential_src.exists() or not potential_src.is_dir():
             print("       ❌ Not a directory")
             continue
-        
+
         # Verify this looks like our template by checking for required structure
-        required_dirs = ['api', 'core', 'runtime']
+        required_dirs = ["api", "core", "runtime"]
         missing_dirs = [d for d in required_dirs if not (potential_src / d).exists()]
-        
+
         if missing_dirs:
             print(f"       ❌ Missing required directories: {missing_dirs}")
             continue
-        
+
         # Additional validation: check for key files
-        key_files = [
-            'api/http/app.py',
-            'runtime/db.py',
-            'core/entities/__init__.py'
-        ]
+        key_files = ["api/http/app.py", "runtime/db.py", "entities/__init__.py"]
         missing_files = [f for f in key_files if not (potential_src / f).exists()]
-        
+
         if missing_files:
             print(f"       ❌ Missing key files: {missing_files}")
             continue
-        
+
         print("       ✅ Valid template src directory found!")
         src_dir = potential_src
         break
-    
+
     if src_dir is None:
         print("❌ Infrastructure source directory not found!")
-        print("❌ This means the generated project will be missing core infrastructure.")
+        print(
+            "❌ This means the generated project will be missing core infrastructure."
+        )
         print("❌ The project may not work correctly without manual setup.")
         print("⚠️  Possible solutions:")
         print("   1. Use a local template: cruft create /path/to/local/template")

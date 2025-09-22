@@ -1,12 +1,6 @@
 # FastAPI Clean Architecture Template
 
-⚠️ **Alpha Release**: This project is currently in alpha. While functional and tested, APIs and structure may change. Use in produc## 🗺️ Roadmap & Planned Features
-
-This template is continuously being improved to provide the most compreh## 📚 Documentation
-
-- **[Features](FEATURES.md)** - Complete feature list and capabilities
-- **[Architecture](ARCHITECTURE.md)** - Clean architecture details and design patterns
-- **[Development](DEVELOPMENT.md)** - Contributing, template development, and deployment guidee FastAPI development experience. Here's what's coming:n at your own discretion and expect potential breaking changes.
+⚠️ **Alpha Release**: This project is currently in alpha. While functional and tested, APIs and structure may change. Use in production at your own discretion and expect potential breaking changes.
 
 A modern, production-ready [Cookiecutter](https://cookiecutter.readthedocs.io/) template for creating FastAPI applications with clean architecture and hexagonal principles. Build scalable REST APIs with built-in authentication, authorization, rate limiting, and automated template updates with [Cruft](https://python-basics-tutorial.readthedocs.io/en/latest/packs/templating/cruft.html).
 
@@ -14,7 +8,7 @@ A modern, production-ready [Cookiecutter](https://cookiecutter.readthedocs.io/) 
 
 This project exists to **accelerate the development of production-enabled microservices and SaaS APIs** by providing all the necessary primitives, components, and architectural templates that adhere to industry best practices.
 
-### 🎯 Intended Use Cases
+### Intended Use Cases
 
 This template is specifically designed for:
 
@@ -123,6 +117,194 @@ Your API is ready at:
 - **Documentation**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/health
 
+### Adding Your First Business Entity & API
+
+Once your project is running, here's how to add your own business logic:
+
+#### 1. Create a Domain Entity
+
+```bash
+# Create a new product entity
+touch your_package/core/entities/product.py
+```
+
+```python
+# your_package/core/entities/product.py
+from decimal import Decimal
+from typing import Optional
+from your_package.core.entities._base import Entity
+
+class Product(Entity):
+    id: Optional[int] = None
+    name: str
+    price: Decimal
+    description: Optional[str] = None
+    in_stock: bool = True
+```
+
+#### 2. Create Database Model
+
+```python
+# your_package/core/rows/product_row.py
+from decimal import Decimal
+from typing import Optional
+from sqlmodel import SQLModel, Field
+
+class ProductRow(SQLModel, table=True):
+    __tablename__ = "products"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(max_length=255)
+    price: Decimal = Field(decimal_places=2)
+    description: Optional[str] = Field(default=None, max_length=1000)
+    in_stock: bool = Field(default=True)
+```
+
+#### 3. Create Repository
+
+```python
+# your_package/core/repositories/product_repo.py
+from typing import List, Optional
+from sqlmodel import Session, select
+from your_package.core.entities.product import Product
+from your_package.core.rows.product_row import ProductRow
+
+class ProductRepository:
+    def __init__(self, session: Session):
+        self._session = session
+
+    def create(self, product: Product) -> Product:
+        row = ProductRow.model_validate(product)
+        self._session.add(row)
+        self._session.flush()
+        self._session.refresh(row)
+        return Product.model_validate(row, from_attributes=True)
+
+    def get(self, product_id: int) -> Optional[Product]:
+        row = self._session.get(ProductRow, product_id)
+        return Product.model_validate(row, from_attributes=True) if row else None
+
+    def list(self, in_stock_only: bool = False) -> List[Product]:
+        query = select(ProductRow)
+        if in_stock_only:
+            query = query.where(ProductRow.in_stock == True)
+        
+        rows = self._session.exec(query).all()
+        return [Product.model_validate(row, from_attributes=True) for row in rows]
+```
+
+#### 4. Create API Schemas
+
+```python
+# your_package/api/http/schemas/product.py
+from decimal import Decimal
+from typing import Optional
+from pydantic import BaseModel, ConfigDict
+
+class ProductCreate(BaseModel):
+    name: str
+    price: Decimal
+    description: Optional[str] = None
+    in_stock: bool = True
+
+class ProductRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    name: str
+    price: Decimal
+    description: Optional[str]
+    in_stock: bool
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    price: Optional[Decimal] = None
+    description: Optional[str] = None
+    in_stock: Optional[bool] = None
+```
+
+#### 5. Create API Router
+
+```python
+# your_package/api/http/routers/products.py
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session
+
+from your_package.api.http.deps import get_session, get_current_user
+from your_package.api.http.schemas.product import ProductCreate, ProductRead, ProductUpdate
+from your_package.core.repositories.product_repo import ProductRepository
+from your_package.core.entities.user import User
+
+router = APIRouter()
+
+def get_product_repo(db: Session = Depends(get_session)) -> ProductRepository:
+    return ProductRepository(db)
+
+@router.get("/", response_model=List[ProductRead])
+async def list_products(
+    in_stock_only: bool = False,
+    repo: ProductRepository = Depends(get_product_repo)
+):
+    """List all products, optionally filtering to in-stock items only."""
+    return repo.list(in_stock_only=in_stock_only)
+
+@router.post("/", response_model=ProductRead)
+async def create_product(
+    product_data: ProductCreate,
+    repo: ProductRepository = Depends(get_product_repo),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new product (requires authentication)."""
+    product = Product(**product_data.model_dump())
+    return repo.create(product)
+
+@router.get("/{product_id}", response_model=ProductRead)
+async def get_product(
+    product_id: int,
+    repo: ProductRepository = Depends(get_product_repo)
+):
+    """Get a specific product by ID."""
+    product = repo.get(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+```
+
+#### 6. Register the Router
+
+```python
+# Add to your_package/api/http/app.py (in the router registration section)
+from your_package.api.http.routers import products
+
+app.include_router(products.router, prefix="/api/products", tags=["products"])
+```
+
+#### 7. Update Database Schema
+
+```bash
+# Add the new table to your database
+# Update your_package/runtime/init_db.py to include ProductRow
+python -m your_package.runtime.init_db
+```
+
+#### 8. Test Your API
+
+```bash
+# List products
+curl http://localhost:8000/api/products/
+
+# Create a product (requires authentication in production)
+curl -X POST http://localhost:8000/api/products/ \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Sample Product", "price": "29.99", "description": "A great product"}'
+
+# Get product by ID
+curl http://localhost:8000/api/products/1
+```
+
+**🎉 You now have a complete CRUD API following clean architecture principles!**
+
 ## ⚙️ Configuration Options
 
 | Option | Description | Default |
@@ -164,7 +346,7 @@ Your generated project includes:
 your-project/
 ├── main.py                    # FastAPI app entry point
 ├── your_package/
-│   ├── api/http/             # HTTP layer (routes, middleware)
+│   ├── api/http/             # HTTP layer (routes, middleware, schemas)
 │   ├── core/                 # Domain logic (entities, services)
 │   ├── application/          # Application services
 │   ├── business/             # Business logic
@@ -195,7 +377,6 @@ We're continuously improving this template to provide the most comprehensive Fas
 - [ ] **Custom Alerting** - Configurable alerts for critical application events
 
 ### 🗄️ Database & Storage Enhancements
-- [ ] **Multi-Database Support** - MongoDB, DynamoDB, and other NoSQL options
 - [ ] **Database Migrations** - Alembic integration with automated migration workflows
 - [ ] **Connection Pooling** - Advanced connection pool management and monitoring
 - [ ] **Read/Write Splitting** - Automatic routing for read replicas and write masters
@@ -204,7 +385,6 @@ We're continuously improving this template to provide the most comprehensive Fas
 
 ### 🚀 Performance & Scalability
 - [ ] **Async Task Processing** - Celery/RQ integration for background job processing
-- [ ] **GraphQL Support** - Strawberry GraphQL integration with the existing REST API
 - [ ] **WebSocket Templates** - Real-time communication patterns and connection management
 - [ ] **API Gateway Integration** - Kong, Ambassador, or Istio service mesh templates
 - [ ] **Auto-scaling Configs** - Kubernetes HPA and Docker Swarm scaling configurations
@@ -242,13 +422,6 @@ We're continuously improving this template to provide the most comprehensive Fas
 - [ ] **Email Service Integration** - SendGrid, Mailgun, AWS SES template configurations
 - [ ] **Search Integration** - Elasticsearch, Solr, or Algolia search capabilities
 
-### 📱 API Client Generation
-- [ ] **TypeScript/JavaScript SDK** - Auto-generated client libraries
-- [ ] **Python Client Library** - Type-safe Python SDK for API consumption
-- [ ] **Mobile SDK Templates** - React Native, Flutter API client generation
-- [ ] **Postman Collections** - Auto-generated API testing collections
-- [ ] **OpenAPI Generator Integration** - Multi-language client generation
-
 ### 🎯 Specialized Templates
 - [ ] **E-commerce APIs** - Product catalog, cart, payment processing templates
 - [ ] **Content Management** - CMS APIs with media handling and content workflows
@@ -257,12 +430,6 @@ We're continuously improving this template to provide the most comprehensive Fas
 - [ ] **Healthcare APIs** - HIPAA-compliant templates with data privacy features
 - [ ] **Real-time Analytics** - Stream processing and dashboard APIs
 
-### 📈 Business Intelligence
-- [ ] **Analytics Dashboard** - Built-in analytics for API usage and performance
-- [ ] **A/B Testing Framework** - Feature flag management and experiment tracking
-- [ ] **User Behavior Tracking** - Anonymous usage analytics and insights
-- [ ] **Business Metrics** - Automated reporting for KPIs and business metrics
-- [ ] **Data Export APIs** - Scheduled data exports in multiple formats
 
 ## 🤝 Contributing to the Roadmap
 

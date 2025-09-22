@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from src.api.http.deps import get_current_user, require_role, require_scope
+from src.api.http.deps import get_authenticated_user, require_role, require_scope
 from src.entities.user import User
 
 router_jit = APIRouter(prefix="/jit", tags=["auth-jit"])
@@ -23,25 +23,30 @@ class MeResponse(BaseModel):
 @router_jit.get("/me", response_model=MeResponse)
 async def get_me(
     request: Request,
-    user: User = Depends(get_current_user)
+    user: User = Depends(get_authenticated_user)
 ) -> dict[str, Any]:
     """Development/debugging endpoint - mirrors authenticated user context.
 
     This endpoint allows clients to understand their current authentication state
     including the domain User object and the claims from their OIDC token.
+    Works with both JWT and session-based authentication.
     """
+    # Include auth method in response for debugging
+    auth_method = getattr(request.state, "auth_method", "unknown")
+    
     return {
         "user_id": str(user.id),
         "email": user.email,
         "scopes": list(getattr(request.state, "scopes", [])),
         "roles": list(getattr(request.state, "roles", [])),
         "claims": getattr(request.state, "claims", {}),
+        "auth_method": auth_method,
     }
 
 
 @router_jit.get("/protected-scope")
 async def protected_scope(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_authenticated_user),
     dep: None = Depends(require_scope("read:protected")),
 ) -> dict[str, Any]:
     """Example endpoint demonstrating scope-based authorization."""
@@ -50,7 +55,7 @@ async def protected_scope(
 
 @router_jit.get("/protected-role")
 async def protected_role(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_authenticated_user),
     dep: None = Depends(require_role("admin"))
 ) -> dict[str, Any]:
     """Example endpoint demonstrating role-based authorization."""

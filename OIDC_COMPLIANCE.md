@@ -2,21 +2,43 @@
 
 ## Overview
 
-This application server acts as an **OIDC Relying Party (Client)** that validates tokens from external identity providers and maintains domain-specific User objects. It does **NOT** act as an identity provider itself.
+This application server acts as an **OIDC Relying Party (Client)** that validates tokens from external identity providers and maintains domain-specific User objects. It supports a hybrid authentication architecture:
+
+- **BFF Pattern**: For web SPAs using authorization code flow with PKCE and HttpOnly cookies
+- **JWT Bearer Tokens**: For mobile apps and direct API access
+
+It does **NOT** act as an identity provider itself.
 
 ## Architecture
 
 ```
 External OIDC Provider (Auth0, Google, etc.)
-    ↓ (issues JWT tokens)
+    ↓ (authorization code flow for web / JWT tokens for mobile)
 Your Application (OIDC Relying Party)
-    ↓ (validates tokens & provisions users)
+    ├── BFF Router: Web clients → Sessions + HttpOnly cookies  
+    └── JWT Router: Mobile/API → Bearer token validation
+    ↓ (provisions users & manages sessions)
 Domain User Objects + Business Logic
 ```
 
+## Hybrid Authentication Patterns
+
+### Web Clients (BFF Pattern)
+- **Authorization Code Flow** with PKCE
+- **HttpOnly Cookies** for session management
+- **CSRF Protection** with secure tokens
+- **Server-side Sessions** with refresh token storage
+- **True Logout** capability
+
+### Mobile/API Clients (JWT Pattern)  
+- **Bearer Token** authentication
+- **JWT Validation** with JWKS
+- **Stateless** operation
+- **JIT User Provisioning** from claims
+
 ## OIDC Client Features
 
-### 1. Token Validation
+### 1. Token Validation (JWT Pattern)
 - **JWT Verification**: Validates tokens from configured OIDC providers
 - **JWKS Integration**: Fetches and caches public keys from provider JWKS endpoints
 - **Multi-Provider Support**: Can validate tokens from multiple OIDC providers simultaneously
@@ -201,6 +223,52 @@ audiences = ["your-azure-app-id"]
 - ✅ **Audience Validation**: Prevents token misuse across services
 - ✅ **Clock Skew Tolerance**: Handles reasonable time differences
 - ✅ **Error Handling**: Secure failure modes for invalid tokens
+
+## API Endpoints
+
+### BFF Pattern Endpoints (Web Clients)
+
+#### `GET /auth/web/login`
+Initiates OIDC authorization code flow with PKCE:
+- Generates PKCE challenge and state parameter
+- Creates temporary auth session
+- Redirects to OIDC provider authorization endpoint
+
+#### `GET /auth/web/callback`
+Handles OIDC authorization callback:
+- Validates state parameter (CSRF protection)
+- Exchanges authorization code for tokens using PKCE verifier
+- Provisions user from claims (JIT)
+- Creates persistent session with HttpOnly cookie
+
+#### `POST /auth/web/logout`
+Terminates user session:
+- Validates CSRF token
+- Clears session and HttpOnly cookie
+- Optional: initiates logout with OIDC provider
+
+#### `GET /auth/web/me`
+Returns current user authentication state:
+- Session-based authentication via HttpOnly cookie
+- Returns user info and authentication status
+
+### JWT Pattern Endpoints (Mobile/API Clients)
+
+#### `GET /auth/me`
+Returns authenticated user information:
+- Requires `Authorization: Bearer <jwt_token>` header
+- Validates JWT signature and claims
+- Performs JIT user provisioning if needed
+
+#### `GET /auth/protected-scope`
+Example scope-protected endpoint:
+- Requires specific scope in JWT token
+- Demonstrates scope-based authorization
+
+#### `GET /auth/protected-role`
+Example role-protected endpoint:
+- Requires specific role in JWT token
+- Demonstrates role-based authorization
 
 ## Future Enhancements
 

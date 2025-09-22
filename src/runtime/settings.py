@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import json
-from typing import Dict, Optional
-from typing_extensions import Literal
+from typing import Literal
 
-from pydantic import AliasChoices, Field, computed_field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class OIDCProviderConfig(BaseModel):
+    """OIDC provider configuration."""
+
+    client_id: str
+    client_secret: str | None = None
+    authorization_endpoint: str
+    token_endpoint: str
+    userinfo_endpoint: str | None = None
+    end_session_endpoint: str | None = None
+    scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"])
+    redirect_uri: str
 
 
 def _parse_list(value: str | list[str]) -> list[str]:
@@ -27,7 +39,7 @@ def _parse_list(value: str | list[str]) -> list[str]:
 
 class Settings(BaseSettings):
     # JWT / OIDC
-    issuer_jwks_map: Dict[str, str] = Field(
+    issuer_jwks_map: dict[str, str] = Field(
         default_factory=dict,
         validation_alias=AliasChoices("JWT_ISSUER_JWKS_MAP", "ISSUER_JWKS_MAP"),
     )
@@ -39,15 +51,15 @@ class Settings(BaseSettings):
         default="api://default",
         validation_alias=AliasChoices("JWT_AUDIENCES", "AUDIENCES"),
     )
-    uid_claim: Optional[str] = Field(
+    uid_claim: str | None = Field(
         default="https://your.app/uid",
         validation_alias=AliasChoices("JWT_UID_CLAIM", "UID_CLAIM"),
     )
-    role_claim: Optional[str] = Field(
+    role_claim: str | None = Field(
         default="roles",
         validation_alias=AliasChoices("JWT_ROLE_CLAIM", "ROLE_CLAIM"),
     )
-    scope_claim: Optional[str] = Field(
+    scope_claim: str | None = Field(
         default="scope",
         validation_alias=AliasChoices("JWT_SCOPE_CLAIM", "SCOPE_CLAIM"),
     )
@@ -57,21 +69,39 @@ class Settings(BaseSettings):
     )
 
     # App / infra
-    database_url: str = Field(default="sqlite:///./database.db", validation_alias="DATABASE_URL")
+    database_url: str = Field(
+        default="sqlite:///./database.db", validation_alias="DATABASE_URL"
+    )
     cors_origins_str: str | list[str] = Field(
         default="http://localhost:3000",
         validation_alias=AliasChoices("CORS_ORIGINS", "cors_origins"),
     )
 
-    environment: Literal["development", "production", "test"] = Field(default="development")
+    environment: Literal["development", "production", "test"] = Field(
+        default="development"
+    )
     log_level: str = Field(default="INFO")
 
     # Rate limiting / Redis
-    redis_url: Optional[str] = Field(default=None, validation_alias="REDIS_URL")
+    redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
     rate_limit_requests: int = Field(default=5)
     rate_limit_window: int = Field(default=60)
 
-    jwt_secret: Optional[str] = Field(default=None, validation_alias="JWT_SECRET")
+    jwt_secret: str | None = Field(default=None, validation_alias="JWT_SECRET")
+
+    # BFF/Session configuration
+    secret_key: str | None = Field(default=None, validation_alias="SECRET_KEY")
+    session_max_age: int = Field(
+        default=86400, validation_alias="SESSION_MAX_AGE"
+    )  # 24 hours
+    base_url: str = Field(default="http://localhost:8000", validation_alias="BASE_URL")
+    oidc_providers: dict[str, OIDCProviderConfig] = Field(
+        default_factory=dict, validation_alias="OIDC_PROVIDERS"
+    )
+    oidc_client_id: str | None = Field(default=None, validation_alias="OIDC_CLIENT_ID")
+    oidc_client_secret: str | None = Field(
+        default=None, validation_alias="OIDC_CLIENT_SECRET"
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -115,16 +145,41 @@ class Settings(BaseSettings):
         else:
             self.cors_origins_str = value
 
+    @field_validator("oidc_providers", mode="before")
+    @classmethod
+    def _parse_oidc_providers(
+        cls, value: dict[str, OIDCProviderConfig] | str | None
+    ) -> dict[str, OIDCProviderConfig]:
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, dict):
+                    return {k: OIDCProviderConfig(**v) for k, v in parsed.items()}
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+        if value is None:
+            return {}
+        if isinstance(value, dict):
+            # Check if values are already OIDCProviderConfig instances
+            if all(isinstance(v, OIDCProviderConfig) for v in value.values()):
+                return value
+            # Otherwise, convert dict values to OIDCProviderConfig
+            return {
+                k: OIDCProviderConfig(**v) if isinstance(v, dict) else v
+                for k, v in value.items()
+            }
+        raise TypeError("oidc_providers must be provided as a dict or JSON string")
+
     @field_validator("issuer_jwks_map", mode="before")
     @classmethod
-    def _parse_issuer_map(cls, value: Dict[str, str] | str | None) -> Dict[str, str]:
+    def _parse_issuer_map(cls, value: dict[str, str] | str | None) -> dict[str, str]:
         if isinstance(value, str):
             try:
                 parsed = json.loads(value)
                 if isinstance(parsed, dict):
                     return parsed
             except json.JSONDecodeError:
-                out: Dict[str, str] = {}
+                out: dict[str, str] = {}
                 for part in (p for p in value.split(";") if p):
                     try:
                         iss, jwks = part.split("|", 1)
@@ -141,12 +196,17 @@ class Settings(BaseSettings):
     def validate_runtime(self) -> None:
         if self.environment == "production":
             if not self.issuer_jwks_map:
-                raise ValueError("JWT_ISSUER_JWKS_MAP must be configured in production and not empty")
+                raise ValueError(
+                    "JWT_ISSUER_JWKS_MAP must be configured in production and not empty"
+                )
             if not self.audiences:
                 raise ValueError("JWT_AUDIENCES must be configured in production")
             if not self.database_url:
                 raise ValueError("DATABASE_URL must be configured in production")
-        if self.redis_url and not (self.redis_url.startswith("redis://") or self.redis_url.startswith("rediss://")):
+        if self.redis_url and not (
+            self.redis_url.startswith("redis://")
+            or self.redis_url.startswith("rediss://")
+        ):
             raise ValueError("REDIS_URL must be a redis:// or rediss:// URL")
 
 

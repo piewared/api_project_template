@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.http.middleware.limiter import close_rate_limiter, configure_rate_limiter
 from src.api.http.routers.auth import router_jit
+from src.api.http.routers.auth_bff import router_bff
 from src.core.services import jwt_service
 from src.runtime.settings import settings
 
@@ -122,6 +123,9 @@ async def log_requests(request: Request, call_next):
 # --- Router registration ---
 # OIDC compliant authentication endpoints
 app.include_router(router_jit, prefix="/auth")
+
+# BFF authentication endpoints for web clients
+app.include_router(router_bff, prefix="/auth")
 
 # Add your application-specific routers here
 # Example:

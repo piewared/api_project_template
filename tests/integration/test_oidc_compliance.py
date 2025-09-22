@@ -64,7 +64,7 @@ class TestOIDCRelyingParty:
         # Without Authorization header
         response = client.get("/auth/jit/me")
         assert response.status_code == 401
-        assert "Missing Bearer token" in response.json()["detail"]
+        assert "Authentication required" in response.json()["detail"]
 
         # With invalid Bearer token format
         response = client.get("/auth/jit/me", headers={"Authorization": "Invalid token"})

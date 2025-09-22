@@ -8,6 +8,320 @@ A modern, production-ready [Cookiecutter](https://cookiecutter.readthedocs.io/) 
 
 This project exists to **accelerate the development of production-enabled microservices and SaaS APIs** by providing all the necessary primitives, components, and architectural templates that adhere to industry best practices.
 
+## 🔐 Authentication & Authorization
+
+This template provides a **hybrid authentication system** that supports two distinct patterns to meet different client needs:
+
+### Authentication Patterns
+
+#### 1. **BFF (Backend-for-Frontend) Pattern** 
+**Best for: Web applications, SPAs, trusted first-party clients**
+
+Uses server-side sessions with HTTP-only cookies for maximum security:
+- 🛡️ **OIDC Authorization Code Flow** with PKCE for secure authentication
+- 🍪 **HTTP-only session cookies** (immune to XSS attacks)
+- 🔄 **Automatic token refresh** handled server-side
+- 🛡️ **CSRF protection** built-in
+- 🔒 **No sensitive tokens** exposed to client JavaScript
+
+#### 2. **JWT Bearer Token Pattern**
+**Best for: Mobile apps, third-party integrations, microservice-to-microservice communication**
+
+Uses JWT tokens for stateless authentication:
+- 🗝️ **Bearer token authentication** in Authorization header
+- 📱 **Mobile-friendly** token-based flow
+- 🔗 **API integration ready** for third-party services
+- ⚡ **Stateless** - no server-side session storage required
+- 🔄 **Multi-provider support** (Google, Microsoft, Auth0, etc.)
+
+### Quick Setup
+
+#### Environment Configuration
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Configure OIDC settings
+OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid_configuration
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-client-secret
+
+# Configure session security
+SESSION_SECRET_KEY=your-256-bit-secret-key
+JWT_SECRET_KEY=your-jwt-secret-key
+```
+
+#### Development Mode
+
+For development and testing, you can bypass OIDC with mock authentication:
+
+```bash
+# Enable development mode
+DEVELOPMENT_MODE=true
+
+# Optional: Set default development user
+DEVELOPMENT_USER_SUB=dev-user-123
+DEVELOPMENT_USER_EMAIL=dev@example.com
+DEVELOPMENT_USER_NAME="Development User"
+```
+
+### Usage Examples
+
+#### Web Application (BFF Pattern)
+
+**Frontend (JavaScript/TypeScript):**
+
+```javascript
+// 1. Redirect to login
+window.location.href = '/web/login';
+
+// 2. After successful authentication, get user info
+const response = await fetch('/web/me', {
+  credentials: 'include'  // Include session cookie
+});
+const user = await response.json();
+
+// 3. Make authenticated API calls
+const apiResponse = await fetch('/api/protected-endpoint', {
+  credentials: 'include'  // Session cookie automatically included
+});
+
+// 4. Logout
+await fetch('/web/logout', { 
+  method: 'POST',
+  credentials: 'include' 
+});
+```
+
+**API Endpoints Available:**
+- `GET /web/login` - Initiate OIDC authentication flow
+- `GET /web/callback` - Handle OIDC callback (automatic)
+- `GET /web/me` - Get current user information
+- `POST /web/logout` - Logout and clear session
+
+#### Mobile/API Integration (JWT Pattern)
+
+**Mobile App or API Client:**
+
+```python
+import requests
+
+# 1. Get JWT token from your OIDC provider
+# (Implementation varies by provider - Google, Auth0, etc.)
+jwt_token = get_token_from_your_oidc_provider()
+
+# 2. Use token in API requests
+headers = {
+    'Authorization': f'Bearer {jwt_token}',
+    'Content-Type': 'application/json'
+}
+
+# 3. Make authenticated API calls
+response = requests.get(
+    'http://localhost:8000/api/protected-endpoint',
+    headers=headers
+)
+
+user_data = response.json()
+```
+
+**cURL Examples:**
+
+```bash
+# Using JWT Bearer token
+curl -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..." \
+     http://localhost:8000/api/users/me
+
+# Using session cookie (after web login)
+curl -b "session=abc123..." \
+     http://localhost:8000/api/users/me
+```
+
+### Protecting API Endpoints
+
+The template provides flexible dependency injection for different authentication requirements:
+
+```python
+from fastapi import APIRouter, Depends
+from your_package.api.http.deps import (
+    get_authenticated_user,    # Accepts both JWT and session auth
+    get_session_only_user,     # Web clients only (BFF pattern)
+    get_current_user          # JWT bearer token only
+)
+from your_package.entities.user import User
+
+router = APIRouter()
+
+@router.get("/flexible-endpoint")
+async def flexible_endpoint(
+    user: User = Depends(get_authenticated_user)
+):
+    """Accessible via both JWT tokens AND session cookies"""
+    return {"message": f"Hello {user.email}", "auth_type": "hybrid"}
+
+@router.get("/web-only-endpoint") 
+async def web_only_endpoint(
+    user: User = Depends(get_session_only_user)
+):
+    """Only accessible via session cookies (web clients)"""
+    return {"message": f"Hello web user {user.email}"}
+
+@router.get("/api-only-endpoint")
+async def api_only_endpoint(
+    user: User = Depends(get_current_user)
+):
+    """Only accessible via JWT bearer tokens"""
+    return {"message": f"Hello API user {user.email}"}
+
+@router.get("/public-endpoint")
+async def public_endpoint():
+    """No authentication required"""
+    return {"message": "This is public"}
+```
+
+### Role-Based Access Control (RBAC)
+
+The system includes built-in support for roles and scopes:
+
+```python
+from your_package.api.http.deps import require_roles, require_scopes
+
+@router.delete("/admin/users/{user_id}")
+async def delete_user(
+    user_id: str,
+    current_user: User = Depends(require_roles(["admin", "moderator"]))
+):
+    """Only users with admin or moderator roles can access"""
+    pass
+
+@router.get("/api/analytics")  
+async def get_analytics(
+    current_user: User = Depends(require_scopes(["read:analytics"]))
+):
+    """Only users with read:analytics scope can access"""
+    pass
+```
+
+### Security Features
+
+#### Automatic Security Headers
+```python
+# Automatically applied to all responses:
+# - HSTS (HTTP Strict Transport Security)
+# - CSRF protection for web clients
+# - Content Security Policy headers
+# - X-Frame-Options, X-Content-Type-Options
+```
+
+#### Rate Limiting
+```python
+from your_package.api.http.deps import rate_limit
+
+@router.get("/limited-endpoint")
+@rate_limit(max_requests=100, window_seconds=3600)  # 100 requests per hour
+async def limited_endpoint():
+    return {"message": "Rate limited endpoint"}
+```
+
+#### Request Validation
+```python
+# All endpoints automatically validate:
+# - JWT signature and expiration
+# - OIDC token claims and issuer
+# - Session validity and CSRF tokens
+# - Request size and content type
+```
+
+### Advanced Configuration
+
+#### Multiple OIDC Providers
+
+```bash
+# Support multiple identity providers
+OIDC_DISCOVERY_URL=https://accounts.google.com/.well-known/openid_configuration
+ALLOWED_ISSUERS=["https://accounts.google.com", "https://your-auth0-domain.auth0.com"]
+```
+
+#### Custom User Provisioning
+
+```python
+# Customize how users are created from OIDC claims
+from your_package.core.services.session_service import SessionService
+
+class CustomSessionService(SessionService):
+    def provision_user_from_claims(self, claims: dict) -> User:
+        # Custom logic for mapping OIDC claims to your User model
+        return User(
+            id=claims["sub"],
+            email=claims["email"],
+            name=claims["name"],
+            roles=self.extract_roles_from_claims(claims),
+            # Add your custom fields here
+        )
+```
+
+#### Session Storage Options
+
+```python
+# Configure session storage (default: in-memory)
+# Production: Use Redis or database storage
+SESSION_STORAGE="redis"  # or "database" or "memory"
+REDIS_URL="redis://localhost:6379/0"
+```
+
+### Testing Authentication
+
+The template includes comprehensive test utilities:
+
+```python
+# Test with mock authentication
+def test_protected_endpoint(client, mock_user):
+    """Test endpoint with authenticated user"""
+    response = client.get(
+        "/api/protected-endpoint",
+        headers={"Authorization": f"Bearer {mock_user.jwt_token}"}
+    )
+    assert response.status_code == 200
+
+# Test BFF flow
+def test_web_authentication_flow(client):
+    """Test complete web authentication flow"""
+    # Login redirects to OIDC provider
+    response = client.get("/web/login", follow_redirects=False)
+    assert response.status_code == 302
+    
+    # Simulate callback with mock token
+    response = client.get("/web/callback?code=mock-code&state=mock-state")
+    assert response.status_code == 302  # Redirect after successful auth
+```
+
+### Migration Guide
+
+#### From JWT-Only Systems
+```python
+# Your existing JWT endpoints work unchanged
+@router.get("/api/endpoint")
+async def endpoint(user: User = Depends(get_current_user)):
+    return {"user": user.email}
+```
+
+#### From Session-Only Systems  
+```python
+# Upgrade to hybrid authentication
+@router.get("/api/endpoint")
+async def endpoint(user: User = Depends(get_authenticated_user)):  # Now accepts both!
+    return {"user": user.email}
+```
+
+**🔐 Your API now supports both modern web applications and mobile/API integrations with a single, unified authentication system!**
+
+## 🗺️ Roadmap & Planned Featuresin authentication, authorization, rate limiting, and automated template updates with [Cruft](https://python-basics-tutorial.readthedocs.io/en/latest/packs/templating/cruft.html).
+
+## 🎯 Motivation
+
+This project exists to **accelerate the development of production-enabled microservices and SaaS APIs** by providing all the necessary primitives, components, and architectural templates that adhere to industry best practices.
+
 ### Intended Use Cases
 
 This template is specifically designed for:

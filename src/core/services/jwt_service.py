@@ -5,7 +5,8 @@ from __future__ import annotations
 import base64
 import json
 import time
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from authlib.jose import JoseError, JsonWebKey, jwt
 from cachetools import TTLCache
@@ -116,26 +117,67 @@ def extract_uid(claims: dict[str, Any]) -> str:
 
 
 def extract_scopes(claims: dict[str, Any]) -> set[str]:
+    """Extract scopes from JWT claims.
+
+    Scopes can be in various claims: 'scope' (space-separated), 'scp' (string or array),
+    or 'scopes' (array). Returns as set for deduplication.
+    """
     scopes: set[str] = set()
+
+    # Check for 'scope' claim (space-separated string)
     if "scope" in claims:
         scopes.update(str(claims["scope"]).split())
+
+    # Check for 'scp' claim (Auth0 style)
     if "scp" in claims:
         value = claims["scp"]
         if isinstance(value, str):
             scopes.update(value.split())
         else:
             scopes.update(value)
+
+    # Check for 'scopes' claim (array)
+    if "scopes" in claims and isinstance(claims["scopes"], list):
+        scopes.update(claims["scopes"])
+
     return scopes
 
 
-def extract_roles(claims: dict[str, Any]) -> set[str]:
-    roles: set[str] = set()
-    if "roles" in claims:
-        value = claims["roles"]
-        if isinstance(value, str):
-            roles.update(value.split())
-        else:
-            roles.update(value)
+def extract_roles(claims: dict[str, Any]) -> list[str]:
+    """Extract roles from JWT claims.
+
+    Roles can be in various claims and nested structures.
+    """
+    roles: list[str] = []
+
+    # Check for common role claims
+    for role_claim in ["roles", "groups", "authorities"]:
+        value = claims.get(role_claim)
+        if value:
+            if isinstance(value, list):
+                roles.extend(value)
+            elif isinstance(value, str):
+                # Handle space-separated roles string
+                roles.extend(value.split())
+            else:
+                roles.append(str(value))
+
+    # Check for Auth0 style roles (e.g., in app_metadata or custom claims)
+    app_metadata = claims.get("app_metadata", {})
+    if isinstance(app_metadata, dict) and "roles" in app_metadata:
+        auth0_roles = app_metadata["roles"]
+        if isinstance(auth0_roles, list):
+            roles.extend(auth0_roles)
+
+    # Check for Keycloak realm roles
     if "realm_access" in claims and "roles" in claims["realm_access"]:
-        roles.update(claims["realm_access"]["roles"])
+        keycloak_roles = claims["realm_access"]["roles"]
+        if isinstance(keycloak_roles, list):
+            roles.extend(keycloak_roles)
+
+    # Check for custom namespace roles (Auth0 custom claims pattern)
+    for key, value in claims.items():
+        if "roles" in key.lower() and isinstance(value, list):
+            roles.extend(value)
+
     return roles

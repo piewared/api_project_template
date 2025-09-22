@@ -1,3 +1,5 @@
+"""Authentication endpoints for OIDC relying party (client)."""
+
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -10,6 +12,7 @@ router_jit = APIRouter(prefix="/jit", tags=["auth-jit"])
 
 
 class MeResponse(BaseModel):
+    """Response model for the /me endpoint - useful for clients to understand their auth state."""
     user_id: str
     email: str
     scopes: list[str]
@@ -19,9 +22,14 @@ class MeResponse(BaseModel):
 
 @router_jit.get("/me", response_model=MeResponse)
 async def get_me(
-    request: Request, user: User = Depends(get_current_user)
+    request: Request,
+    user: User = Depends(get_current_user)
 ) -> dict[str, Any]:
-    # Mirror the authenticated user context for clients that need their claims
+    """Development/debugging endpoint - mirrors authenticated user context.
+
+    This endpoint allows clients to understand their current authentication state
+    including the domain User object and the claims from their OIDC token.
+    """
     return {
         "user_id": str(user.id),
         "email": user.email,
@@ -36,13 +44,14 @@ async def protected_scope(
     user: User = Depends(get_current_user),
     dep: None = Depends(require_scope("read:protected")),
 ) -> dict[str, Any]:
-    # Example endpoint that enforces a scope requirement
+    """Example endpoint demonstrating scope-based authorization."""
     return {"message": "You have the required scope!", "user_id": str(user.id)}
 
 
 @router_jit.get("/protected-role")
 async def protected_role(
-    user: User = Depends(get_current_user), dep: None = Depends(require_role("admin"))
+    user: User = Depends(get_current_user),
+    dep: None = Depends(require_role("admin"))
 ) -> dict[str, Any]:
-    # Example endpoint that enforces a role requirement
+    """Example endpoint demonstrating role-based authorization."""
     return {"message": "You have the required role!", "user_id": str(user.id)}

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.http.middleware.limiter import close_rate_limiter, configure_rate_limiter
+from src.api.http.routers.auth import router_jit
 from src.core.services import jwt_service
 from src.runtime.settings import settings
 
@@ -119,6 +120,9 @@ async def log_requests(request: Request, call_next):
 
 
 # --- Router registration ---
+# OIDC compliant authentication endpoints
+app.include_router(router_jit, prefix="/auth")
+
 # Add your application-specific routers here
 # Example:
 # app.include_router(your_router, prefix="/api/v1", tags=["your_feature"])

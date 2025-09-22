@@ -98,7 +98,7 @@ class TestJWTService:
             claims = {"roles": "user admin"}
             
             result = jwt_service.extract_roles(claims)
-            assert result == {"user", "admin"}
+            assert set(result) == {"user", "admin"}
 
         def test_extract_roles_from_realm_access(self):
             """Should extract roles from Keycloak-style realm_access."""
@@ -108,7 +108,8 @@ class TestJWTService:
             }
             
             result = jwt_service.extract_roles(claims)
-            assert result == {"admin", "user", "guest"}
+            # Convert to set for comparison since order doesn't matter
+            assert set(result) == {"admin", "user", "guest"}
 
         def test_extract_empty_claims(self):
             """Should handle missing or empty claims gracefully."""
@@ -118,7 +119,7 @@ class TestJWTService:
                 mock_settings.uid_claim = None
                 assert jwt_service.extract_uid(claims) == "None|None"
                 assert jwt_service.extract_scopes(claims) == set()
-                assert jwt_service.extract_roles(claims) == set()
+                assert jwt_service.extract_roles(claims) == []
 
     class TestJWKSFetching:
         """Test JWKS fetching functionality."""

@@ -4,18 +4,21 @@
 
 ## 🏗️ Architecture Overview
 
-This template follows **hexagonal architecture** principles, providing a clean separation of concerns across three main layers:
+This template follows **clean architecture principles with hexagonal influences**, providing a pragmatic separation of concerns across main layers:
+
+**Note**: While inspired by pure hexagonal architecture, this template makes deliberate compromises for development velocity, such as domain entities inheriting from SQLModel for simplified ORM integration.
 
 ### Core Layer (Domain)
-- **Entities**: Pure domain models with business logic
+- **Entities**: Domain models with business logic (inherit from SQLModel for ORM integration)
 - **Repositories**: Abstract interfaces for data access
 - **Services**: Domain services and business rules
-- Contains NO framework dependencies
+- Minimal framework dependencies (SQLModel for pragmatic ORM integration)
 
-### Application Layer
+### Application Layer  
 - **Entities**: Application-specific domain models
 - **Repositories**: Concrete repository implementations
 - **Policies**: Application-specific business rules
+- **Rows**: Database persistence models
 - Orchestrates core domain logic
 
 ### Infrastructure Layer
@@ -394,10 +397,11 @@ gunicorn -w 4 -k uvicorn.workers.UnicornWorker main:app  # Alternative ASGI serv
 
 This template is designed to be a starting point for your projects. Key principles:
 
-1. **Maintain Architectural Boundaries**: Keep domain logic in core, application logic in application layer
+1. **Maintain Layer Separation**: Keep domain logic in core, application logic in application layer
 2. **Dependency Direction**: Dependencies should flow inward (infrastructure → application → core)
-3. **Test Coverage**: Maintain comprehensive tests across all layers
-4. **Type Safety**: Use typing throughout for better development experience
+3. **Pragmatic Compromises**: Balance architectural purity with development velocity
+4. **Test Coverage**: Maintain comprehensive tests across all layers
+5. **Type Safety**: Use typing throughout for better development experience
 
 ## 📄 License
 

@@ -1,8 +1,14 @@
-# FastAPI Hexagonal Architecture Template
+# FastAPI Clean Architecture Template
 
-⚠️ **Alpha Release**: This project is currently in alpha. While functional and tested, APIs and structure may change. Use in production at your own discretion and expect potential breaking changes.
+⚠️ **Alpha Release**: This project is currently in alpha. While functional and tested, APIs and structure may change. Use in produc## 🗺️ Roadmap & Planned Features
 
-A modern, production-ready [Cookiecutter](https://cookiecutter.readthedocs.io/) template for creating FastAPI applications with hexagonal (ports and adapters) architecture. Build scalable REST APIs with built-in authentication, authorization, rate limiting, and automated template updates.
+This template is continuously being improved to provide the most compreh## 📚 Documentation
+
+- **[Features](FEATURES.md)** - Complete feature list and capabilities
+- **[Architecture](ARCHITECTURE.md)** - Clean architecture details and design patterns
+- **[Development](DEVELOPMENT.md)** - Contributing, template development, and deployment guidee FastAPI development experience. Here's what's coming:n at your own discretion and expect potential breaking changes.
+
+A modern, production-ready [Cookiecutter](https://cookiecutter.readthedocs.io/) template for creating FastAPI applications with clean architecture and hexagonal principles. Build scalable REST APIs with built-in authentication, authorization, rate limiting, and automated template updates with [Cruft](https://python-basics-tutorial.readthedocs.io/en/latest/packs/templating/cruft.html).
 
 ## 🎯 Motivation
 
@@ -43,7 +49,7 @@ Building production-ready APIs from scratch involves solving the same challenges
 Instead of rebuilding these foundational elements for every project, this template provides:
 
 ✅ **Complete API Primitives** - Authentication, rate limiting, database integration, and security middleware  
-✅ **Hexagonal Architecture** - Clean, testable code structure with proper separation of concerns  
+✅ **Clean Architecture** - Layered design with dependency inversion and separation of concerns  
 ✅ **Production Components** - Health checks, error handling, logging, and monitoring hooks  
 ✅ **Best Practices** - Type safety, comprehensive testing, documentation, and CI/CD pipelines  
 ✅ **Developer Velocity** - Skip the boilerplate and focus on your unique business logic  
@@ -137,7 +143,7 @@ Your API is ready at:
 Your generated project includes:
 
 ### Core Features
-- ✅ **FastAPI application** with hexagonal architecture
+- ✅ **FastAPI application** with clean architecture and layered design
 - ✅ **JWT/OIDC authentication** with role-based access control
 - ✅ **SQLModel database** integration (SQLite default, PostgreSQL ready)
 - ✅ **Redis rate limiting** with in-memory fallback
@@ -260,7 +266,7 @@ We're continuously improving this template to provide the most comprehensive Fas
 
 ## 🤝 Contributing to the Roadmap
 
-We welcome community input on our roadmap! Here's how you can contribute:
+Community input on the roadmap is welcome! Here's how you can contribute:
 
 - **🗳️ Vote on Features**: Comment on [GitHub Issues](https://github.com/piewared/api_template/issues) with 👍 for features you want
 - **💡 Suggest Features**: Open a feature request with detailed use cases

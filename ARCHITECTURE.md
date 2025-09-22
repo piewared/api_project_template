@@ -1,12 +1,14 @@
 # Architecture Documentation
 
-## Hexagonal Architecture
+## Clean Architecture with Hexagonal Principles
 
-This template implements hexagonal architecture (ports and adapters) for clean separation of concerns:
+This template implements clean architecture with hexagonal principles for separation of concerns and dependency inversion:
 
-- **Core**: Pure domain logic, no external dependencies
-- **Application**: Orchestrates domain logic, implements use cases  
-- **Infrastructure**: External concerns (HTTP, database, etc.)
+- **Core**: Domain entities and business logic with minimal external dependencies
+- **Application**: Application services that orchestrate domain logic and implement use cases  
+- **Infrastructure**: External concerns (HTTP, database, frameworks)
+
+**Important Note**: While inspired by hexagonal architecture, this template makes pragmatic compromises for development velocity. Domain entities inherit from SQLModel for convenience, which couples the domain to the ORM framework. This is a deliberate trade-off between architectural purity and practical development speed.
 
 ## Design Principles
 
@@ -14,6 +16,7 @@ This template implements hexagonal architecture (ports and adapters) for clean s
 - **Interface Segregation**: Small, focused interfaces
 - **Single Responsibility**: Each layer has a clear purpose
 - **Open/Closed**: Extend functionality without modifying existing code
+- **Pragmatic Compromises**: Balance architectural principles with development velocity
 
 ## Generated Project Structure
 
@@ -51,6 +54,8 @@ your-project/
        name: str
        price: Decimal
    ```
+   
+   *Note: Entities inherit from SQLModel for ORM integration - a pragmatic compromise.*
 
 2. **Create Repository Interface** (`core/repositories/`):
    ```python
@@ -62,12 +67,12 @@ your-project/
            pass
    ```
 
-3. **Implement Persistence** (`application/`):
+3. **Implement Persistence** (`core/rows/` and `core/repositories/`):
    ```python
-   # Database model
+   # Database model (in core/rows/)
    class ProductRow(SQLModel, table=True): ...
    
-   # Repository implementation
+   # Repository implementation (in core/repositories/)
    class SqlProductRepository(ProductRepository): ...
    ```
 
@@ -92,6 +97,33 @@ class Settings(BaseSettings):
     new_feature_enabled: bool = False
     api_key: str = Field(..., env="MY_API_KEY")
 ```
+
+## Architectural Decisions & Trade-offs
+
+### Pragmatic Compromises Made
+
+1. **SQLModel Domain Entities**: Domain entities inherit from SQLModel instead of being pure POPOs (Plain Old Python Objects). This couples the domain to the ORM but significantly reduces boilerplate and mapping code.
+
+2. **Repository Placement**: Repository implementations are in `core/repositories/` rather than a separate infrastructure layer. This simplifies the structure while maintaining separation of concerns.
+
+3. **Mixed Layer Concerns**: The `core/` directory contains both pure domain concepts and infrastructure concerns (like `rows/` for database models).
+
+### Benefits of These Compromises
+
+- **Faster Development**: Less boilerplate code and mapping between layers
+- **Type Safety**: Direct SQLModel integration provides better IDE support
+- **Pragmatic Structure**: Easier to understand and navigate for most developers
+- **Reduced Complexity**: Fewer abstraction layers mean simpler debugging
+
+### When to Consider Pure Hexagonal
+
+Consider moving to pure hexagonal architecture if you:
+- Need to support multiple persistence technologies
+- Have complex domain logic that changes frequently  
+- Are building a large, long-term system with multiple teams
+- Have strict requirements for technology independence
+
+For most microservices and SaaS backends, this template's pragmatic approach provides the right balance of structure and velocity.
 
 ## Testing Strategy
 

@@ -14,6 +14,7 @@ from src.api.http.app import app
 from src.api.http.deps import get_session
 from src.api.http.middleware.limiter import configure_rate_limiter
 from src.core.services import jwt_service
+from src.runtime.config import OIDCProviderConfig
 from src.runtime.settings import settings
 from tests.utils import oct_jwk
 
@@ -32,24 +33,18 @@ def clear_jwks_cache() -> Generator[None, None, None]:
     yield
     jwt_service._JWKS_CACHE.clear()
 
-
-@pytest.fixture(autouse=True)
-def snapshot_config() -> Generator[None, None, None]:
-    tracked_attrs = (
-        "issuer_jwks_map",
-        "allowed_algorithms",
-        "audiences",
-        "clock_skew",
-        "uid_claim",
-        "redis_url",
-    )
-    snapshot = {attr: deepcopy(getattr(settings, attr)) for attr in tracked_attrs}
-    try:
-        yield
-    finally:
-        for attr, value in snapshot.items():
-            setattr(settings, attr, value)
-
+@pytest.fixture
+def oidc_provider_config() -> OIDCProviderConfig:
+    return OIDCProviderConfig(
+            client_id="test-client-id",
+            client_secret="test-client-secret",
+            authorization_endpoint=f"{_ISSUER}/authorize",
+            token_endpoint=f"{_ISSUER}/token",
+            userinfo_endpoint=f"{_ISSUER}/userinfo",
+            jwks_uri=f"{_ISSUER}/.well-known/jwks.json",
+            scopes=["openid", "profile", "email"],
+            redirect_uri="http://localhost/callback",
+        )
 
 @pytest.fixture
 def request_factory() -> Callable[[Dict[str, str]], Request]:
@@ -78,7 +73,7 @@ def response_factory() -> Callable[[], Any]:
 
 
 @pytest.fixture
-def client(session: Session):
+def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Generator[TestClient, None, None]:
     """Yield a TestClient wired to the shared SQLModel session and test-friendly config."""
 
     def override_get_session():
@@ -92,7 +87,6 @@ def client(session: Session):
     # Store original values to restore later
     original_requests = settings.rate_limit_requests
     original_window = settings.rate_limit_window
-    original_jwks_map = dict(settings.issuer_jwks_map)
     original_allowed_algorithms = list(settings.allowed_algorithms)
     original_audiences = list(settings.audiences)
     original_uid_claim = settings.uid_claim
@@ -113,9 +107,8 @@ def client(session: Session):
         settings.environment = "test"
         settings.rate_limit_requests = 1000
         settings.rate_limit_window = 60
-        settings.issuer_jwks_map = {
-            _ISSUER: "https://issuer.test/.well-known/jwks.json"
-        }
+        settings.oidc_providers[_ISSUER] = oidc_provider_config
+
         settings.allowed_algorithms = ["HS256"]
         settings.audiences = [_AUDIENCE]
         settings.uid_claim = "uid"
@@ -127,7 +120,7 @@ def client(session: Session):
             app.dependency_overrides.clear()
             settings.rate_limit_requests = original_requests
             settings.rate_limit_window = original_window
-            settings.issuer_jwks_map = original_jwks_map
+            settings.oidc_providers.pop(_ISSUER)
             settings.allowed_algorithms = original_allowed_algorithms
             settings.audiences = original_audiences
             settings.uid_claim = original_uid_claim

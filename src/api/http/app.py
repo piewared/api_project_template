@@ -171,8 +171,9 @@ async def startup() -> None:
     logger.info("Configuration validated")
 
     # Verify JWKS endpoints so auth failures surface early
-    if settings.issuer_jwks_map:
-        issuers = list(settings.issuer_jwks_map.keys())
+    if settings.oidc_providers:
+        #issuers = list(settings.oidc_providers.keys())
+        issuers = list(settings.oidc_providers.values())
         results = await asyncio.gather(
             *(jwt_service.fetch_jwks(iss) for iss in issuers), return_exceptions=True
         )

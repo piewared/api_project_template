@@ -2,20 +2,12 @@
 
 import pytest
 
-from src.runtime.settings import Settings, settings as config
+from src.runtime.settings import EnvironmentSettings
+from src.runtime.settings import settings as config
 
 
 class TestApplicationStartup:
     """Test application startup and configuration validation."""
-
-    def test_production_config_validation_requires_jwks_map(self):
-        """Production environment should require issuer JWKS map configuration."""
-        s = Settings()
-        s.environment = "production"
-        s.issuer_jwks_map = {}
-        
-        with pytest.raises(ValueError, match=".*JWKS.*"):
-            s.validate_runtime()
 
     @pytest.mark.asyncio
     async def test_startup_initializes_rate_limiter_with_redis(self, monkeypatch):
@@ -24,12 +16,12 @@ class TestApplicationStartup:
         import src.api.http.app as application
 
         # Ensure no JWKS checks by clearing issuer map
-        original_issuer_map = dict(config.issuer_jwks_map)
+        original_issuer_map = config.oidc_providers
         original_environment = config.environment
         original_redis_url = config.redis_url
 
         try:
-            config.issuer_jwks_map = {}
+            config.oidc_providers.clear()
             config.environment = "development"
 
             # Prepare fake Redis and limiter classes
@@ -60,25 +52,22 @@ class TestApplicationStartup:
 
         finally:
             # Restore original settings
-            config.issuer_jwks_map = original_issuer_map
+            config.oidc_providers.update(original_issuer_map)
             config.environment = original_environment
             config.redis_url = original_redis_url
 
     @pytest.mark.asyncio
-    async def test_startup_fails_when_dependencies_missing_in_production(self, monkeypatch):
+    async def test_startup_fails_when_dependencies_missing_in_production(self, monkeypatch, oidc_provider_config):
         """Startup should fail in production when rate limiter dependencies are missing."""
         import src.api.http.app as application
 
         # Store original values
-        original_issuer_map = dict(config.issuer_jwks_map)
         original_environment = config.environment
         original_redis_url = config.redis_url
 
         try:
             # Provide valid issuer map so config validation doesn't fail
-            config.issuer_jwks_map = {
-                "https://issuer.example.com": "https://issuer.example.com/.well-known/jwks.json"
-            }
+            config.oidc_providers["https://issuer.example.com"] = oidc_provider_config
             config.environment = "production"
 
             # Mock JWKS fetching to succeed
@@ -98,6 +87,6 @@ class TestApplicationStartup:
 
         finally:
             # Restore original settings
-            config.issuer_jwks_map = original_issuer_map
+            config.oidc_providers.pop("https://issuer.example.com", None)
             config.environment = original_environment
             config.redis_url = original_redis_url

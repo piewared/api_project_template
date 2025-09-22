@@ -12,6 +12,7 @@ from authlib.jose import JoseError, JsonWebKey, jwt
 from cachetools import TTLCache
 from fastapi import HTTPException
 
+from src.runtime.config import OIDCProviderConfig
 from src.runtime.settings import settings
 
 _JWKS_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=10, ttl=3600)
@@ -42,10 +43,11 @@ def decode_claims(token: str) -> dict[str, Any]:
     return _decode_segment(payload, "Invalid JWT payload")
 
 
-async def fetch_jwks(issuer: str) -> dict[str, Any]:
-    if issuer not in settings.issuer_jwks_map:
-        raise HTTPException(status_code=401, detail="Unknown issuer")
-    jwks_url = settings.issuer_jwks_map[issuer]
+async def fetch_jwks(issuer: OIDCProviderConfig) -> dict[str, Any]:
+    jwks_url = issuer.jwks_uri
+    if not jwks_url:
+        raise HTTPException(status_code=401, detail="Issuer has no JWKS URI configured")
+
     if jwks_url in _JWKS_CACHE:
         return _JWKS_CACHE[jwks_url]
 

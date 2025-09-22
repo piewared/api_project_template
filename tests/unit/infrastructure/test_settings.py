@@ -4,215 +4,138 @@ import pytest
 import os
 from unittest.mock import patch
 
-from src.runtime.settings import Settings, _parse_list
+from src.runtime.settings import settings, Settings, EnvironmentSettings
+from src.runtime.config import ApplicationConfig
 
 
-class TestParseListHelper:
-    """Tests for the _parse_list helper function."""
+class TestApplicationConfig:
+    """Tests for the ApplicationConfig class."""
 
-    def test_empty_values(self):
-        """Should handle empty values correctly."""
-        assert _parse_list("") == []
-        assert _parse_list([]) == []
+    def test_default_config(self):
+        """Should have sensible defaults."""
+        config = ApplicationConfig()
 
-    def test_string_input(self):
-        """Should parse comma-separated strings."""
-        assert _parse_list("one,two,three") == ["one", "two", "three"]
-        assert _parse_list("one, two, three") == ["one", "two", "three"]
-        assert _parse_list("one") == ["one"]
+        assert config.jwt.allowed_algorithms == ["RS256", "RS512", "ES256", "ES384"]
+        assert config.jwt.audiences == ["api://default"]
+        assert config.jwt.uid_claim == "sub"
+        assert config.cors.origins == ["http://localhost:3000", "http://localhost:3001"]
+        assert config.rate_limit.requests == 100
+        assert config.session.max_age == 86400
 
-    def test_list_input(self):
-        """Should handle list input correctly."""
-        assert _parse_list(["one", "two", "three"]) == ["one", "two", "three"]
-        assert _parse_list(["1", "2", "3"]) == ["1", "2", "3"]
+    def test_environment_specific_config(self):
+        """Should apply environment-specific overrides."""
+        config = ApplicationConfig()
 
-    def test_json_input(self):
-        """Should parse JSON arrays."""
-        assert _parse_list('["one", "two", "three"]') == ["one", "two", "three"]
-        
-    def test_strips_whitespace(self):
-        """Should strip whitespace from values."""
-        assert _parse_list("  one  ,  two  ,  three  ") == ["one", "two", "three"]
-        assert _parse_list(["  one  ", "  two  ", "  three  "]) == ["one", "two", "three"]
+        # Production config
+        prod_config = config.for_environment("production")
+        assert prod_config.session.secure_cookies is True
+        assert prod_config.cors.origins == []  # Must be explicitly configured
 
-    def test_filters_empty_items(self):
-        """Should filter out empty items."""
-        assert _parse_list("one,,three,") == ["one", "three"]
-        assert _parse_list(["one", "", "three", " "]) == ["one", "three"]
+        # Development config
+        dev_config = config.for_environment("development")
+        assert dev_config.rate_limit.enabled is False
+
+        # Test config
+        test_config = config.for_environment("test")
+        assert test_config.rate_limit.enabled is False
+        assert test_config.session.max_age == 300
 
 
-class TestSettings:
-    """Tests for the Settings class."""
+class TestEnvironmentSettings:
+    """Tests for environment variable-based settings."""
 
     def test_can_instantiate_with_no_env(self):
         """Should be able to create settings without environment variables."""
-        # Mock environment to clear any existing values
         with patch.dict(os.environ, {}, clear=True):
-            # Disable .env file loading for this test
-            from pydantic_settings import SettingsConfigDict
-            
-            class TestSettings(Settings):
-                model_config = SettingsConfigDict(
-                    env_file=None,
-                    env_file_encoding="utf-8",
-                    env_ignore_empty=True,
-                )
-            
-            settings = TestSettings()
-            
-            assert settings.environment == "development"
-            assert settings.log_level == "INFO"
-            assert settings.database_url == "sqlite:///./database.db"
-            assert settings.rate_limit_requests == 5
-            assert settings.rate_limit_window == 60
+            env_settings = EnvironmentSettings()
 
-    def test_computed_properties(self):
-        """Should provide computed properties correctly."""
-        with patch.dict(os.environ, {}, clear=True):
-            settings = Settings()
-            
-            # These are computed from string fields
-            assert isinstance(settings.allowed_algorithms, list)
-            assert isinstance(settings.audiences, list)
-            assert isinstance(settings.cors_origins, list)
-            
-            # Should have defaults
-            assert "RS256" in settings.allowed_algorithms
-            assert "api://default" in settings.audiences
-
-    def test_setting_computed_properties(self):
-        """Should allow setting computed properties."""
-        with patch.dict(os.environ, {}, clear=True):
-            settings = Settings()
-            
-            # Set algorithms as list
-            settings.allowed_algorithms = ["HS256", "RS256"]
-            assert settings.allowed_algorithms_str == "HS256,RS256"
-            
-            # Set audiences as string
-            settings.audiences = "api://app,api://admin"
-            assert settings.audiences == ["api://app", "api://admin"]
+            assert env_settings.environment == "development"
+            assert env_settings.log_level == "INFO"
+            assert env_settings.database_url == "sqlite:///./database.db"
+            assert env_settings.base_url == "http://localhost:8000"
 
     def test_environment_variable_loading(self):
         """Should load values from environment variables."""
         env_vars = {
-            'ENVIRONMENT': 'production',
-            'LOG_LEVEL': 'DEBUG',
-            'DATABASE_URL': 'postgresql://user:pass@localhost/db',
-            'RATE_LIMIT_REQUESTS': '10',
-            'RATE_LIMIT_WINDOW': '120'
+            "ENVIRONMENT": "production",
+            "LOG_LEVEL": "DEBUG",
+            "DATABASE_URL": "postgresql://user:pass@localhost/db",
+            "BASE_URL": "https://api.example.com",
+            "SECRET_KEY": "super-secret-key",
         }
-        
-        with patch.dict(os.environ, env_vars, clear=True):
-            from pydantic_settings import SettingsConfigDict
-            
-            class TestSettings(Settings):
-                model_config = SettingsConfigDict(
-                    env_file=None,
-                    env_file_encoding="utf-8",
-                    env_ignore_empty=True,
-                )
-            
-            settings = TestSettings()
-            
-            assert settings.environment == "production"
-            assert settings.log_level == "DEBUG"
-            assert settings.database_url == "postgresql://user:pass@localhost/db"
-            assert settings.rate_limit_requests == 10
-            assert settings.rate_limit_window == 120
 
-    def test_issuer_jwks_map_validation(self):
-        """Should validate issuer JWKS map correctly."""
-        # Test with JSON string
-        env_vars = {
-            'JWT_ISSUER_JWKS_MAP': '{"https://issuer.example.com": "https://issuer.example.com/.well-known/jwks.json"}'
-        }
-        
         with patch.dict(os.environ, env_vars, clear=True):
-            from pydantic_settings import SettingsConfigDict
-            
-            class TestSettings(Settings):
-                model_config = SettingsConfigDict(
-                    env_file=None,
-                    env_file_encoding="utf-8",
-                    env_ignore_empty=True,
-                )
-            
-            settings = TestSettings()
-            assert "https://issuer.example.com" in settings.issuer_jwks_map
-            assert settings.issuer_jwks_map["https://issuer.example.com"] == "https://issuer.example.com/.well-known/jwks.json"
+            env_settings = EnvironmentSettings()
+
+            assert env_settings.environment == "production"
+            assert env_settings.log_level == "DEBUG"
+            assert env_settings.database_url == "postgresql://user:pass@localhost/db"
+            assert env_settings.base_url == "https://api.example.com"
+            assert env_settings.secret_key == "super-secret-key"
+
+    def test_oidc_provider_configuration(self):
+        """Should configure OIDC providers from environment variables."""
+        env_vars = {
+            "OIDC_GOOGLE_CLIENT_ID": "google-client-id",
+            "OIDC_GOOGLE_CLIENT_SECRET": "google-client-secret",
+        }
+
+        with patch.dict(os.environ, env_vars, clear=True):
+            env_settings = EnvironmentSettings()
+            providers = env_settings.get_oidc_providers()
+
+            assert "google" in providers
+            assert providers["google"].client_id == "google-client-id"
+            assert providers["google"].client_secret == "google-client-secret"
 
     def test_validate_runtime_production(self):
         """Should validate production configuration correctly."""
-        # Test production requirements - must disable .env file loading
-        env_vars = {
-            'ENVIRONMENT': 'production',
-            'JWT_ISSUER_JWKS_MAP': '{}',  # Empty map should fail
-            'JWT_AUDIENCES': 'api://default',
-            'DATABASE_URL': 'postgresql://user:pass@localhost/db'
-        }
-        
-        with patch.dict(os.environ, env_vars, clear=True):
-            # Create settings with no env file to avoid interference
-            from pydantic_settings import SettingsConfigDict
-            
-            class TestSettings(Settings):
-                model_config = SettingsConfigDict(
-                    env_file=None,  # Disable .env file
-                    env_file_encoding="utf-8",
-                    env_ignore_empty=True,
-                )
-            
-            settings = TestSettings()
-            
-            with pytest.raises(ValueError, match="JWT_ISSUER_JWKS_MAP must be configured"):
-                settings.validate_runtime()
+        s = EnvironmentSettings()
+        s.environment = "production"
+
+        with pytest.raises(ValueError, match=".*SECRET_KEY.*"):
+            s.validate_runtime()
+
+        s.secret_key = "test-secret-key"
+        with pytest.raises(ValueError, match=".*SQLite.*"):
+            s.validate_runtime()
+
+        s.database_url = "postgresql://user:pass@localhost/dbname"
+        with pytest.raises(ValueError, match=".*REDIS.*"):
+            s.validate_runtime()
 
     def test_validate_runtime_redis_url(self):
         """Should validate Redis URL format."""
-        env_vars = {
-            'REDIS_URL': 'invalid-url'
-        }
-        
-        with patch.dict(os.environ, env_vars, clear=True):
-            # Create settings with no env file to avoid interference
-            from pydantic_settings import SettingsConfigDict
-            
-            class TestSettings(Settings):
-                model_config = SettingsConfigDict(
-                    env_file=None,  # Disable .env file
-                    env_file_encoding="utf-8",
-                    env_ignore_empty=True,
-                )
-            
-            settings = TestSettings()
-            
-            with pytest.raises(ValueError, match="REDIS_URL must be a redis"):
-                settings.validate_runtime()
+        env_vars = {"REDIS_URL": "invalid-url"}
 
-    def test_redis_url_validation_success(self):
-        """Should accept valid Redis URLs."""
-        from pydantic_settings import SettingsConfigDict
-        
-        class TestSettings(Settings):
-            model_config = SettingsConfigDict(
-                env_file=None,  # Disable .env file
-                env_file_encoding="utf-8",
-                env_ignore_empty=True,
-            )
-        
-        env_vars = {
-            'REDIS_URL': 'redis://localhost:6379/0'
-        }
-        
         with patch.dict(os.environ, env_vars, clear=True):
-            settings = TestSettings()
-            settings.validate_runtime()  # Should not raise
-            
-        env_vars = {
-            'REDIS_URL': 'rediss://localhost:6379/0'
-        }
-        
-        with patch.dict(os.environ, env_vars, clear=True):
-            settings = TestSettings()
-            settings.validate_runtime()  # Should not raise
+            env_settings = EnvironmentSettings()
+
+            with pytest.raises(ValueError, match="REDIS_URL must be a redis"):
+                env_settings.validate_runtime()
+
+
+class TestUnifiedSettings:
+    """Tests for the unified settings interface."""
+
+    def test_backward_compatibility(self):
+        """Should maintain backward compatibility with existing code."""
+        # These should all work as before
+        assert hasattr(settings, "environment")
+        assert hasattr(settings, "database_url")
+        assert hasattr(settings, "allowed_algorithms")
+        assert hasattr(settings, "cors_origins")
+        assert hasattr(settings, "session_max_age")
+        assert hasattr(settings, "oidc_providers")
+
+    def test_settings_values(self):
+        """Should provide expected values."""
+        assert settings.environment in ["development", "production", "test"]
+        assert isinstance(settings.allowed_algorithms, list)
+        assert isinstance(settings.cors_origins, list)
+        assert isinstance(settings.oidc_providers, dict)
+
+    def test_validation_method(self):
+        """Should provide validation method."""
+        # Should not raise with default development settings
+        settings.validate_runtime()

@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 # --- Rate limiter dependencies ---
 try:
-    from fastapi_limiter import FastAPILimiter
     import redis.asyncio as redis_async
+    from fastapi_limiter import FastAPILimiter
     from redis.asyncio import Redis as AsyncRedis
 except ImportError:  # pragma: no cover - optional dependency missing
     FastAPILimiter = None

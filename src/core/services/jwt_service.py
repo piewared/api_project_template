@@ -5,18 +5,18 @@ from __future__ import annotations
 import base64
 import json
 import time
-from typing import Any, Dict, Optional, Sequence, Set
+from typing import Any, Sequence
 
-from authlib.jose import JsonWebKey, JoseError, jwt
+from authlib.jose import JoseError, JsonWebKey, jwt
 from cachetools import TTLCache
 from fastapi import HTTPException
 
 from src.runtime.settings import settings
 
-_JWKS_CACHE: TTLCache[str, Dict[str, Any]] = TTLCache(maxsize=10, ttl=3600)
+_JWKS_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=10, ttl=3600)
 
 
-def _decode_segment(segment: str, exc_message: str) -> Dict[str, Any]:
+def _decode_segment(segment: str, exc_message: str) -> dict[str, Any]:
     padding = "=" * (-len(segment) % 4)
     try:
         decoded = base64.urlsafe_b64decode(segment + padding)
@@ -25,7 +25,7 @@ def _decode_segment(segment: str, exc_message: str) -> Dict[str, Any]:
         raise HTTPException(status_code=401, detail=exc_message) from exc
 
 
-def decode_header(token: str) -> Dict[str, Any]:
+def decode_header(token: str) -> dict[str, Any]:
     try:
         header_segment, _, _ = token.split(".", 2)
     except ValueError as exc:
@@ -33,7 +33,7 @@ def decode_header(token: str) -> Dict[str, Any]:
     return _decode_segment(header_segment, "Invalid JWT header")
 
 
-def decode_claims(token: str) -> Dict[str, Any]:
+def decode_claims(token: str) -> dict[str, Any]:
     try:
         _header, payload, _signature = token.split(".", 2)
     except ValueError as exc:
@@ -41,7 +41,7 @@ def decode_claims(token: str) -> Dict[str, Any]:
     return _decode_segment(payload, "Invalid JWT payload")
 
 
-async def fetch_jwks(issuer: str) -> Dict[str, Any]:
+async def fetch_jwks(issuer: str) -> dict[str, Any]:
     if issuer not in settings.issuer_jwks_map:
         raise HTTPException(status_code=401, detail="Unknown issuer")
     jwks_url = settings.issuer_jwks_map[issuer]
@@ -58,7 +58,7 @@ async def fetch_jwks(issuer: str) -> Dict[str, Any]:
         return jwks
 
 
-async def verify_jwt(token: str, audiences: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+async def verify_jwt(token: str, audiences: Sequence[str] | None = None) -> dict[str, Any]:
     header = decode_header(token)
 
     alg = header.get("alg")
@@ -74,7 +74,7 @@ async def verify_jwt(token: str, audiences: Optional[Sequence[str]] = None) -> D
         jwks = await fetch_jwks(issuer)
         key_set = JsonWebKey.import_key_set(jwks)
     except HTTPException as exc:
-        raise HTTPException(status_code=401, detail=f"Failed to fetch JWKS: {exc.detail}")
+        raise HTTPException(status_code=401, detail=f"Failed to fetch JWKS: {exc.detail}") from exc
     except Exception as exc:  # pragma: no cover - defensive
         raise HTTPException(status_code=401, detail=f"Failed to parse JWKS: {exc}") from exc
 
@@ -108,15 +108,15 @@ async def verify_jwt(token: str, audiences: Optional[Sequence[str]] = None) -> D
     return dict(claims)
 
 
-def extract_uid(claims: Dict[str, Any]) -> str:
+def extract_uid(claims: dict[str, Any]) -> str:
     uid_claim = settings.uid_claim
     if uid_claim and uid_claim in claims:
         return claims[uid_claim]
     return f"{claims.get('iss')}|{claims.get('sub')}"
 
 
-def extract_scopes(claims: Dict[str, Any]) -> Set[str]:
-    scopes: Set[str] = set()
+def extract_scopes(claims: dict[str, Any]) -> set[str]:
+    scopes: set[str] = set()
     if "scope" in claims:
         scopes.update(str(claims["scope"]).split())
     if "scp" in claims:
@@ -128,8 +128,8 @@ def extract_scopes(claims: Dict[str, Any]) -> Set[str]:
     return scopes
 
 
-def extract_roles(claims: Dict[str, Any]) -> Set[str]:
-    roles: Set[str] = set()
+def extract_roles(claims: dict[str, Any]) -> set[str]:
+    roles: set[str] = set()
     if "roles" in claims:
         value = claims["roles"]
         if isinstance(value, str):

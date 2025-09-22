@@ -12,12 +12,13 @@ from pydantic import BaseModel, Field
 class OIDCProviderConfig(BaseModel):
     """OIDC provider configuration."""
 
-    client_id: str | None = Field(description="OIDC client identifier", default=None)
-    client_secret: str | None = Field(description="OIDC client secret", default=None)
-    authorization_endpoint: str = Field(description="OIDC authorization endpoint URL. Used to initiate auth flow.")
-    token_endpoint: str = Field(description="OIDC token endpoint URL. Used to exchange code for tokens.")
-    userinfo_endpoint: str | None = Field(description="OIDC userinfo endpoint URL. Used to fetch user profile.", default=None)
+    client_id: str | None = Field(description="Client ID for the OIDC provider.", default=None)
+    client_secret: str | None = Field(description="Client secret for the OIDC provider.", default=None)
+    authorization_endpoint: str = Field(description="OIDC authorization endpoint URL.")
+    token_endpoint: str = Field(description="OIDC token endpoint URL.")
+    userinfo_endpoint: str | None = Field(description="OIDC userinfo endpoint URL.", default=None)
     end_session_endpoint: str | None = Field(description="OIDC end session endpoint URL. Used to log out users.", default=None)
+    issuer: str | None = Field(description="Expected JWT issuer for this provider.", default=None)
     jwks_uri: str | None = Field(description="JWKS endpoint for JWT validation.", default=None)
     scopes: list[str] = Field(default_factory=lambda: ["openid", "profile", "email"], description="OIDC scopes to request during authentication.")
     redirect_uri: str | None = Field(description="Redirect URI for this provider.", default=None)
@@ -98,6 +99,7 @@ DEFAULT_OIDC_PROVIDERS: dict[str, OIDCProviderConfig] = {
         token_endpoint="https://oauth2.googleapis.com/token",
         userinfo_endpoint="https://openidconnect.googleapis.com/v1/userinfo",
         end_session_endpoint="https://accounts.google.com/logout",
+        issuer="https://accounts.google.com",
         jwks_uri="https://www.googleapis.com/oauth2/v3/certs",
         scopes=["openid", "profile", "email"],
     ),
@@ -106,6 +108,7 @@ DEFAULT_OIDC_PROVIDERS: dict[str, OIDCProviderConfig] = {
         token_endpoint="https://login.microsoftonline.com/common/oauth2/v2.0/token",
         userinfo_endpoint="https://graph.microsoft.com/oidc/userinfo",
         end_session_endpoint="https://login.microsoftonline.com/common/oauth2/v2.0/logout",
+        issuer="https://login.microsoftonline.com",  # Base issuer pattern for Microsoft
         jwks_uri="https://login.microsoftonline.com/common/discovery/v2.0/keys",
         scopes=["openid", "profile", "email"],
     ),

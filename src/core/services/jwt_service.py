@@ -53,15 +53,22 @@ async def fetch_jwks(issuer: OIDCProviderConfig) -> dict[str, Any]:
 
     import httpx  # local import to avoid forcing httpx at import time
 
-    async with httpx.AsyncClient(timeout=5) as client:
-        resp = await client.get(jwks_url)
-        resp.raise_for_status()
-        jwks = resp.json()
-        _JWKS_CACHE[jwks_url] = jwks
-        return jwks
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(jwks_url)
+            resp.raise_for_status()
+            jwks = resp.json()
+            _JWKS_CACHE[jwks_url] = jwks
+            return jwks
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to fetch JWKS: {exc}"
+        ) from exc
 
 
-async def verify_jwt(token: str, audiences: Sequence[str] | None = None) -> dict[str, Any]:
+async def verify_jwt(
+    token: str, audiences: Sequence[str] | None = None
+) -> dict[str, Any]:
     header = decode_header(token)
 
     alg = header.get("alg")
@@ -73,17 +80,33 @@ async def verify_jwt(token: str, audiences: Sequence[str] | None = None) -> dict
     if not issuer:
         raise HTTPException(status_code=401, detail="Missing iss claim")
 
+    # Find provider config by issuer
+    provider_config = None
+    for provider in settings.oidc_providers.values():
+        if provider.issuer and issuer.startswith(provider.issuer):
+            provider_config = provider
+            break
+
+    if not provider_config:
+        raise HTTPException(status_code=401, detail=f"Unknown issuer: {issuer}")
+
     try:
-        jwks = await fetch_jwks(issuer)
+        jwks = await fetch_jwks(provider_config)
         key_set = JsonWebKey.import_key_set(jwks)
     except HTTPException as exc:
-        raise HTTPException(status_code=401, detail=f"Failed to fetch JWKS: {exc.detail}") from exc
+        raise HTTPException(
+            status_code=401, detail=f"Failed to fetch JWKS: {exc.detail}"
+        ) from exc
     except Exception as exc:  # pragma: no cover - defensive
-        raise HTTPException(status_code=401, detail=f"Failed to parse JWKS: {exc}") from exc
+        raise HTTPException(
+            status_code=401, detail=f"Failed to parse JWKS: {exc}"
+        ) from exc
 
     audience_values = audiences or settings.audiences
     if not audience_values:
-        raise HTTPException(status_code=401, detail="No audience configured for verification")
+        raise HTTPException(
+            status_code=401, detail="No audience configured for verification"
+        )
 
     try:
         claims = jwt.decode(

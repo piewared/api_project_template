@@ -5,17 +5,13 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.api.http.deps import get_current_user, require_role, require_scope
 from src.api.http.middleware.limiter import close_rate_limiter, configure_rate_limiter
 from src.core.services import jwt_service
-from src.entities.user import User
 from src.runtime.settings import settings
 
 # --- Logging ---
@@ -172,7 +168,7 @@ async def startup() -> None:
         results = await asyncio.gather(
             *(jwt_service.fetch_jwks(iss) for iss in issuers), return_exceptions=True
         )
-        errors = [(iss, str(err)) for iss, err in zip(issuers, results) if isinstance(err, Exception)]
+        errors = [(iss, str(err)) for iss, err in zip(issuers, results, strict=True) if isinstance(err, Exception)]
         for iss, err in errors:
             logger.exception("Failed to fetch JWKS for issuer %s: %s", iss, err)
         if errors and settings.environment == "production":
@@ -184,15 +180,6 @@ async def startup() -> None:
 async def shutdown() -> None:
     logger.info("Shutting down application")
     await close_rate_limiter()
-
-
-# --- Response models ---
-class MeResponse(BaseModel):
-    user_id: str
-    email: str
-    scopes: List[str]
-    roles: List[str]
-    claims: Dict[str, Any]
 
 
 # --- Route handlers ---
@@ -207,32 +194,3 @@ async def health() -> dict[str, str]:
 async def readiness() -> dict[str, str]:
     """Readiness check endpoint."""
     return {"status": "ready"}
-
-
-@app.get("/me", response_model=MeResponse)
-async def get_me(request: Request, user: User = Depends(get_current_user)) -> dict[str, Any]:
-    # Mirror the authenticated user context for clients that need their claims
-    return {
-        "user_id": str(user.id),
-        "email": user.email,
-        "scopes": list(getattr(request.state, "scopes", [])),
-        "roles": list(getattr(request.state, "roles", [])),
-        "claims": getattr(request.state, "claims", {}),
-    }
-
-
-@app.get("/protected-scope")
-async def protected_scope(
-    user: User = Depends(get_current_user), dep: None = Depends(require_scope("read:protected"))
-) -> dict[str, Any]:
-    # Example endpoint that enforces a scope requirement
-    return {"message": "You have the required scope!", "user_id": str(user.id)}
-
-
-@app.get("/protected-role")
-async def protected_role(
-    user: User = Depends(get_current_user), dep: None = Depends(require_role("admin"))
-) -> dict[str, Any]:
-    # Example endpoint that enforces a role requirement
-    return {"message": "You have the required role!", "user_id": str(user.id)}
-

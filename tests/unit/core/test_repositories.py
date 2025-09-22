@@ -3,9 +3,10 @@
 import pytest
 from sqlmodel import Session
 
-from src.core.entities.user import User
-from src.core.entities.user_identity import UserIdentity
-from src.core.repositories.user_repo import UserRepository, UserIdentityRepository
+from src.entities.user import User, UserRepository, UserTable
+from src.entities.user_identity.entity import UserIdentity
+from src.entities.user_identity.repository import UserIdentityRepository
+from src.entities.user_identity.table import UserIdentityTable
 
 
 class TestUserRepository:
@@ -18,20 +19,21 @@ class TestUserRepository:
 
     def test_get_user_by_id(self, user_repo: UserRepository, session: Session):
         """Should retrieve user by ID."""
-        from src.core.rows.user_row import UserRow
-        
+
         # Setup
-        user_row = UserRow(first_name="Jane", last_name="Smith", email="jane@example.com")
+        user_row = UserTable(
+            id="1", first_name="Jane", last_name="Smith", email="jane@example.com"
+        )
         session.add(user_row)
         session.commit()
         session.refresh(user_row)
-        
+
         # Ensure ID is not None after persistence
         assert user_row.id is not None
-        
+
         # Test
         result = user_repo.get(user_row.id)
-        
+
         assert result is not None
         assert result.id == user_row.id
         assert result.first_name == "Jane"
@@ -40,27 +42,30 @@ class TestUserRepository:
 
     def test_get_user_not_found(self, user_repo: UserRepository):
         """Should return None for non-existent user."""
-        result = user_repo.get(999)
+        result = user_repo.get("999")
         assert result is None
 
-    def test_get_returns_domain_entity(self, user_repo: UserRepository, session: Session):
+    def test_get_returns_domain_entity(
+        self, user_repo: UserRepository, session: Session
+    ):
         """Should return User domain entity, not database row."""
-        from src.core.rows.user_row import UserRow
-        
+
         # Setup
-        user_row = UserRow(first_name="Test", last_name="Entity", email="test@example.com")
+        user_row = UserTable(
+            id="1", first_name="Test", last_name="Entity", email="test@example.com"
+        )
         session.add(user_row)
         session.commit()
         session.refresh(user_row)
-        
+
         # Ensure ID is not None after persistence
         assert user_row.id is not None
-        
+
         # Test
         result = user_repo.get(user_row.id)
-        
+
         assert isinstance(result, User)
-        assert not isinstance(result, UserRow)
+        assert not isinstance(result, UserTable)
 
 
 class TestUserIdentityRepository:
@@ -74,9 +79,10 @@ class TestUserIdentityRepository:
     @pytest.fixture
     def sample_user(self, session: Session):
         """Create a sample user for identity testing."""
-        from src.core.rows.user_row import UserRow
-        
-        user_row = UserRow(first_name="Test", last_name="User", email="test@example.com")
+
+        user_row = UserTable(
+            id="1", first_name="Test", last_name="User", email="test@example.com"
+        )
         session.add(user_row)
         session.commit()
         session.refresh(user_row)
@@ -84,24 +90,26 @@ class TestUserIdentityRepository:
         assert user_row.id is not None
         return user_row
 
-    def test_get_by_uid(self, identity_repo: UserIdentityRepository, sample_user, session: Session):
+    def test_get_by_uid(
+        self, identity_repo: UserIdentityRepository, sample_user, session: Session
+    ):
         """Should retrieve identity by UID claim."""
-        from src.core.rows.user_identity_row import UserIdentityRow
-        
+
         # Setup
-        identity = UserIdentityRow(
+        identity = UserIdentityTable(
+            id="1",
             issuer="https://auth.example.com",
             subject="user-123",
             uid_claim="unique-uid",
-            user_id=sample_user.id  # type: ignore[arg-type] # We've asserted it's not None
+            user_id=sample_user.id,  # type: ignore[arg-type] # We've asserted it's not None
         )
         session.add(identity)
         session.commit()
         session.refresh(identity)
-        
+
         # Test
         result = identity_repo.get_by_uid("unique-uid")
-        
+
         assert result is not None
         assert result.uid_claim == "unique-uid"
         assert result.user_id == sample_user.id
@@ -111,73 +119,87 @@ class TestUserIdentityRepository:
         result = identity_repo.get_by_uid("nonexistent-uid")
         assert result is None
 
-    def test_get_by_issuer_subject(self, identity_repo: UserIdentityRepository, sample_user, session: Session):
+    def test_get_by_issuer_subject(
+        self, identity_repo: UserIdentityRepository, sample_user, session: Session
+    ):
         """Should retrieve identity by issuer and subject combination."""
-        from src.core.rows.user_identity_row import UserIdentityRow
-        
+
         # Setup
-        identity = UserIdentityRow(
+        identity = UserIdentityTable(
+            id="1",
             issuer="https://specific.issuer.com",
             subject="specific-subject",
             uid_claim="uid-123",
-            user_id=sample_user.id  # type: ignore[arg-type] # We've asserted it's not None
+            user_id=sample_user.id,  # type: ignore[arg-type] # We've asserted it's not None
         )
         session.add(identity)
         session.commit()
         session.refresh(identity)
-        
+
         # Test
-        result = identity_repo.get_by_issuer_subject("https://specific.issuer.com", "specific-subject")
-        
+        result = identity_repo.get_by_issuer_subject(
+            "https://specific.issuer.com", "specific-subject"
+        )
+
         assert result is not None
         assert result.issuer == "https://specific.issuer.com"
         assert result.subject == "specific-subject"
         assert result.user_id == sample_user.id
 
-    def test_get_by_issuer_subject_not_found(self, identity_repo: UserIdentityRepository):
+    def test_get_by_issuer_subject_not_found(
+        self, identity_repo: UserIdentityRepository
+    ):
         """Should return None for non-existent issuer/subject combination."""
-        result = identity_repo.get_by_issuer_subject("https://unknown.issuer", "unknown-subject")
+        result = identity_repo.get_by_issuer_subject(
+            "https://unknown.issuer", "unknown-subject"
+        )
         assert result is None
 
-    def test_returns_domain_entity(self, identity_repo: UserIdentityRepository, sample_user, session: Session):
+    def test_returns_domain_entity(
+        self, identity_repo: UserIdentityRepository, sample_user, session: Session
+    ):
         """Should return UserIdentity domain entity, not database row."""
-        from src.core.rows.user_identity_row import UserIdentityRow
-        
+
         # Setup
-        identity = UserIdentityRow(
+        identity = UserIdentityTable(
+            id="1",
             issuer="https://domain.test",
             subject="domain-subject",
             uid_claim="domain-uid",
-            user_id=sample_user.id  # type: ignore[arg-type] # We've asserted it's not None
+            user_id=sample_user.id,  # type: ignore[arg-type] # We've asserted it's not None
         )
         session.add(identity)
         session.commit()
         session.refresh(identity)
-        
+
         # Test
         result = identity_repo.get_by_uid("domain-uid")
-        
-        assert isinstance(result, UserIdentity)
-        assert not isinstance(result, UserIdentityRow)
 
-    def test_uid_claim_can_be_none(self, identity_repo: UserIdentityRepository, sample_user, session: Session):
+        assert isinstance(result, UserIdentity)
+        assert not isinstance(result, UserIdentityTable)
+
+    def test_uid_claim_can_be_none(
+        self, identity_repo: UserIdentityRepository, sample_user, session: Session
+    ):
         """Should handle identities without UID claims."""
-        from src.core.rows.user_identity_row import UserIdentityRow
-        
+
         # Setup
-        identity = UserIdentityRow(
+        identity = UserIdentityTable(
+            id="1",
             issuer="https://no-uid.issuer",
             subject="no-uid-subject",
             uid_claim=None,  # No UID claim
-            user_id=sample_user.id  # type: ignore[arg-type] # We've asserted it's not None
+            user_id=sample_user.id,  # type: ignore[arg-type] # We've asserted it's not None
         )
         session.add(identity)
         session.commit()
         session.refresh(identity)
-        
+
         # Test
-        result = identity_repo.get_by_issuer_subject("https://no-uid.issuer", "no-uid-subject")
-        
+        result = identity_repo.get_by_issuer_subject(
+            "https://no-uid.issuer", "no-uid-subject"
+        )
+
         assert result is not None
         assert result.uid_claim is None
         assert result.issuer == "https://no-uid.issuer"

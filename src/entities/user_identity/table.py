@@ -1,3 +1,5 @@
+"""User identity database table model."""
+
 from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, String, UniqueConstraint
@@ -9,8 +11,12 @@ def utc_now():
     return datetime.now(UTC)
 
 
-class UserIdentityRow(SQLModel, table=True):
-    """Persistence model mapping external identities to user accounts."""
+class UserIdentityTable(SQLModel, table=True):
+    """Database persistence model for user identities.
+
+    This represents how UserIdentity entities are stored in the database,
+    with proper constraints and indexes for efficient querying.
+    """
 
     __table_args__ = (
         UniqueConstraint("issuer", "subject", name="uq_identity_issuer_subject"),
@@ -20,8 +26,10 @@ class UserIdentityRow(SQLModel, table=True):
     id: str = Field(primary_key=True)
     issuer: str = Field(sa_column=Column(String(512), nullable=False, index=True))
     subject: str = Field(sa_column=Column(String(512), nullable=False, index=True))
-    uid_claim: str | None = Field(default=None, sa_column=Column(String(512), nullable=True, index=True))
-    user_id: str = Field(foreign_key="userrow.id", index=True)
+    uid_claim: str | None = Field(
+        default=None, sa_column=Column(String(512), nullable=True, index=True)
+    )
+    user_id: str = Field(foreign_key="usertable.id", index=True)
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False),

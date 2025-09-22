@@ -7,10 +7,10 @@ from collections.abc import Iterator
 from fastapi import Depends, HTTPException, Request
 from sqlmodel import Session
 
-from src.core.entities.user import User as UserEntity
-from src.core.entities.user_identity import UserIdentity
-from src.core.repositories.user_repo import UserIdentityRepository, UserRepository
 from src.core.services import jwt_service
+from src.entities.user import User, UserRepository
+from src.entities.user_identity.entity import UserIdentity
+from src.entities.user_identity.repository import UserIdentityRepository
 from src.runtime.db import session
 from src.runtime.settings import settings
 
@@ -35,7 +35,7 @@ def get_session() -> Iterator[Session]:
 #     return YourRepository(db)
 
 
-_DEV_USER = UserEntity(
+_DEV_USER = User(
     id='93743658555595339',
     first_name="Development",
     last_name="User",
@@ -43,7 +43,7 @@ _DEV_USER = UserEntity(
 )
 
 
-async def get_current_user(request: Request, db: Session = Depends(get_session)) -> UserEntity:
+async def get_current_user(request: Request, db: Session = Depends(get_session)) -> User:
     """Authenticate the request using a Bearer token, with JIT user provisioning."""
 
     if settings.environment == "development":
@@ -98,7 +98,7 @@ async def get_current_user(request: Request, db: Session = Depends(get_session))
                 last_name = ""
 
         # Create the new user
-        new_user = UserEntity(
+        new_user = User(
             first_name=first_name or "Unknown",
             last_name=last_name or "User",
             email=email,

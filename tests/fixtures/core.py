@@ -3,19 +3,20 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Callable, Dict, Generator
 
+import pytest
 from fastapi import Response
 from fastapi.testclient import TestClient
-import pytest
 from sqlalchemy import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 from starlette.requests import Request
 
-from src.core.services import jwt_service
-from src.runtime.settings import settings
 from src.api.http.app import app
 from src.api.http.deps import get_session
 from src.api.http.middleware.limiter import configure_rate_limiter
+from src.core.services import jwt_service
+from src.runtime.settings import settings
 from tests.utils import oct_jwk
+
 # Models will be imported within fixtures to control timing
 
 
@@ -102,7 +103,8 @@ def client(session: Session):
 
     # Mock the fetch_jwks function
     import unittest.mock
-    with unittest.mock.patch.object(jwt_service, 'fetch_jwks', fake_fetch_jwks):
+
+    with unittest.mock.patch.object(jwt_service, "fetch_jwks", fake_fetch_jwks):
         configure_rate_limiter(
             use_external=False, local_factory=lambda *_a, **_k: _no_limit
         )
@@ -111,7 +113,9 @@ def client(session: Session):
         settings.environment = "test"
         settings.rate_limit_requests = 1000
         settings.rate_limit_window = 60
-        settings.issuer_jwks_map = {_ISSUER: "https://issuer.test/.well-known/jwks.json"}
+        settings.issuer_jwks_map = {
+            _ISSUER: "https://issuer.test/.well-known/jwks.json"
+        }
         settings.allowed_algorithms = ["HS256"]
         settings.audiences = [_AUDIENCE]
         settings.uid_claim = "uid"
@@ -134,15 +138,19 @@ def client(session: Session):
 def persistent_session() -> Generator[Session, None, None]:
     """Create a persistent database session for session-scoped testing."""
     # Create engine first
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
     # Import models to register them with the metadata
-    from src.core.rows.user_row import UserRow  # noqa: F401
-    from src.core.rows.user_identity_row import UserIdentityRow  # noqa: F401
-    
+    from src.entities.user import UserTable  # noqa: F401
+    from src.entities.user_identity import UserIdentityTable  # noqa: F401
+
     # Create all tables using the current metadata state
     SQLModel.metadata.create_all(engine)
-    
+
     with Session(engine) as session:
         yield session
 
@@ -151,15 +159,19 @@ def persistent_session() -> Generator[Session, None, None]:
 def session() -> Generator[Session, None, None]:
     """Create a fresh database session for testing."""
     # Create engine first
-    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    
-    # Import models to register them with the metadata  
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    # Import models to register them with the metadata
     # This needs to happen after engine creation but before table creation
-    from src.core.rows.user_row import UserRow  # noqa: F401
-    from src.core.rows.user_identity_row import UserIdentityRow  # noqa: F401
-    
+    from src.entities.user import UserTable  # noqa: F401
+    from src.entities.user_identity import UserIdentityTable  # noqa: F401
+
     # Create all tables using the current metadata state
     SQLModel.metadata.create_all(engine)
-    
+
     with Session(engine) as session:
         yield session

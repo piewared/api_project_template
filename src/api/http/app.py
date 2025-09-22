@@ -14,8 +14,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.http.deps import get_current_user, require_role, require_scope
 from src.api.http.middleware.limiter import close_rate_limiter, configure_rate_limiter
-from src.core.entities.user import User as UserEntity
 from src.core.services import jwt_service
+from src.entities.user import User
 from src.runtime.settings import settings
 
 # --- Logging ---
@@ -210,7 +210,7 @@ async def readiness() -> dict[str, str]:
 
 
 @app.get("/me", response_model=MeResponse)
-async def get_me(request: Request, user: UserEntity = Depends(get_current_user)) -> dict[str, Any]:
+async def get_me(request: Request, user: User = Depends(get_current_user)) -> dict[str, Any]:
     # Mirror the authenticated user context for clients that need their claims
     return {
         "user_id": str(user.id),
@@ -223,7 +223,7 @@ async def get_me(request: Request, user: UserEntity = Depends(get_current_user))
 
 @app.get("/protected-scope")
 async def protected_scope(
-    user: UserEntity = Depends(get_current_user), dep: None = Depends(require_scope("read:protected"))
+    user: User = Depends(get_current_user), dep: None = Depends(require_scope("read:protected"))
 ) -> dict[str, Any]:
     # Example endpoint that enforces a scope requirement
     return {"message": "You have the required scope!", "user_id": str(user.id)}
@@ -231,7 +231,7 @@ async def protected_scope(
 
 @app.get("/protected-role")
 async def protected_role(
-    user: UserEntity = Depends(get_current_user), dep: None = Depends(require_role("admin"))
+    user: User = Depends(get_current_user), dep: None = Depends(require_role("admin"))
 ) -> dict[str, Any]:
     # Example endpoint that enforces a role requirement
     return {"message": "You have the required role!", "user_id": str(user.id)}

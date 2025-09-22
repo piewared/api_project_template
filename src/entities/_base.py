@@ -8,5 +8,5 @@ class Entity(BaseModel):
 
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        description="Unique identifier for the entity"
+        description="Unique identifier for the entity",
     )

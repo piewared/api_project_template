@@ -12,7 +12,7 @@ from src.runtime.config import (
     DEFAULT_OIDC_PROVIDERS,
     ApplicationConfig,
     OIDCProviderConfig,
-    main_config,
+    get_config,
 )
 from src.runtime.settings import EnvironmentVariables
 

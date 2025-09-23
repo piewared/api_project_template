@@ -7,6 +7,9 @@ Complex objects, default business logic settings, and static configuration live 
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -134,7 +137,8 @@ def _get_oidc_providers() -> dict[str, OIDCProviderConfig]:
     yaml_config = _load_oidc_yaml_config()
     # Create deep copies to avoid mutation issues between different config instances
     providers = {
-        name: provider.model_copy(deep=True) for name, provider in DEFAULT_OIDC_PROVIDERS.items()
+        name: provider.model_copy(deep=True)
+        for name, provider in DEFAULT_OIDC_PROVIDERS.items()
     }
 
     for name, config in yaml_config.items():
@@ -291,5 +295,77 @@ class ApplicationConfig(BaseModel):
         return self.oidc.providers
 
 
+@dataclass
+class AppContext:
+    """Application context containing configuration and other app-wide state."""
+
+    config: ApplicationConfig
+
+
+# Global configuration instance
 _env_vars = EnvironmentVariables()
-main_config = ApplicationConfig.from_environment(_env_vars)
+_default_config = ApplicationConfig.from_environment(_env_vars)
+_default_context = AppContext(config=_default_config)
+
+# Context variable for application context
+_app_context: ContextVar[AppContext] = ContextVar(
+    "app_context", default=_default_context
+)
+
+
+def get_context() -> AppContext:
+    """Get the current application context.
+
+    Returns:
+        AppContext: The current application context containing configuration.
+    """
+    return _app_context.get()
+
+
+def set_context(context: AppContext) -> Token[AppContext]:
+    """Set the current application context.
+
+    Args:
+        context: AppContext instance to set as current.
+    """
+    return _app_context.set(context)
+
+
+@contextmanager
+def with_context(config_override: ApplicationConfig | None = None):
+    """Context manager for temporarily overriding the application context.
+
+    Args:
+        config_override: Optional ApplicationConfig instance to use as override.
+                 If None, uses the current context.
+
+    Example:
+        # Normal usage - uses current context
+        with with_context():
+            context = get_context()
+            config = context.config
+
+        # Test usage - with override
+        test_config = ApplicationConfig(environment="test")
+        with with_context(test_config):
+            context = get_context()
+            assert context.config.environment == "test"
+    """
+    if config_override is not None:
+        token = set_context(replace(get_context(), config=config_override))
+        try:
+            yield
+        finally:
+            _app_context.reset(token)
+    else:
+        # No override, just yield current context
+        yield
+
+
+def get_config() -> ApplicationConfig:
+    """Convenience function to get the current configuration.
+
+    Returns:
+        ApplicationConfig: The current configuration from the app context.
+    """
+    return get_context().config

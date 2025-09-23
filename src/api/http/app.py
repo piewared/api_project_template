@@ -14,7 +14,9 @@ from src.api.http.middleware.limiter import close_rate_limiter, configure_rate_l
 from src.api.http.routers.auth import router_jit
 from src.api.http.routers.auth_bff import router_bff
 from src.core.services import jwt_service
-from src.runtime.config import main_config
+from src.runtime.config import get_config
+
+main_config = get_config()
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)

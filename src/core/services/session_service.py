@@ -12,8 +12,10 @@ from pydantic import BaseModel
 from src.core.services import jwt_service, oidc_client_service
 from src.entities.user import User, UserRepository
 from src.entities.user_identity import UserIdentity, UserIdentityRepository
-from src.runtime.config import main_config
+from src.runtime.config import get_config
 from src.runtime.db import session
+
+main_config = get_config()
 
 
 class AuthSession(BaseModel):

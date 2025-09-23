@@ -11,7 +11,9 @@ from pydantic import BaseModel
 from src.api.http.deps import get_session_only_user
 from src.core.services import oidc_client_service, session_service
 from src.entities.user import User
-from src.runtime.config import main_config
+from src.runtime.config import get_config
+
+main_config = get_config()
 
 router_bff = APIRouter(prefix="/web", tags=["auth-bff"])
 

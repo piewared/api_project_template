@@ -6,12 +6,14 @@ import asyncio
 import time
 from collections import defaultdict, deque
 from collections.abc import Awaitable, Callable
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import HTTPException, Request, Response
 from loguru import logger
 
-from src.runtime.config import main_config
+from src.runtime.config import get_config
+
+main_config = get_config()
 
 try:
     from fastapi_limiter.depends import RateLimiter

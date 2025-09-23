@@ -8,7 +8,9 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
-from src.runtime.config import main_config
+from src.runtime.config import get_config
+
+main_config = get_config()
 
 
 class TokenResponse(BaseModel):

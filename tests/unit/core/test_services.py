@@ -8,7 +8,13 @@ from authlib.jose import jwt
 from fastapi import HTTPException
 
 from src.core.services import jwt_service
-from src.runtime.config import OIDCProviderConfig, main_config
+from src.runtime.config import (
+    AppContext,
+    ApplicationConfig,
+    OIDCProviderConfig,
+    get_config,
+    with_context,
+)
 from tests.utils import encode_token, oct_jwk
 
 
@@ -51,17 +57,25 @@ class TestJWTService:
             """Should extract UID from custom claim when configured."""
             claims = {"iss": "issuer", "sub": "subject", "custom_uid": "user-123"}
 
-            main_config.jwt.uid_claim = "custom_uid"
-            result = jwt_service.extract_uid(claims)
-            assert result == "user-123"
+            # Create test config with custom uid claim
+            test_config = ApplicationConfig()
+            test_config.jwt.uid_claim = "custom_uid"
+
+            with with_context(test_config):
+                result = jwt_service.extract_uid(claims)
+                assert result == "user-123"
 
         def test_extract_uid_fallback_to_issuer_subject(self):
             """Should fall back to issuer|subject when custom claim missing."""
             claims = {"iss": "https://issuer.example", "sub": "user-456"}
 
-            main_config.jwt.uid_claim = "missing_claim"
-            result = jwt_service.extract_uid(claims)
-            assert result == "https://issuer.example|user-456"
+            # Create test config with missing uid claim
+            test_config = ApplicationConfig()
+            test_config.jwt.uid_claim = "missing_claim"
+
+            with with_context(config_override=test_config):
+                result = jwt_service.extract_uid(claims)
+                assert result == "https://issuer.example|user-456"
 
         def test_extract_scopes_from_string(self):
             """Should parse space-separated scope string."""
@@ -103,10 +117,14 @@ class TestJWTService:
             """Should handle missing or empty claims gracefully."""
             claims = {}
 
-            main_config.jwt.uid_claim = None # type: ignore
-            assert jwt_service.extract_uid(claims) == "None|None"
-            assert jwt_service.extract_scopes(claims) == set()
-            assert jwt_service.extract_roles(claims) == []
+            # Create test config with no uid claim
+            test_config = ApplicationConfig()
+            test_config.jwt.uid_claim = None  # type: ignore
+
+            with with_context(config_override=test_config):
+                assert jwt_service.extract_uid(claims) == "None|None"
+                assert jwt_service.extract_scopes(claims) == set()
+                assert jwt_service.extract_roles(claims) == []
 
     class TestJWKSFetching:
         """Test JWKS fetching functionality."""
@@ -166,30 +184,32 @@ class TestJWTService:
         @pytest.mark.asyncio
         async def test_verify_valid_jwt(self, valid_jwks, oidc_provider_config):
             """Should verify valid JWT successfully."""
-            # Mock settings to return our test provider
-            main_config.oidc.providers = {"test": oidc_provider_config}
-            main_config.jwt.allowed_algorithms = ["HS256"]
-            main_config.jwt.audiences = ["api://test"]
-            main_config.jwt.clock_skew = 10
+            # Create test config with test provider
+            test_config = ApplicationConfig()
+            test_config.oidc.providers = {"test": oidc_provider_config}
+            test_config.jwt.allowed_algorithms = ["HS256"]
+            test_config.jwt.audiences = ["api://test"]
+            test_config.jwt.clock_skew = 10
 
-            # Setup JWKS cache
-            cache_key = oidc_provider_config.jwks_uri
-            jwt_service._JWKS_CACHE[cache_key] = valid_jwks
+            with with_context(config_override=test_config):
+                # Setup JWKS cache
+                cache_key = oidc_provider_config.jwks_uri
+                jwt_service._JWKS_CACHE[cache_key] = valid_jwks
 
-            # Create valid token
-            token = encode_token(
-                issuer="https://test.issuer",
-                audience="api://test",
-                key=b"test-secret-key",
-                kid="test-key",
-                extra_claims={"sub": "user-123"},
-            )
+                # Create valid token
+                token = encode_token(
+                    issuer="https://test.issuer",
+                    audience="api://test",
+                    key=b"test-secret-key",
+                    kid="test-key",
+                    extra_claims={"sub": "user-123"},
+                )
 
-            result = await jwt_service.verify_jwt(token)
+                result = await jwt_service.verify_jwt(token)
 
-            assert result["iss"] == "https://test.issuer"
-            assert result["aud"] == "api://test"
-            assert result["sub"] == "user-123"
+                assert result["iss"] == "https://test.issuer"
+                assert result["aud"] == "api://test"
+                assert result["sub"] == "user-123"
 
         @pytest.mark.asyncio
         async def test_verify_jwt_missing_issuer(self):
@@ -198,59 +218,68 @@ class TestJWTService:
             payload = {"sub": "user", "aud": "api://test", "exp": int(time.time()) + 60}
             token = jwt.encode({"alg": "HS256"}, payload, b"test-key").decode("utf-8")
 
-            main_config.jwt.allowed_algorithms = ["HS256"]
+            # Create test config with allowed algorithms
+            test_config = ApplicationConfig()
+            test_config.jwt.allowed_algorithms = ["HS256"]
 
-            with pytest.raises(HTTPException) as exc_info:
-                await jwt_service.verify_jwt(token)
+            with with_context(config_override=test_config):
+                with pytest.raises(HTTPException) as exc_info:
+                    await jwt_service.verify_jwt(token)
 
-            assert exc_info.value.status_code == 401
-            assert "missing iss" in exc_info.value.detail.lower()
+                assert exc_info.value.status_code == 401
+                assert "missing iss" in exc_info.value.detail.lower()
 
         @pytest.mark.asyncio
         async def test_verify_jwt_unknown_issuer(
             self, valid_jwks, oidc_provider_config
         ):
             """Should reject JWT from unknown issuer."""
-            main_config.oidc.providers = {"test": oidc_provider_config}
-            main_config.jwt.allowed_algorithms = ["HS256"]
+            # Create test config with test provider
+            test_config = ApplicationConfig()
+            test_config.oidc.providers = {"test": oidc_provider_config}
+            test_config.jwt.allowed_algorithms = ["HS256"]
 
-            token = encode_token(
-                issuer="https://unknown.issuer",
-                audience="api://test",
-                key=b"test-secret-key",
-                kid="test-key",
-                extra_claims={"sub": "user-123"},
-            )
+            with with_context(config_override=test_config):
+                token = encode_token(
+                    issuer="https://unknown.issuer",
+                    audience="api://test",
+                    key=b"test-secret-key",
+                    kid="test-key",
+                    extra_claims={"sub": "user-123"},
+                )
 
-            with pytest.raises(HTTPException) as exc_info:
-                await jwt_service.verify_jwt(token)
+                with pytest.raises(HTTPException) as exc_info:
+                    await jwt_service.verify_jwt(token)
 
-            assert exc_info.value.status_code == 401
-            assert "unknown issuer" in exc_info.value.detail.lower()
+                assert exc_info.value.status_code == 401
+                assert "unknown issuer" in exc_info.value.detail.lower()
 
         @pytest.mark.asyncio
         async def test_verify_jwt_wrong_audience(
             self, valid_jwks, oidc_provider_config
         ):
             """Should reject JWT with wrong audience."""
-            main_config.oidc.providers = {"test": oidc_provider_config}
-            main_config.jwt.allowed_algorithms = ["HS256"]
-            main_config.jwt.audiences = ["api://test"]
-            main_config.jwt.clock_skew = 10
+            # Create test config with test provider
+            test_config = ApplicationConfig()
+            test_config.oidc.providers = {"test": oidc_provider_config}
+            test_config.jwt.allowed_algorithms = ["HS256"]
+            test_config.jwt.audiences = ["api://test"]
+            test_config.jwt.clock_skew = 10
 
-            # Setup JWKS cache
-            cache_key = oidc_provider_config.jwks_uri
-            jwt_service._JWKS_CACHE[cache_key] = valid_jwks
+            with with_context(config_override=test_config):
+                # Setup JWKS cache
+                cache_key = oidc_provider_config.jwks_uri
+                jwt_service._JWKS_CACHE[cache_key] = valid_jwks
 
-            token = encode_token(
-                issuer="https://test.issuer",
-                audience="api://wrong",  # Wrong audience
-                key=b"test-secret-key",
-                kid="test-key",
-                extra_claims={"sub": "user-123"},
-            )
+                token = encode_token(
+                    issuer="https://test.issuer",
+                    audience="api://wrong",  # Wrong audience
+                    key=b"test-secret-key",
+                    kid="test-key",
+                    extra_claims={"sub": "user-123"},
+                )
 
-            with pytest.raises(HTTPException) as exc_info:
-                await jwt_service.verify_jwt(token)
+                with pytest.raises(HTTPException) as exc_info:
+                    await jwt_service.verify_jwt(token)
 
                 assert exc_info.value.status_code == 401

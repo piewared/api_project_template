@@ -12,8 +12,10 @@ from src.core.services.session_service import get_user_session
 from src.entities.user import User, UserRepository
 from src.entities.user_identity.entity import UserIdentity
 from src.entities.user_identity.repository import UserIdentityRepository
-from src.runtime.config import main_config
+from src.runtime.config import get_config
 from src.runtime.db import session
+
+main_config = get_config()
 
 
 def get_session() -> Iterator[Session]:

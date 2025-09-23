@@ -2,8 +2,10 @@
 
 import pytest
 
-from src.runtime.config import main_config as config
+from src.runtime.config import get_config
 from src.runtime.settings import EnvironmentVariables
+
+config = get_config()
 
 
 class TestApplicationStartup:

@@ -4,7 +4,9 @@ from collections.abc import Iterator
 
 from sqlmodel import Session, create_engine
 
-from src.runtime.config import main_config
+from src.runtime.config import get_config
+
+main_config = get_config()
 
 engine = create_engine(main_config.database_url, echo=False)
 

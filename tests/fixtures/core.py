@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Generator
 from copy import deepcopy
-from typing import Any, Callable, Generator
+from typing import Any
 
 import pytest
 from fastapi import Response
@@ -14,9 +15,11 @@ from src.api.http.app import app
 from src.api.http.deps import get_session
 from src.api.http.middleware.limiter import configure_rate_limiter
 from src.core.services import jwt_service
-from src.runtime.config import OIDCProviderConfig, main_config
+from src.runtime.config import OIDCProviderConfig, get_config
 from src.runtime.settings import EnvironmentVariables
 from tests.utils import oct_jwk
+
+main_config = get_config()
 
 # Models will be imported within fixtures to control timing
 
@@ -28,7 +31,7 @@ _KID = "router-key"
 
 
 @pytest.fixture(autouse=True)
-def clear_jwks_cache() -> Generator[None, None, None]:
+def clear_jwks_cache() -> Generator[None]:
     jwt_service._JWKS_CACHE.clear()
     yield
     jwt_service._JWKS_CACHE.clear()

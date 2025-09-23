@@ -12,7 +12,7 @@ from authlib.jose import JoseError, JsonWebKey, jwt
 from cachetools import TTLCache
 from fastapi import HTTPException
 
-from src.runtime.config import OIDCProviderConfig, main_config
+from src.runtime.config import OIDCProviderConfig, get_config
 
 _JWKS_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=10, ttl=3600)
 
@@ -68,6 +68,7 @@ async def fetch_jwks(issuer: OIDCProviderConfig) -> dict[str, Any]:
 async def verify_jwt(
     token: str, audiences: Sequence[str] | None = None
 ) -> dict[str, Any]:
+    main_config = get_config()
     header = decode_header(token)
 
     alg = header.get("alg")
@@ -81,7 +82,7 @@ async def verify_jwt(
 
     # Find provider config by issuer
     provider_config = None
-    for provider in main_config.oidc_providers.values():
+    for provider in main_config.oidc.providers.values():
         if provider.issuer and issuer.startswith(provider.issuer):
             provider_config = provider
             break
@@ -134,8 +135,8 @@ async def verify_jwt(
 
 
 def extract_uid(claims: dict[str, Any]) -> str:
+    main_config = get_config()
     uid_claim = main_config.jwt.uid_claim
-    print(main_config.jwt.model_dump())
     if uid_claim and uid_claim in claims:
         return claims[uid_claim]
     return f"{claims.get('iss')}|{claims.get('sub')}"

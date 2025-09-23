@@ -11,7 +11,7 @@ from src.api.http.middleware.limiter import (
     configure_rate_limiter,
     rate_limit,
 )
-from src.runtime.config import main_config
+from src.runtime.config import AppContext, ApplicationConfig, get_config, with_context
 
 
 class TestDefaultLocalRateLimiter:
@@ -26,15 +26,12 @@ class TestDefaultLocalRateLimiter:
             if hasattr(app.state, "local_rate_limiter"):
                 app.state.local_rate_limiter = None
 
-        snapshot = {
-            "redis_url": getattr(main_config, "redis_url", None),
-        }
         _reset_limiter_state()
         try:
             yield
         finally:
             _reset_limiter_state()
-            main_config.redis_url = snapshot["redis_url"]
+            # Config restoration not needed with context managers
 
     @pytest.mark.asyncio
     async def test_allows_requests_within_limit(self, request_factory):
@@ -126,31 +123,32 @@ class TestRateLimitDependency:
             if hasattr(app.state, "local_rate_limiter"):
                 app.state.local_rate_limiter = None
 
-        snapshot = {
-            "redis_url": getattr(main_config, "redis_url", None),
-        }
         _reset_limiter_state()
         try:
             yield
         finally:
             _reset_limiter_state()
-            main_config.redis_url = snapshot["redis_url"]
+            # Config restoration not needed with context managers
 
     @pytest.mark.asyncio
     async def test_uses_local_limiter_when_redis_unavailable(
         self, request_factory, response_factory
     ):
         """Should fall back to local limiter when Redis is not configured."""
-        main_config.redis_url = None
-        _activate_local_rate_limiter()
+        # Create test config without redis
+        test_config = ApplicationConfig()
+        test_config.redis_url = None
 
-        guard = rate_limit(1, 1)
-        request = request_factory({})
-        response = response_factory()
+        with with_context(config_override=test_config):
+            _activate_local_rate_limiter()
 
-        # First request should pass
-        await guard(request, response)
+            guard = rate_limit(1, 1)
+            request = request_factory({})
+            response = response_factory()
 
-        # Second request should be blocked
-        with pytest.raises(HTTPException):
+            # First request should pass
             await guard(request, response)
+
+            # Second request should be blocked
+            with pytest.raises(HTTPException):
+                await guard(request, response)

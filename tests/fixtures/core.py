@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Callable, Dict, Generator
+from typing import Any, Callable, Generator
 
 import pytest
 from fastapi import Response
@@ -14,8 +14,8 @@ from src.api.http.app import app
 from src.api.http.deps import get_session
 from src.api.http.middleware.limiter import configure_rate_limiter
 from src.core.services import jwt_service
-from src.runtime.config import OIDCProviderConfig
-from src.runtime.settings import EnvironmentSettings, settings
+from src.runtime.config import OIDCProviderConfig, main_config
+from src.runtime.settings import EnvironmentVariables
 from tests.utils import oct_jwk
 
 # Models will be imported within fixtures to control timing
@@ -48,8 +48,8 @@ def oidc_provider_config() -> OIDCProviderConfig:
 
 
 @pytest.fixture
-def request_factory() -> Callable[[Dict[str, str]], Request]:
-    def _make_request(headers: Dict[str, str]) -> Request:
+def request_factory() -> Callable[[dict[str, str]], Request]:
+    def _make_request(headers: dict[str, str]) -> Request:
         scope = {
             "type": "http",
             "headers": [
@@ -74,7 +74,7 @@ def response_factory() -> Callable[[], Any]:
 
 
 @pytest.fixture
-def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Generator[TestClient, None, None]:
+def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Generator[TestClient]:
     """Yield a TestClient wired to the shared SQLModel session and test-friendly config."""
 
     def override_get_session():
@@ -86,12 +86,12 @@ def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Genera
     jwks_data = {"keys": [oct_jwk(_HS_KEY, _KID)]}
 
     # Store original values to restore later
-    original_requests = settings.rate_limit_requests
-    original_window = settings.rate_limit_window
-    original_allowed_algorithms = list(settings.allowed_algorithms)
-    original_audiences = list(settings.audiences)
-    original_uid_claim = settings.uid_claim
-    original_environment = settings.environment
+    original_requests = main_config.rate_limit.requests
+    original_window = main_config.rate_limit.window
+    original_allowed_algorithms = list(main_config.allowed_algorithms)
+    original_audiences = list(main_config.audiences)
+    original_uid_claim = main_config.uid_claim
+    original_environment = main_config.environment
 
     async def fake_fetch_jwks(issuer: str):
         return jwks_data
@@ -105,31 +105,31 @@ def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Genera
         )
         app.dependency_overrides[get_session] = override_get_session
 
-        settings.environment = "test"
-        settings.rate_limit_requests = 1000
-        settings.rate_limit_window = 60
-        settings.oidc_providers[_ISSUER] = oidc_provider_config
+        main_config.environment = "test"
+        main_config.rate_limit.requests = 1000
+        main_config.rate_limit.window = 60
+        main_config.oidc.providers[_ISSUER] = oidc_provider_config
 
-        settings.allowed_algorithms = ["HS256"]
-        settings.audiences = [_AUDIENCE]
-        settings.uid_claim = "uid"
+        main_config.jwt.allowed_algorithms = ["HS256"]
+        main_config.jwt.audiences = [_AUDIENCE]
+        main_config.jwt.uid_claim = "uid"
 
         try:
             with TestClient(app) as test_client:
                 yield test_client
         finally:
             app.dependency_overrides.clear()
-            settings.rate_limit_requests = original_requests
-            settings.rate_limit_window = original_window
-            settings.oidc_providers.pop(_ISSUER)
-            settings.allowed_algorithms = original_allowed_algorithms
-            settings.audiences = original_audiences
-            settings.uid_claim = original_uid_claim
-            settings.environment = original_environment
+            main_config.rate_limit.requests = original_requests
+            main_config.rate_limit.window = original_window
+            main_config.oidc.providers.pop(_ISSUER)
+            main_config.jwt.allowed_algorithms = original_allowed_algorithms
+            main_config.jwt.audiences = original_audiences
+            main_config.jwt.uid_claim = original_uid_claim
+            main_config.environment = original_environment
 
 
 @pytest.fixture(scope="session")
-def persistent_session() -> Generator[Session, None, None]:
+def persistent_session() -> Generator[Session]:
     """Create a persistent database session for session-scoped testing."""
     # Create engine first
     engine = create_engine(
@@ -150,7 +150,7 @@ def persistent_session() -> Generator[Session, None, None]:
 
 
 @pytest.fixture
-def session() -> Generator[Session, None, None]:
+def session() -> Generator[Session]:
     """Create a fresh database session for testing."""
     # Create engine first
     engine = create_engine(

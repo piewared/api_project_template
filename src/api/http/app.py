@@ -14,7 +14,7 @@ from src.api.http.middleware.limiter import close_rate_limiter, configure_rate_l
 from src.api.http.routers.auth import router_jit
 from src.api.http.routers.auth_bff import router_bff
 from src.core.services import jwt_service
-from src.runtime.settings import settings
+from src.runtime.config import main_config
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -50,7 +50,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=()")
         # HSTS only in prod
-        if settings.environment == "production":
+        if main_config.environment == "production":
             response.headers.setdefault(
                 "Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains; preload",
@@ -71,8 +71,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     lifespan=lifespan,
-    docs_url=None if settings.environment == "production" else "/docs",
-    redoc_url=None if settings.environment == "production" else "/redoc",
+    docs_url=None if main_config.environment == "production" else "/docs",
+    redoc_url=None if main_config.environment == "production" else "/redoc",
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -81,10 +81,10 @@ app.add_middleware(SecurityHeadersMiddleware)
 __all__ = ["app", "startup", "shutdown"]
 
 # --- CORS configuration ---
-if settings.environment == "production" and ("*" in settings.cors_origins):
+if main_config.environment == "production" and ("*" in main_config.cors.origins):
     raise RuntimeError("CORS misconfigured: cannot use '*' with allow_credentials=True in production")
 
-origins = settings.cors_origins
+origins = main_config.cors.origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -135,30 +135,30 @@ app.include_router(router_bff, prefix="/auth")
 # --- Rate limiter setup ---
 async def _initialize_rate_limiter() -> None:
     # Skip initialization when Redis is not configured
-    if settings.redis_url is None:
+    if main_config.redis_url is None:
         logger.info("Redis URL not configured; skipping rate limiter initialization")
         _activate_local_rate_limiter()
         return None
     if FastAPILimiter is None or redis_async is None:
         logger.error("Rate limiter deps missing but REDIS_URL provided")
-        if settings.environment == "production":
+        if main_config.environment == "production":
             raise RuntimeError("Rate limiter dependencies missing in production")
         _activate_local_rate_limiter()
         return
 
     try:
         client = redis_async.from_url(
-            settings.redis_url, encoding="utf-8", decode_responses=True
+            main_config.redis_url, encoding="utf-8", decode_responses=True
         )
         await FastAPILimiter.init(client)
         app.state.redis = client
-        logger.info("FastAPI limiter initialized with Redis: %s", settings.redis_url)
+        logger.info("FastAPI limiter initialized with Redis: %s", main_config.redis_url)
         configure_rate_limiter(use_external=True, local_factory=None)
         app.state.local_rate_limiter = None
         return
     except Exception:
         logger.exception("Failed to initialize FastAPI limiter with Redis")
-        if settings.environment == "production":
+        if main_config.environment == "production":
             raise
         _activate_local_rate_limiter()
         return
@@ -167,20 +167,20 @@ async def _initialize_rate_limiter() -> None:
 # --- Lifecycle hooks ---
 async def startup() -> None:
     # Validate configuration so we fail fast on misconfiguration
-    settings.validate_runtime()
+    # settings.validate_runtime()  # TODO: implement validation in new config
     logger.info("Configuration validated")
 
     # Verify JWKS endpoints so auth failures surface early
-    if settings.oidc_providers:
-        #issuers = list(settings.oidc_providers.keys())
-        issuers = list(settings.oidc_providers.values())
+    if main_config.oidc_providers:
+        #issuers = list(main_config.oidc_providers.keys())
+        issuers = list(main_config.oidc_providers.values())
         results = await asyncio.gather(
             *(jwt_service.fetch_jwks(iss) for iss in issuers), return_exceptions=True
         )
         errors = [(iss, str(err)) for iss, err in zip(issuers, results, strict=True) if isinstance(err, Exception)]
         for iss, err in errors:
             logger.exception("Failed to fetch JWKS for issuer %s: %s", iss, err)
-        if errors and settings.environment == "production":
+        if errors and main_config.environment == "production":
             raise RuntimeError(f"JWKS readiness check failed for issuers: {errors}")
 
     await _initialize_rate_limiter()

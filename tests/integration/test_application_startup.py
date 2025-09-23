@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.runtime.settings import EnvironmentSettings
-from src.runtime.settings import settings as config
+from src.runtime.config import main_config as config
+from src.runtime.settings import EnvironmentVariables
 
 
 class TestApplicationStartup:
@@ -41,7 +41,11 @@ class TestApplicationStartup:
 
             # Monkeypatch dependencies
             monkeypatch.setattr(application, "FastAPILimiter", DummyLimiter)
-            monkeypatch.setattr(application, "redis_async", type("_m", (), {"from_url": staticmethod(fake_from_url)}))
+            monkeypatch.setattr(
+                application,
+                "redis_async",
+                type("_m", (), {"from_url": staticmethod(fake_from_url)}),
+            )
 
             config.redis_url = "redis://localhost:6379/0"
 
@@ -57,7 +61,9 @@ class TestApplicationStartup:
             config.redis_url = original_redis_url
 
     @pytest.mark.asyncio
-    async def test_startup_fails_when_dependencies_missing_in_production(self, monkeypatch, oidc_provider_config):
+    async def test_startup_fails_when_dependencies_missing_in_production(
+        self, monkeypatch, oidc_provider_config
+    ):
         """Startup should fail in production when rate limiter dependencies are missing."""
         import src.api.http.app as application
 
@@ -74,7 +80,9 @@ class TestApplicationStartup:
             async def fake_fetch_jwks(issuer: str):
                 return {"keys": []}
 
-            monkeypatch.setattr("src.core.services.jwt_service.fetch_jwks", fake_fetch_jwks)
+            monkeypatch.setattr(
+                "src.core.services.jwt_service.fetch_jwks", fake_fetch_jwks
+            )
 
             # Simulate missing dependencies
             monkeypatch.setattr(application, "FastAPILimiter", None)

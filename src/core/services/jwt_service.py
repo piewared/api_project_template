@@ -12,8 +12,7 @@ from authlib.jose import JoseError, JsonWebKey, jwt
 from cachetools import TTLCache
 from fastapi import HTTPException
 
-from src.runtime.config import OIDCProviderConfig
-from src.runtime.settings import settings
+from src.runtime.config import OIDCProviderConfig, main_config
 
 _JWKS_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=10, ttl=3600)
 
@@ -72,7 +71,7 @@ async def verify_jwt(
     header = decode_header(token)
 
     alg = header.get("alg")
-    if alg not in settings.allowed_algorithms:
+    if alg not in main_config.jwt.allowed_algorithms:
         raise HTTPException(status_code=401, detail="Disallowed JWT algorithm")
 
     claims_preview = decode_claims(token)
@@ -82,7 +81,7 @@ async def verify_jwt(
 
     # Find provider config by issuer
     provider_config = None
-    for provider in settings.oidc_providers.values():
+    for provider in main_config.oidc_providers.values():
         if provider.issuer and issuer.startswith(provider.issuer):
             provider_config = provider
             break
@@ -102,7 +101,7 @@ async def verify_jwt(
             status_code=401, detail=f"Failed to parse JWKS: {exc}"
         ) from exc
 
-    audience_values = audiences or settings.audiences
+    audience_values = audiences or main_config.jwt.audiences
     if not audience_values:
         raise HTTPException(
             status_code=401, detail="No audience configured for verification"
@@ -117,7 +116,7 @@ async def verify_jwt(
                 "aud": {"essential": True, "values": list(audience_values)},
             },
         )
-        claims.validate(leeway=settings.clock_skew)
+        claims.validate(leeway=main_config.jwt.clock_skew)
     except JoseError as exc:
         raise HTTPException(status_code=401, detail=f"JWT error: {exc}") from exc
     except ValueError as exc:
@@ -125,17 +124,18 @@ async def verify_jwt(
 
     now = int(time.time())
     exp = claims.get("exp")
-    if exp is not None and now > exp + settings.clock_skew:
+    if exp is not None and now > exp + main_config.jwt.clock_skew:
         raise HTTPException(status_code=401, detail="Token expired (skew)")
     nbf = claims.get("nbf")
-    if nbf is not None and now < nbf - settings.clock_skew:
+    if nbf is not None and now < nbf - main_config.jwt.clock_skew:
         raise HTTPException(status_code=401, detail="Token not yet valid (skew)")
 
     return dict(claims)
 
 
 def extract_uid(claims: dict[str, Any]) -> str:
-    uid_claim = settings.uid_claim
+    uid_claim = main_config.jwt.uid_claim
+    print(main_config.jwt.model_dump())
     if uid_claim and uid_claim in claims:
         return claims[uid_claim]
     return f"{claims.get('iss')}|{claims.get('sub')}"

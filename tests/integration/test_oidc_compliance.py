@@ -28,7 +28,7 @@ class TestOIDCRelyingParty:
         assert "user_id" in result
         assert "email" in result
         assert "scopes" in result
-        assert "roles" in result  
+        assert "roles" in result
         assert "claims" in result
 
         # In development mode, should have mock data
@@ -56,31 +56,33 @@ class TestOIDCRelyingParty:
         assert "You have the required role!" in result["message"]
         assert "user_id" in result
 
-    @patch('src.api.http.deps.settings')
-    def test_production_mode_requires_valid_tokens(self, mock_settings, client):
+    @patch("src.api.http.deps.main_config")
+    def test_production_mode_requires_valid_tokens(self, mock_config, client):
         """Test that production mode requires valid Bearer tokens."""
-        mock_settings.environment = "production"
-        
+        mock_config.environment = "production"
+
         # Without Authorization header
         response = client.get("/auth/jit/me")
         assert response.status_code == 401
         assert "Authentication required" in response.json()["detail"]
 
         # With invalid Bearer token format
-        response = client.get("/auth/jit/me", headers={"Authorization": "Invalid token"})
+        response = client.get(
+            "/auth/jit/me", headers={"Authorization": "Invalid token"}
+        )
         assert response.status_code == 401
 
     def test_development_mode_provides_mock_authentication(self, client):
         """Test that development mode provides mock authentication for easier testing."""
         response = client.get("/auth/jit/me")
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         # Should have development user data
         assert result["user_id"] == "93743658555595339"
         assert result["email"] == "dev@example.com"
-        
+
         # Should have mock claims
         claims = result["claims"]
         assert claims["iss"] == "local-dev"
@@ -89,17 +91,17 @@ class TestOIDCRelyingParty:
     def test_authentication_state_structure(self, client):
         """Test that authentication state has proper structure for OIDC client."""
         response = client.get("/auth/jit/me")
-        
+
         assert response.status_code == 200
         result = response.json()
-        
+
         # Verify structure matches OIDC client expectations
         assert isinstance(result["user_id"], str)
         assert isinstance(result["email"], str)
         assert isinstance(result["scopes"], list)
         assert isinstance(result["roles"], list)
         assert isinstance(result["claims"], dict)
-        
+
         # Claims should have OIDC standard structure
         claims = result["claims"]
         assert "iss" in claims  # Issuer
@@ -110,28 +112,30 @@ class TestOIDCRelyingParty:
         # Test scope requirement
         scope_response = client.get("/auth/jit/protected-scope")
         assert scope_response.status_code == 403  # Missing required scope
-        
-        # Test role requirement  
+
+        # Test role requirement
         role_response = client.get("/auth/jit/protected-role")
         assert role_response.status_code == 200  # Has required role
-        
+
         role_result = role_response.json()
         assert "user_id" in role_result
         assert role_result["user_id"] == "93743658555595339"  # Dev user ID
 
     def test_bearer_token_extraction_in_production(self, client):
         """Test Bearer token extraction logic."""
-        with patch('src.api.http.deps.settings') as mock_settings:
-            mock_settings.environment = "production"
-            
+        with patch("src.api.http.deps.main_config") as mock_config:
+            mock_config.environment = "production"
+
             # Test missing Authorization header
             response = client.get("/auth/jit/me")
             assert response.status_code == 401
-            
+
             # Test invalid Authorization header format
-            response = client.get("/auth/jit/me", headers={"Authorization": "NotBearer token"})
+            response = client.get(
+                "/auth/jit/me", headers={"Authorization": "NotBearer token"}
+            )
             assert response.status_code == 401
-            
+
             # Test malformed Bearer header
             response = client.get("/auth/jit/me", headers={"Authorization": "Bearer"})
             assert response.status_code == 401
@@ -139,15 +143,15 @@ class TestOIDCRelyingParty:
     def test_endpoints_accessible_without_oidc_provider_functionality(self, client):
         """Test that client endpoints don't expose OIDC provider functionality."""
         # These endpoints should NOT exist (were incorrectly implemented as provider endpoints)
-        
+
         # Discovery endpoint should not exist
         response = client.get("/auth/jit/.well-known/openid-configuration")
         assert response.status_code == 404
-        
+
         # UserInfo endpoint should not exist
         response = client.get("/auth/jit/userinfo")
         assert response.status_code == 404
-        
+
         # Token introspection should not exist
         response = client.post("/auth/jit/introspect")
         assert response.status_code == 404

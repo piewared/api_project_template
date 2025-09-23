@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
 
-if TYPE_CHECKING:
-    from .settings import EnvironmentVariables
-
+from .settings import EnvironmentVariables
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +80,7 @@ class JWTConfig(BaseModel):
 
     allowed_algorithms: list[str] = Field(default=["RS256", "RS512", "ES256", "ES384"])
     audiences: list[str] = Field(default=["api://default"])
-    uid_claim: str = "sub"  # Standard OIDC claim
+    uid_claim: str = "app_uid"  # Custom UID claim mapping to internal user
     role_claim: str = "roles"
     scope_claim: str = "scope"
     clock_skew: int = 60  # seconds
@@ -134,7 +132,10 @@ def _load_oidc_yaml_config() -> dict[str, dict]:
 def _get_oidc_providers() -> dict[str, OIDCProviderConfig]:
     """Load OIDC provider overrides from YAML file and merge with defaults."""
     yaml_config = _load_oidc_yaml_config()
-    providers = DEFAULT_OIDC_PROVIDERS.copy()
+    # Create deep copies to avoid mutation issues between different config instances
+    providers = {
+        name: provider.model_copy(deep=True) for name, provider in DEFAULT_OIDC_PROVIDERS.items()
+    }
 
     for name, config in yaml_config.items():
         if name in providers:
@@ -178,6 +179,7 @@ class ApplicationConfig(BaseModel):
     )
     redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
     base_url: str = Field(default="http://localhost:8000", validation_alias="BASE_URL")
+    secret_key: str = Field(default="dev-secret-key")
 
     # Subsystem configurations
     jwt: JWTConfig = Field(default_factory=JWTConfig)
@@ -225,6 +227,7 @@ class ApplicationConfig(BaseModel):
         config.database_url = env_vars.database_url
         config.redis_url = env_vars.redis_url
         config.base_url = env_vars.base_url
+        config.secret_key = env_vars.secret_key
 
         # Update the OIDC provider configs with environment variable overrides
         for name, provider in config.oidc.providers.items():
@@ -288,6 +291,5 @@ class ApplicationConfig(BaseModel):
         return self.oidc.providers
 
 
-# Create global settings instance
 _env_vars = EnvironmentVariables()
 main_config = ApplicationConfig.from_environment(_env_vars)

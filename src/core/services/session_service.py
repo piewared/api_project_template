@@ -8,17 +8,17 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-from sqlmodel import Session
 
+from src.core.services import jwt_service, oidc_client_service
 from src.entities.user import User, UserRepository
 from src.entities.user_identity import UserIdentity, UserIdentityRepository
-from src.core.services import jwt_service, oidc_client_service
+from src.runtime.config import main_config
 from src.runtime.db import session
-from src.runtime.settings import settings
 
 
 class AuthSession(BaseModel):
     """Temporary session for OIDC authorization flow."""
+
     id: str
     pkce_verifier: str
     state: str
@@ -30,6 +30,7 @@ class AuthSession(BaseModel):
 
 class UserSession(BaseModel):
     """Persistent user session after successful authentication."""
+
     id: str
     user_id: UUID
     provider: str
@@ -47,25 +48,22 @@ _user_sessions: dict[str, UserSession] = {}
 
 
 def create_auth_session(
-    pkce_verifier: str,
-    state: str,
-    provider: str,
-    redirect_uri: str
+    pkce_verifier: str, state: str, provider: str, redirect_uri: str
 ) -> str:
     """Create temporary auth session for OIDC flow.
-    
+
     Args:
         pkce_verifier: PKCE code verifier
         state: CSRF state parameter
         provider: OIDC provider identifier
         redirect_uri: Post-auth redirect URI
-        
+
     Returns:
         Session ID
     """
     session_id = secrets.token_urlsafe(32)
     now = int(time.time())
-    
+
     auth_session = AuthSession(
         id=session_id,
         pkce_verifier=pkce_verifier,
@@ -73,53 +71,50 @@ def create_auth_session(
         provider=provider,
         redirect_uri=redirect_uri,
         created_at=now,
-        expires_at=now + 600  # 10 minutes
+        expires_at=now + 600,  # 10 minutes
     )
-    
+
     _auth_sessions[session_id] = auth_session
     return session_id
 
 
 def get_auth_session(session_id: str) -> AuthSession | None:
     """Get auth session by ID.
-    
+
     Args:
         session_id: Session identifier
-        
+
     Returns:
         Auth session or None if not found/expired
     """
     auth_session = _auth_sessions.get(session_id)
     if not auth_session:
         return None
-    
+
     # Check expiry
     if time.time() > auth_session.expires_at:
         del _auth_sessions[session_id]
         return None
-    
+
     return auth_session
 
 
 def delete_auth_session(session_id: str) -> None:
     """Delete auth session.
-    
+
     Args:
         session_id: Session identifier
     """
     _auth_sessions.pop(session_id, None)
 
 
-async def provision_user_from_claims(
-    claims: dict[str, Any],
-    provider: str
-) -> User:
+async def provision_user_from_claims(claims: dict[str, Any], provider: str) -> User:
     """Provision user from OIDC claims (JIT provisioning).
-    
+
     Args:
         claims: User claims from OIDC provider
         provider: OIDC provider identifier
-        
+
     Returns:
         User object (created or existing)
     """
@@ -127,27 +122,27 @@ async def provision_user_from_claims(
     try:
         issuer = claims.get("iss")
         subject = claims.get("sub")
-        
+
         if not issuer or not subject:
             raise ValueError("Missing required iss or sub claims")
-        
+
         uid = jwt_service.extract_uid(claims)
         identity_repo = UserIdentityRepository(db)
         user_repo = UserRepository(db)
-        
+
         # Try to find existing identity
         identity = None
         if uid:
             identity = identity_repo.get_by_uid(uid)
         if identity is None:
             identity = identity_repo.get_by_issuer_subject(issuer, subject)
-        
+
         if identity is None:
             # Create new user
             email = claims.get("email")
             first_name = claims.get("given_name", claims.get("first_name", ""))
             last_name = claims.get("family_name", claims.get("last_name", ""))
-            
+
             # Fallback name generation
             if not first_name and not last_name:
                 if email and "@" in email:
@@ -157,15 +152,15 @@ async def provision_user_from_claims(
                 elif subject:
                     first_name = f"User {subject[-8:]}"
                     last_name = ""
-            
+
             new_user = User(
                 first_name=first_name or "Unknown",
                 last_name=last_name or "User",
                 email=email,
             )
-            
+
             created_user = user_repo.create(new_user)
-            
+
             # Create identity mapping
             new_identity = UserIdentity(
                 issuer=issuer,
@@ -173,7 +168,7 @@ async def provision_user_from_claims(
                 uid_claim=uid,
                 user_id=created_user.id,
             )
-            
+
             identity_repo.create(new_identity)
             db.commit()
             return created_user
@@ -183,7 +178,7 @@ async def provision_user_from_claims(
             if user is None:
                 raise ValueError("User identity exists but user not found")
             return user
-            
+
     finally:
         db.close()
 
@@ -193,23 +188,23 @@ def create_user_session(
     provider: str,
     refresh_token: str | None,
     access_token: str | None,
-    expires_at: int | None
+    expires_at: int | None,
 ) -> str:
     """Create persistent user session.
-    
+
     Args:
         user_id: Internal user ID
         provider: OIDC provider identifier
         refresh_token: OAuth refresh token
         access_token: OAuth access token
         expires_at: Access token expiry timestamp
-        
+
     Returns:
         Session ID
     """
     session_id = secrets.token_urlsafe(32)
     now = int(time.time())
-    
+
     user_session = UserSession(
         id=session_id,
         user_id=user_id,
@@ -219,32 +214,32 @@ def create_user_session(
         access_token_expires_at=expires_at,
         created_at=now,
         last_accessed_at=now,
-        expires_at=now + settings.session_max_age
+        expires_at=now + main_config.session_max_age,
     )
-    
+
     _user_sessions[session_id] = user_session
     return session_id
 
 
 def get_user_session(session_id: str) -> UserSession | None:
     """Get user session by ID.
-    
+
     Args:
         session_id: Session identifier
-        
+
     Returns:
         User session or None if not found/expired
     """
     user_session = _user_sessions.get(session_id)
     if not user_session:
         return None
-    
+
     # Check expiry
     now = int(time.time())
     if now > user_session.expires_at:
         del _user_sessions[session_id]
         return None
-    
+
     # Update last accessed time
     user_session.last_accessed_at = now
     return user_session
@@ -252,7 +247,7 @@ def get_user_session(session_id: str) -> UserSession | None:
 
 def delete_user_session(session_id: str) -> None:
     """Delete user session.
-    
+
     Args:
         session_id: Session identifier
     """
@@ -261,44 +256,43 @@ def delete_user_session(session_id: str) -> None:
 
 async def refresh_user_session(session_id: str) -> str:
     """Refresh user session using stored refresh token.
-    
+
     Args:
         session_id: Current session identifier
-        
+
     Returns:
         New session ID
-        
+
     Raises:
         ValueError: If session not found or refresh fails
     """
     user_session = get_user_session(session_id)
     if not user_session:
         raise ValueError("Session not found or expired")
-    
+
     if not user_session.refresh_token:
         raise ValueError("No refresh token available")
-    
+
     try:
         # Refresh tokens with provider
         tokens = await oidc_client_service.refresh_access_token(
-            user_session.refresh_token,
-            user_session.provider
+            user_session.refresh_token, user_session.provider
         )
-        
+
         # Create new session with refreshed tokens
         new_session_id = create_user_session(
             user_id=user_session.user_id,
             provider=user_session.provider,
             refresh_token=tokens.refresh_token or user_session.refresh_token,
             access_token=tokens.access_token,
-            expires_at=tokens.expires_at
+            expires_at=tokens.expires_at,
         )
-        
+
         # Delete old session
         delete_user_session(session_id)
-        
+
         return new_session_id
-        
+
     except Exception as e:
         # Delete invalid session
         delete_user_session(session_id)
@@ -307,33 +301,31 @@ async def refresh_user_session(session_id: str) -> str:
 
 def generate_csrf_token(session_id: str) -> str:
     """Generate CSRF token for session.
-    
+
     Args:
         session_id: Session identifier
-        
+
     Returns:
         CSRF token
     """
     # Create HMAC-based CSRF token
-    secret_key = settings.secret_key.encode() if settings.secret_key else b"dev-secret"
+    secret_key = (
+        main_config.secret_key.encode() if main_config.secret_key else b"dev-secret"
+    )
     message = f"{session_id}:{int(time.time() // 3600)}"  # Hour-based
-    
-    csrf_token = hmac.new(
-        secret_key,
-        message.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
+
+    csrf_token = hmac.new(secret_key, message.encode(), hashlib.sha256).hexdigest()
+
     return csrf_token
 
 
 def validate_csrf_token(session_id: str, csrf_token: str) -> bool:
     """Validate CSRF token for session.
-    
+
     Args:
         session_id: Session identifier
         csrf_token: CSRF token to validate
-        
+
     Returns:
         True if valid, False otherwise
     """

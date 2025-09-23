@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
-from src.runtime.settings import settings
+from src.runtime.config import main_config
 
 
 class TokenResponse(BaseModel):
@@ -66,7 +66,7 @@ async def exchange_code_for_tokens(
     Returns:
         Token response with access/refresh tokens
     """
-    provider_config = settings.oidc_providers[provider]
+    provider_config = main_config.oidc_providers[provider]
 
     token_data = {
         "grant_type": "authorization_code",
@@ -109,7 +109,7 @@ async def get_user_claims(
     Returns:
         User claims dictionary
     """
-    provider_config = settings.oidc_providers[provider]
+    provider_config = main_config.oidc_providers[provider]
 
     # If we have an ID token, decode it for user claims
     if id_token:
@@ -149,7 +149,7 @@ async def refresh_access_token(refresh_token: str, provider: str) -> TokenRespon
     Returns:
         New token response
     """
-    provider_config = settings.oidc_providers[provider]
+    provider_config = main_config.oidc_providers[provider]
 
     token_data = {
         "grant_type": "refresh_token",

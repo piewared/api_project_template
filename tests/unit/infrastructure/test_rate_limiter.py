@@ -6,8 +6,12 @@ import pytest
 from fastapi import HTTPException
 
 from src.api.http.app import _activate_local_rate_limiter, app
-from src.runtime.settings import settings
-from src.api.http.middleware.limiter import DefaultLocalRateLimiter, configure_rate_limiter, rate_limit
+from src.api.http.middleware.limiter import (
+    DefaultLocalRateLimiter,
+    configure_rate_limiter,
+    rate_limit,
+)
+from src.runtime.config import main_config
 
 
 class TestDefaultLocalRateLimiter:
@@ -16,20 +20,21 @@ class TestDefaultLocalRateLimiter:
     @pytest.fixture(autouse=True)
     def restore_limiter_state(self):
         """Ensure clean state for each test."""
+
         def _reset_limiter_state():
             configure_rate_limiter(use_external=False, local_factory=None)
             if hasattr(app.state, "local_rate_limiter"):
                 app.state.local_rate_limiter = None
 
         snapshot = {
-            "redis_url": getattr(settings, "redis_url", None),
+            "redis_url": getattr(main_config, "redis_url", None),
         }
         _reset_limiter_state()
         try:
             yield
         finally:
             _reset_limiter_state()
-            settings.redis_url = snapshot["redis_url"]
+            main_config.redis_url = snapshot["redis_url"]
 
     @pytest.mark.asyncio
     async def test_allows_requests_within_limit(self, request_factory):
@@ -54,7 +59,7 @@ class TestDefaultLocalRateLimiter:
         # First requests should pass
         for _ in range(times):
             await guard(request)
-        
+
         # Next request should be blocked
         with pytest.raises(HTTPException) as exc_info:
             await guard(request)
@@ -70,14 +75,14 @@ class TestDefaultLocalRateLimiter:
 
         request = request_factory({})
         await guard(request)
-        
+
         # Wait for window to reset
         await asyncio.sleep(1.1)
-        
+
         # Should be allowed again
         await guard(request)
 
-    @pytest.mark.asyncio  
+    @pytest.mark.asyncio
     async def test_rate_limit_persists_until_window_expires(self, request_factory):
         """Should continue blocking requests until the full window expires."""
         limiter = DefaultLocalRateLimiter()
@@ -90,7 +95,7 @@ class TestDefaultLocalRateLimiter:
         # Exceed the limit
         for _ in range(times):
             await guard(request)
-        
+
         with pytest.raises(HTTPException):
             await guard(request)
 
@@ -115,25 +120,28 @@ class TestRateLimitDependency:
     @pytest.fixture(autouse=True)
     def restore_limiter_state(self):
         """Ensure clean state for each test."""
+
         def _reset_limiter_state():
             configure_rate_limiter(use_external=False, local_factory=None)
             if hasattr(app.state, "local_rate_limiter"):
                 app.state.local_rate_limiter = None
 
         snapshot = {
-            "redis_url": getattr(settings, "redis_url", None),
+            "redis_url": getattr(main_config, "redis_url", None),
         }
         _reset_limiter_state()
         try:
             yield
         finally:
             _reset_limiter_state()
-            settings.redis_url = snapshot["redis_url"]
+            main_config.redis_url = snapshot["redis_url"]
 
     @pytest.mark.asyncio
-    async def test_uses_local_limiter_when_redis_unavailable(self, request_factory, response_factory):
+    async def test_uses_local_limiter_when_redis_unavailable(
+        self, request_factory, response_factory
+    ):
         """Should fall back to local limiter when Redis is not configured."""
-        settings.redis_url = None
+        main_config.redis_url = None
         _activate_local_rate_limiter()
 
         guard = rate_limit(1, 1)
@@ -142,7 +150,7 @@ class TestRateLimitDependency:
 
         # First request should pass
         await guard(request, response)
-        
+
         # Second request should be blocked
         with pytest.raises(HTTPException):
             await guard(request, response)

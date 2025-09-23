@@ -41,6 +41,9 @@ class EnvironmentVariables(BaseSettings):
     redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
     base_url: str = Field(default="http://localhost:8000", validation_alias="BASE_URL")
 
+    # Security
+    secret_key: str = Field(default="dev-secret-key", validation_alias="SECRET_KEY")
+
     # Global OIDC redirect URI (fallback for all providers)
     oidc_redirect_uri: str | None = Field(
         default=None, validation_alias="OIDC_REDIRECT_URI"
@@ -58,14 +61,39 @@ class EnvironmentVariables(BaseSettings):
         # The variables have this format: OIDC_<PROVIDER>_CLIENT_ID, OIDC_<PROVIDER>_CLIENT_SECRET, OIDC_<PROVIDER>_REDIRECT_URI
         # Parse the provider names and group variables accordingly
         parsed_vars = {}
+
+        # Known OIDC variable suffixes
+        known_suffixes = [
+            "CLIENT_ID",
+            "CLIENT_SECRET",
+            "REDIRECT_URI",
+            "ISSUER",
+            "AUTHORIZATION_ENDPOINT",
+            "TOKEN_ENDPOINT",
+            "JWKS_URI",
+            "END_SESSION_ENDPOINT",
+        ]
+
         for key, value in oidc_vars.items():
-            parts = key.split("_")
-            if len(parts) >= 3:
-                provider = parts[1]
-                var_type = "_".join(
-                    parts[2:]
-                ).lower()  # client_id, client_secret, redirect_uri
+            # Remove "OIDC_" prefix
+            without_prefix = key[5:]  # Remove "OIDC_"
+
+            # Find which known suffix this variable ends with
+            provider = None
+            var_type = None
+
+            for suffix in known_suffixes:
+                if without_prefix.endswith(suffix):
+                    # Provider name is everything before the suffix (minus the connecting underscore)
+                    provider = without_prefix[
+                        : -len(suffix) - 1
+                    ].lower()  # -1 for the underscore
+                    var_type = suffix.lower()
+                    break
+
+            if provider and var_type:
                 if provider not in parsed_vars:
                     parsed_vars[provider] = {}
                 parsed_vars[provider][var_type] = value
+
         return parsed_vars

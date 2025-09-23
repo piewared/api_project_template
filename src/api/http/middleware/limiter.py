@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from collections import defaultdict, deque
 import time
-from typing import Any, Awaitable, Callable, DefaultDict, Deque, Optional
+from collections import defaultdict, deque
+from collections.abc import Awaitable, Callable
+from typing import Any, Optional
 
 from fastapi import HTTPException, Request, Response
 from loguru import logger
 
-from src.runtime.settings import settings
+from src.runtime.config import main_config
 
 try:
     from fastapi_limiter.depends import RateLimiter
@@ -23,14 +24,14 @@ except Exception:  # pragma: no cover - optional dependency
 LocalLimiterFactory = Callable[[int, int], Callable[[Request], Awaitable[Any]]]
 
 _use_external_limiter = _has_external
-_local_limiter_factory: Optional[LocalLimiterFactory] = None
+_local_limiter_factory: LocalLimiterFactory | None = None
 
 
 class DefaultLocalRateLimiter:
     """Simple in-memory limiter used when Redis isn't available."""
 
     def __init__(self) -> None:
-        self._hits: DefaultDict[str, Deque[float]] = defaultdict(deque)
+        self._hits: defaultdict[str, deque[float]] = defaultdict(deque)
         self._lock = asyncio.Lock()
 
     def dependency(
@@ -94,7 +95,7 @@ class DefaultLocalRateLimiter:
 def configure_rate_limiter(
     *,
     use_external: bool,
-    local_factory: Optional[LocalLimiterFactory] = None,
+    local_factory: LocalLimiterFactory | None = None,
 ) -> None:
     """Configure which limiter implementation should be used."""
 
@@ -113,8 +114,8 @@ def rate_limit(times: int | None = None, seconds: int | None = None) -> Callable
     """Return a dependency enforcing request quotas."""
 
     async def dependency(request: Request, response: Response) -> Any:
-        effective_times = times if times is not None else (settings.rate_limit_requests or 10)
-        effective_seconds = seconds if seconds is not None else (settings.rate_limit_window or 60)
+        effective_times = times if times is not None else (main_config.rate_limit.requests or 10)
+        effective_seconds = seconds if seconds is not None else (main_config.rate_limit.window or 60)
 
         if _use_external_limiter and RateLimiter is not None:
             limiter = RateLimiter(times=effective_times, seconds=effective_seconds)

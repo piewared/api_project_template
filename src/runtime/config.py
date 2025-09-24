@@ -173,16 +173,11 @@ class ApplicationConfig(BaseModel):
     """Main application configuration containing all subsystem configs."""
 
     # Application-wide settings
-    environment: Literal["development", "production", "test"] = Field(
-        default="development"
-    )
+    environment: Literal["development", "production", "test"] = Field(default="development")
     log_level: str = Field(default="INFO")
-
-    database_url: str = Field(
-        default="sqlite:///./database.db", validation_alias="DATABASE_URL"
-    )
-    redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
-    base_url: str = Field(default="http://localhost:8000", validation_alias="BASE_URL")
+    database_url: str = Field(default="sqlite:///./database.db")
+    redis_url: str | None = Field(default=None)
+    base_url: str = Field(default="http://localhost:8000")
     secret_key: str = Field(default="dev-secret-key")
 
     # Subsystem configurations
@@ -484,18 +479,6 @@ def with_context(config_override: ApplicationConfig | dict | None = None, **kwar
         # Merge with current config using recursive merge
         base_dict = current_config.model_dump()
         merged_dict = _recursive_dict_merge(base_dict, override_dict)
-
-        # Handle validation aliases - convert field names to aliases where needed
-        alias_mapping = {
-            'database_url': 'DATABASE_URL',
-            'redis_url': 'REDIS_URL',
-            'base_url': 'BASE_URL'
-        }
-        
-        # Convert field names to aliases for Pydantic validation
-        for field_name, alias_name in alias_mapping.items():
-            if field_name in merged_dict:
-                merged_dict[alias_name] = merged_dict.pop(field_name)
 
         # Create new ApplicationConfig from merged dict
         merged_config = ApplicationConfig.model_validate(merged_dict)

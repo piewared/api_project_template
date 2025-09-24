@@ -55,23 +55,23 @@ class TestContextManager:
         # First level override
         level1_config = ApplicationConfig()
         level1_config.jwt.uid_claim = "level1_uid"
-        level1_config.environment = "level1"
+        level1_config.environment = "production"
 
         with with_context(level1_config):
             level1_context = get_config()
             assert level1_context.jwt.uid_claim == "level1_uid"
-            assert level1_context.environment == "level1"
+            assert level1_context.environment == "production"
 
             # Second level override
             level2_config = ApplicationConfig()
             level2_config.jwt.uid_claim = "level2_uid"
-            level2_config.environment = "level2"
+            level2_config.environment = "test"
             level2_config.log_level = "DEBUG"
 
             with with_context(level2_config):
                 level2_context = get_config()
                 assert level2_context.jwt.uid_claim == "level2_uid"
-                assert level2_context.environment == "level2"
+                assert level2_context.environment == "test"
                 assert level2_context.log_level == "DEBUG"
 
                 # Third level override
@@ -87,13 +87,13 @@ class TestContextManager:
                 # Back to level 2
                 back_to_level2 = get_config()
                 assert back_to_level2.jwt.uid_claim == "level2_uid"
-                assert back_to_level2.environment == "level2"
+                assert back_to_level2.environment == "test"
                 assert back_to_level2.log_level == "DEBUG"
 
             # Back to level 1
             back_to_level1 = get_config()
             assert back_to_level1.jwt.uid_claim == "level1_uid"
-            assert back_to_level1.environment == "level1"
+            assert back_to_level1.environment == "production"
 
         # Back to original
         final_config = get_config()
@@ -112,8 +112,6 @@ class TestContextManager:
         assert after_config is original_config
 
     def test_context_isolation_in_nested_calls(self):
-        """Should maintain context isolation in nested function calls."""
-        original_config = get_config()
 
         def inner_function() -> str:
             """Function that reads config in different context."""
@@ -130,20 +128,20 @@ class TestContextManager:
         # Set up outer context
         outer_config = ApplicationConfig()
         outer_config.jwt.uid_claim = "outer_uid"
-        outer_config.environment = "outer_env"
+        outer_config.environment = "production"
 
         with with_context(outer_config):
             # Call middle function which creates its own context
             middle_uid, middle_env = middle_function()
 
-            # Middle function should see its own uid and default environment
-            # (each context gets a fresh ApplicationConfig with defaults)
+            # Middle function should see its own uid but inherit environment
+            # (inheritance means child inherits parent's non-overridden values)
             assert middle_uid == "middle_uid"
-            assert middle_env == "development"  # Default from new ApplicationConfig
+            assert middle_env == "production"  # Inherited from outer context
 
             # After middle function, should be back to outer context
             assert get_config().jwt.uid_claim == "outer_uid"
-            assert get_config().environment == "outer_env"
+            assert get_config().environment == "production"
 
     def test_exception_handling_in_context(self):
         """Should properly restore context even when exceptions occur."""
@@ -170,7 +168,7 @@ class TestContextManager:
         original_config = get_config()
 
         test_config = ApplicationConfig()
-        test_config.environment = "test_env"
+        test_config.environment = "test"
         test_config.log_level = "DEBUG"
         test_config.database_url = "sqlite:///test.db"
         test_config.jwt.uid_claim = "test_uid"
@@ -180,7 +178,7 @@ class TestContextManager:
         with with_context(test_config):
             override_config = get_config()
 
-            assert override_config.environment == "test_env"
+            assert override_config.environment == "test"
             assert override_config.log_level == "DEBUG"
             assert override_config.database_url == "sqlite:///test.db"
             assert override_config.jwt.uid_claim == "test_uid"
@@ -238,24 +236,24 @@ class TestAsyncContextManager:
         # Level 1 context
         level1_config = ApplicationConfig()
         level1_config.jwt.uid_claim = "level1_async_uid"
-        level1_config.environment = "async_test"
+        level1_config.environment = "production"
 
         with with_context(level1_config):
             # Should see level 1 context
             assert get_config().jwt.uid_claim == "level1_async_uid"
-            assert get_config().environment == "async_test"
+            assert get_config().environment == "production"
 
             # Call level 2 async function
             uid, env = await level2_async()
 
-            # Level 2 should see its own uid and default environment
-            # (each context gets a fresh ApplicationConfig with defaults)
+            # Level 2 should see its own uid but inherit environment
+            # (inheritance means child inherits parent's non-overridden values)
             assert uid == "level2_async_uid"
-            assert env == "development"  # Default from new ApplicationConfig
+            assert env == "production"  # Inherited from level 1 context
 
             # Back to level 1 after async call
             assert get_config().jwt.uid_claim == "level1_async_uid"
-            assert get_config().environment == "async_test"
+            assert get_config().environment == "production"
 
         # Back to original
         assert get_config() is original_config
@@ -265,11 +263,21 @@ class TestAsyncContextManager:
         """Should maintain context isolation with concurrent async tasks."""
         results = {}
 
+        # Valid environments to cycle through
+        valid_envs = ["development", "production", "test"]
+
         async def async_task(task_id: int) -> None:
             """Async task that works in its own context."""
             task_config = ApplicationConfig()
             task_config.jwt.uid_claim = f"task_{task_id}_uid"
-            task_config.environment = f"task_{task_id}_env"
+            # Cycle through valid environments
+            env_index = task_id % len(valid_envs)
+            if env_index == 0:
+                task_config.environment = "development"
+            elif env_index == 1:
+                task_config.environment = "production"
+            else:
+                task_config.environment = "test"
 
             with with_context(task_config):
                 # Simulate varying amounts of async work
@@ -288,7 +296,8 @@ class TestAsyncContextManager:
         # Each task should have seen its own context
         for i in range(1, 6):
             assert results[i]["uid"] == f"task_{i}_uid"
-            assert results[i]["env"] == f"task_{i}_env"
+            expected_env = valid_envs[i % len(valid_envs)]
+            assert results[i]["env"] == expected_env
 
 
 class TestThreadSafety:
@@ -299,11 +308,21 @@ class TestThreadSafety:
         original_config = get_config()
         results = {}
 
+        # Valid environments to cycle through
+        valid_envs = ["development", "production", "test"]
+
         def thread_worker(worker_id: int) -> None:
             """Worker function that runs in its own thread."""
             worker_config = ApplicationConfig()
             worker_config.jwt.uid_claim = f"thread_{worker_id}_uid"
-            worker_config.environment = f"thread_{worker_id}_env"
+            # Cycle through valid environments
+            env_index = worker_id % len(valid_envs)
+            if env_index == 0:
+                worker_config.environment = "development"
+            elif env_index == 1:
+                worker_config.environment = "production"
+            else:
+                worker_config.environment = "test"
 
             with with_context(worker_config):
                 # Simulate some work
@@ -328,7 +347,7 @@ class TestThreadSafety:
         # Each thread should have seen its own context
         for i in range(1, 6):
             assert results[i]["uid"] == f"thread_{i}_uid"
-            assert results[i]["env"] == f"thread_{i}_env"
+            assert results[i]["env"] == valid_envs[i % len(valid_envs)]
 
         # Main thread context should be unchanged
         assert get_config() is original_config
@@ -454,7 +473,7 @@ class TestContextManagerEdgeCases:
         # Parent context sets multiple properties
         parent_config = ApplicationConfig()
         parent_config.jwt.uid_claim = "parent_uid"
-        parent_config.environment = "parent_env"
+        parent_config.environment = "production"
         parent_config.log_level = "DEBUG"
         parent_config.database_url = "sqlite:///parent.db"
 
@@ -471,14 +490,15 @@ class TestContextManagerEdgeCases:
                 assert child_context.jwt.uid_claim == "child_uid"
 
                 # Should inherit parent's non-overridden properties
-                # Note: This tests the current behavior where each context
-                # gets a fresh ApplicationConfig, so properties not explicitly
-                # set will be defaults, not inherited from parent
-                assert child_context.environment == "development"  # Default
-                assert child_context.log_level == "INFO"  # Default
+                # Note: This tests proper inheritance behavior where child contexts
+                # inherit non-overridden values from their parent context
+                assert (
+                    child_context.environment == "production"
+                )  # Inherited from parent
+                assert child_context.log_level == "DEBUG"  # Inherited from parent
 
             # Back to parent context
             parent_context = get_config()
             assert parent_context.jwt.uid_claim == "parent_uid"
-            assert parent_context.environment == "parent_env"
+            assert parent_context.environment == "production"
             assert parent_context.log_level == "DEBUG"

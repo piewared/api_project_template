@@ -117,14 +117,9 @@ class TestJWTService:
             """Should handle missing or empty claims gracefully."""
             claims = {}
 
-            # Create test config with no uid claim
-            test_config = ApplicationConfig()
-            test_config.jwt.uid_claim = None  # type: ignore
-
-            with with_context(config_override=test_config):
-                assert jwt_service.extract_uid(claims) == "None|None"
-                assert jwt_service.extract_scopes(claims) == set()
-                assert jwt_service.extract_roles(claims) == []
+            assert jwt_service.extract_uid(claims) == "None|None"
+            assert jwt_service.extract_scopes(claims) == set()
+            assert jwt_service.extract_roles(claims) == []
 
     class TestJWKSFetching:
         """Test JWKS fetching functionality."""

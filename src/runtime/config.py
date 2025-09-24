@@ -252,6 +252,9 @@ class ApplicationConfig(BaseModel):
         # Apply environment variable overrides to specific fields in sub-config models
         config.oidc.global_redirect_uri = env_vars.oidc_redirect_uri
 
+        # Reset tracking so only explicitly set fields after this point are tracked
+        config.__pydantic_fields_set__ = set()
+
         return config
 
     # CORS configuration properties
@@ -307,6 +310,7 @@ _env_vars = EnvironmentVariables()
 _default_config = ApplicationConfig.from_environment(_env_vars)
 _default_context = AppContext(config=_default_config)
 
+
 # Context variable for application context
 _app_context: ContextVar[AppContext] = ContextVar(
     "app_context", default=_default_context
@@ -331,35 +335,168 @@ def set_context(context: AppContext) -> Token[AppContext]:
     return _app_context.set(context)
 
 
-@contextmanager
-def with_context(config_override: ApplicationConfig | None = None):
-    """Context manager for temporarily overriding the application context.
+def _recursive_model_dump_exclude_unset(model: BaseModel) -> dict:
+    """Recursively dump a Pydantic model with exclude_unset=True for all nested models.
+
+    This function works from the deepest levels up, so that if any nested field
+    is explicitly set, the parent field containing that nested model is also included.
 
     Args:
-        config_override: Optional ApplicationConfig instance to use as override.
-                 If None, uses the current context.
+        model: The Pydantic model to dump
+
+    Returns:
+        dict: Dictionary containing only explicitly set fields at all levels
+    """
+    result = {}
+
+    # Get explicitly set fields at this level
+    explicitly_set_fields = model.model_fields_set
+
+    # Check all fields in the model
+    for field_name, _field_info in model.__class__.model_fields.items():
+        field_value = getattr(model, field_name)
+
+        if isinstance(field_value, BaseModel):
+            # Recursively check nested Pydantic models
+            nested_result = _recursive_model_dump_exclude_unset(field_value)
+            if nested_result:
+                # If nested model has explicitly set fields, we need to merge properly
+                # Include the full nested model but let the recursive merge handle it
+                result[field_name] = field_value.model_dump()
+            elif field_name in explicitly_set_fields:
+                # If this nested model field was explicitly set at this level, include it
+                result[field_name] = field_value.model_dump()
+        elif isinstance(field_value, dict):
+            # Handle dict fields that might contain Pydantic models
+            nested_dict = {}
+            has_nested_changes = False
+            for key, value in field_value.items():
+                if isinstance(value, BaseModel):
+                    nested_result = _recursive_model_dump_exclude_unset(value)
+                    if nested_result:
+                        nested_dict[key] = value.model_dump()
+                        has_nested_changes = True
+                    else:
+                        nested_dict[key] = value.model_dump()
+                else:
+                    nested_dict[key] = value
+
+            if has_nested_changes or field_name in explicitly_set_fields:
+                result[field_name] = nested_dict
+        elif field_name in explicitly_set_fields:
+            # Regular field that was explicitly set
+            result[field_name] = field_value
+
+    return result
+
+
+def _recursive_dict_merge(base_dict: dict, override_dict: dict) -> dict:
+    """Recursively merge two dictionaries from deepest levels up.
+
+    Args:
+        base_dict: The base dictionary to merge into
+        override_dict: The override dictionary to merge from
+
+    Returns:
+        dict: The merged dictionary
+    """
+    result = base_dict.copy()
+
+    for key, value in override_dict.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            # Recursively merge nested dictionaries
+            result[key] = _recursive_dict_merge(result[key], value)
+        else:
+            # Override or new key
+            result[key] = value
+
+    return result
+
+
+@contextmanager
+def with_context(config_override: ApplicationConfig | dict | None = None, **kwargs):
+    """Context manager for temporarily overriding the application context.
+
+    This function merges the override configuration with the current context,
+    allowing for partial overrides that inherit non-overridden values from
+    the parent context.
+
+    Args:
+        config_override: Optional ApplicationConfig instance or dict containing override values.
+                        If ApplicationConfig, nested fields are properly merged with inheritance.
+                        If dict, only specified keys are treated as overrides.
+        **kwargs: Additional override values as keyword arguments.
 
     Example:
-        # Normal usage - uses current context
-        with with_context():
-            context = get_context()
-            config = context.config
+        # Using dict overrides (recommended for partial overrides)
+        with with_context({'log_level': 'DEBUG', 'environment': 'prod'}):
+            config = get_config()
+            assert config.log_level == 'DEBUG'     # Overridden
+            assert config.environment == 'prod'    # Overridden
 
-        # Test usage - with override
-        test_config = ApplicationConfig(environment="test")
-        with with_context(test_config):
-            context = get_context()
-            assert context.config.environment == "test"
+        # Using keyword arguments (recommended for single overrides)
+        with with_context(log_level='INFO'):
+            config = get_config()
+            assert config.log_level == 'INFO'      # Overridden
+
+        # Using ApplicationConfig (properly merges nested configurations)
+        override_config = ApplicationConfig()
+        override_config.jwt.uid_claim = 'custom_uid'  # Only this field changes
+        with with_context(override_config):
+            config = get_config()
+            # config.jwt.uid_claim is 'custom_uid', other jwt fields inherited
     """
-    if config_override is not None:
-        token = set_context(replace(get_context(), config=config_override))
+    # Handle kwargs first
+    if kwargs:
+        # Convert kwargs to dict and merge with any dict override
+        override_dict = {}
+        if isinstance(config_override, dict):
+            override_dict.update(config_override)
+        elif config_override is not None:
+            raise ValueError("Cannot use kwargs with ApplicationConfig override")
+        override_dict.update(kwargs)
+
+        # Use dict merging approach
+        current_config = get_context().config
+        merged_config = current_config.model_copy(update=override_dict)
+
+        token = set_context(replace(get_context(), config=merged_config))
         try:
             yield
         finally:
             _app_context.reset(token)
-    else:
-        # No override, just yield current context
+        return
+
+    if config_override is None:
+        # No overrides, just yield current context
         yield
+        return
+
+    current_config = get_context().config
+
+    if isinstance(config_override, dict):
+        # Use Pydantic's model_copy with update for simple dict merging
+        merged_config = current_config.model_copy(update=config_override)
+    elif isinstance(config_override, ApplicationConfig):
+        # Get only explicitly set fields recursively using our custom function
+        override_dict = _recursive_model_dump_exclude_unset(config_override)
+
+        # Merge with current config using recursive merge
+        base_dict = current_config.model_dump()
+        merged_dict = _recursive_dict_merge(base_dict, override_dict)
+
+        # Create new ApplicationConfig from merged dict
+        merged_config = ApplicationConfig.model_validate(merged_dict)
+    else:
+        raise ValueError(
+            f"config_override must be dict, ApplicationConfig, or None, got {type(config_override)}"
+        )
+
+    token = set_context(replace(get_context(), config=merged_config))
+    try:
+        yield
+    finally:
+        _app_context.reset(token)
 
 
 def get_config() -> ApplicationConfig:

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from src.api.http.deps import get_session_only_user
+from src.api.http.deps import get_optional_session_user
 from src.core.services import oidc_client_service, session_service
 from src.entities.user import User
 from src.runtime.config import ApplicationConfig, get_config
@@ -201,7 +201,7 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
 
 @router_bff.get("/me")
 async def get_auth_state(
-    request: Request, user: User | None = Depends(get_session_only_user)
+    request: Request, user: User | None = Depends(get_optional_session_user)
 ) -> AuthState:
     """Get current authentication state for web client."""
     if not user:

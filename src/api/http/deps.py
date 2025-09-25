@@ -365,3 +365,14 @@ async def get_session_only_user(
     # Type checker doesn't know that required=True guarantees non-None return
     assert user is not None  # This should never be None when required=True
     return user
+
+
+async def get_optional_session_user(
+    request: Request, db: Session = Depends(get_session)
+) -> User | None:
+    """
+    Optional session-only authentication dependency for BFF endpoints.
+    Returns None if no session, doesn't raise HTTPException.
+    Only accepts session cookies, not JWT tokens.
+    """
+    return await _authenticate_with_session(request, db, required=False)

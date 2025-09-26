@@ -28,3 +28,15 @@ class UserRepository:
         row = UserTable.model_validate(user, from_attributes=True)
         self._session.add(row)
         return user  # No need for flush/refresh - entity already has its ID!
+
+    def update(self, user: User) -> User:
+        """Update an existing user."""
+        row = self._session.get(UserTable, user.id)
+        if row is None:
+            raise ValueError(f"User with ID {user.id} not found")
+
+        # Update the row with new values
+        for field, value in user.model_dump().items():
+            setattr(row, field, value)
+
+        return user

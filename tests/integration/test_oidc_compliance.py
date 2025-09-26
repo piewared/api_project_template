@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api.http.app import app
+from src.runtime.config import ApplicationConfig, with_context
 
 
 @pytest.fixture
@@ -56,20 +57,22 @@ class TestOIDCRelyingParty:
         assert "You have the required role!" in result["message"]
         assert "user_id" in result
 
-    @patch("src.api.http.deps.main_config")
-    def test_production_mode_requires_valid_tokens(self, mock_config, client):
+    def test_production_mode_requires_valid_tokens(self, client):
         """Test that production mode requires valid Bearer tokens."""
+
+        mock_config = ApplicationConfig()
         mock_config.environment = "production"
+        with with_context(config_override=mock_config):
+            # Without Authorization header
+            response = client.get("/auth/jit/me")
 
-        # Without Authorization header
-        response = client.get("/auth/jit/me")
-        assert response.status_code == 401
-        assert "Authentication required" in response.json()["detail"]
+            assert response.status_code == 401
+            assert "Authentication required" in response.json()["detail"]
 
-        # With invalid Bearer token format
-        response = client.get(
-            "/auth/jit/me", headers={"Authorization": "Invalid token"}
-        )
+            # With invalid Bearer token format
+            response = client.get(
+                "/auth/jit/me", headers={"Authorization": "Invalid token"}
+            )
         assert response.status_code == 401
 
     def test_development_mode_provides_mock_authentication(self, client):
@@ -123,9 +126,9 @@ class TestOIDCRelyingParty:
 
     def test_bearer_token_extraction_in_production(self, client):
         """Test Bearer token extraction logic."""
-        with patch("src.api.http.deps.main_config") as mock_config:
-            mock_config.environment = "production"
-
+        mock_config = ApplicationConfig()
+        mock_config.environment = "production"
+        with with_context(config_override=mock_config):
             # Test missing Authorization header
             response = client.get("/auth/jit/me")
             assert response.status_code == 401

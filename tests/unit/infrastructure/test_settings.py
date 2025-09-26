@@ -30,7 +30,7 @@ class TestEnvironmentVariables:
             assert env_vars.database_url == "sqlite:///./database.db"
             assert env_vars.redis_url is None
             assert env_vars.base_url == "http://localhost:8000"
-            assert env_vars.oidc_redirect_uri is None
+            assert env_vars.oidc_redirect_uri == 'http://localhost:8000/auth/web/callback'
 
     def test_environment_variable_loading(self):
         """Should load values from environment variables."""

@@ -5,7 +5,6 @@ import hmac
 import secrets
 import time
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -34,7 +33,7 @@ class UserSession(BaseModel):
     """Persistent user session after successful authentication."""
 
     id: str
-    user_id: UUID
+    user_id: str
     provider: str
     refresh_token: str | None
     access_token: str | None
@@ -175,10 +174,32 @@ async def provision_user_from_claims(claims: dict[str, Any], provider: str) -> U
             db.commit()
             return created_user
         else:
-            # Return existing user
+            # Return existing user - but should we update their info?
             user = user_repo.get(identity.user_id)
             if user is None:
                 raise ValueError("User identity exists but user not found")
+
+            # Update user with fresh claims data
+            email = claims.get("email")
+            first_name = claims.get("given_name", claims.get("first_name", ""))
+            last_name = claims.get("family_name", claims.get("last_name", ""))
+
+            # Update user fields if they exist in claims
+            updated = False
+            if email and email != user.email:
+                user.email = email
+                updated = True
+            if first_name and first_name != user.first_name:
+                user.first_name = first_name
+                updated = True
+            if last_name and last_name != user.last_name:
+                user.last_name = last_name
+                updated = True
+
+            if updated:
+                user_repo.update(user)
+                db.commit()
+
             return user
 
     finally:
@@ -186,7 +207,7 @@ async def provision_user_from_claims(claims: dict[str, Any], provider: str) -> U
 
 
 def create_user_session(
-    user_id: UUID,
+    user_id: str,
     provider: str,
     refresh_token: str | None,
     access_token: str | None,
@@ -321,7 +342,7 @@ def generate_csrf_token(session_id: str) -> str:
     return csrf_token
 
 
-def validate_csrf_token(session_id: str, csrf_token: str) -> bool:
+def validate_csrf_token(session_id: str, csrf_token: str | None) -> bool:
     """Validate CSRF token for session.
 
     Args:
@@ -332,6 +353,8 @@ def validate_csrf_token(session_id: str, csrf_token: str) -> bool:
         True if valid, False otherwise
     """
     try:
+        if csrf_token is None:
+            return False
         expected_token = generate_csrf_token(session_id)
         return hmac.compare_digest(expected_token, csrf_token)
     except Exception:

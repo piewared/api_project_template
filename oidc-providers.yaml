@@ -23,6 +23,6 @@ microsoft:
 #   end_session_endpoint: "https://auth.example.com/logout"
 #   jwks_uri: "https://auth.example.com/.well-known/jwks.json"
 #   scopes: ["openid", "profile", "email"]
-#   redirect_uri: "http://localhost:8000/web/callback"
+#   redirect_uri: "http://localhost:8000/auth/web/callback" # Optional custom redirect URI that overrides the global one
 #   # Note: client_id, client_secret, and redirect_uri come from environment variables:
 #   # OIDC_CUSTOM_PROVIDER_CLIENT_ID and OIDC_CUSTOM_PROVIDER_CLIENT_SECRET

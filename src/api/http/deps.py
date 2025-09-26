@@ -15,8 +15,6 @@ from src.entities.user_identity.repository import UserIdentityRepository
 from src.runtime.config import get_config
 from src.runtime.db import session
 
-main_config = get_config()
-
 
 def get_session() -> Iterator[Session]:
     """Yield a database session tied to the current request lifecycle."""
@@ -51,7 +49,7 @@ async def get_current_user(
 ) -> User:
     """Authenticate the request using a Bearer token, with JIT user provisioning."""
 
-    if main_config.environment == "development":
+    if get_config().environment == "development":
         request.state.claims = getattr(
             request.state, "claims", {"iss": "local-dev", "sub": "dev-user"}
         )
@@ -181,7 +179,7 @@ async def _authenticate_with_session(
         HTTPException: If required=True and authentication fails
     """
     # Development mode bypass
-    if main_config.environment == "development":
+    if get_config().environment == "development":
         request.state.claims = getattr(
             request.state, "claims", {"iss": "local-dev", "sub": "dev-user"}
         )
@@ -243,7 +241,7 @@ async def get_authenticated_user(
     request: Request, db: Session = Depends(get_session)
 ) -> User:
     """
-    Unified authentication dependency that works with both JWT and session-based auth.
+    Unified authentication dependency that works with both JWT and session-based auth. JIT user provisioning is supported for JWT auth.
 
     Authentication priority:
     1. Session cookie (BFF pattern) - for web clients
@@ -259,8 +257,8 @@ async def get_authenticated_user(
     # Try JWT Bearer token authentication (mobile/API pattern)
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ", 1)[1]
         try:
+            token = auth_header.split(" ", 1)[1]
             claims = await jwt_service.verify_jwt(token)
             uid = jwt_service.extract_uid(claims)
             issuer = claims.get("iss")
@@ -283,6 +281,7 @@ async def get_authenticated_user(
                 identity = identity_repo.get_by_issuer_subject(issuer, subject)
 
             # JIT provisioning: create user and identity if they don't exist
+
             if identity is None:
                 # Extract user information from JWT claims
                 email = claims.get("email")
@@ -356,15 +355,12 @@ async def get_authenticated_user(
 
 async def get_session_only_user(
     request: Request, db: Session = Depends(get_session)
-) -> User:
+) -> User | None:
     """
     Session-only authentication dependency for BFF endpoints.
     Only accepts session cookies, not JWT tokens.
     """
-    user = await _authenticate_with_session(request, db, required=True)
-    # Type checker doesn't know that required=True guarantees non-None return
-    assert user is not None  # This should never be None when required=True
-    return user
+    return await _authenticate_with_session(request, db, required=True)
 
 
 async def get_optional_session_user(
@@ -372,7 +368,7 @@ async def get_optional_session_user(
 ) -> User | None:
     """
     Optional session-only authentication dependency for BFF endpoints.
-    Returns None if no session, doesn't raise HTTPException.
-    Only accepts session cookies, not JWT tokens.
+    Returns None if no session is found instead of raising an exception.
+    Used for endpoints that need to check auth state without failing on unauthenticated requests.
     """
     return await _authenticate_with_session(request, db, required=False)

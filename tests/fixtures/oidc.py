@@ -144,18 +144,30 @@ def mock_id_token() -> str:
 @pytest.fixture
 def mock_httpx_response():
     """Mock httpx response for testing HTTP calls."""
+    import httpx
+    from unittest.mock import Mock
+
     class MockResponse:
         def __init__(self, json_data: dict, status_code: int = 200):
             self._json_data = json_data
             self.status_code = status_code
-            
+
         def json(self) -> dict:
             return self._json_data
-            
+
         def raise_for_status(self):
             if self.status_code >= 400:
-                raise Exception(f"HTTP {self.status_code}")
-                
+                # Create minimal mocks for HTTPStatusError
+                mock_request = Mock(spec=httpx.Request)
+                mock_response = Mock(spec=httpx.Response)
+                mock_response.status_code = self.status_code
+
+                raise httpx.HTTPStatusError(
+                    f"HTTP {self.status_code}",
+                    request=mock_request,
+                    response=mock_response
+                )
+
     return MockResponse
 
 
@@ -270,7 +282,7 @@ def mock_session_service():
     mock_service.create_user_session.return_value = "user-session-456"
     mock_service.get_user_session.return_value = UserSession(
         id="user-session-456",
-        user_id=UUID("93743658555595339"),
+        user_id=str(UUID("93743658555595339")),
         provider="default",
         refresh_token="mock-refresh-token",
         access_token="mock-access-token",

@@ -8,7 +8,7 @@ import requests
 from fastapi.testclient import TestClient
 
 from src.api.http.app import app
-from src.runtime.config import ApplicationConfig, OIDCConfig, OIDCProviderConfig
+from src.runtime.config import ApplicationConfig, OIDCConfig, OIDCProviderConfig, with_context
 
 
 @pytest.fixture
@@ -43,10 +43,9 @@ def integration_client(keycloak_config):
         mock_get_config.return_value = config
         
         # Also patch the module-level configs that are imported at startup
-        with patch("src.api.http.routers.auth_bff.main_config", config):
-            with patch("src.api.http.deps.main_config", config):
-                with TestClient(app) as client:
-                    yield client
+        with with_context(config_override=config):
+            with TestClient(app) as client:
+                yield client
 
 
 def keycloak_available() -> bool:

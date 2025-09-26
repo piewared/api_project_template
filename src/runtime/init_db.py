@@ -1,9 +1,10 @@
 """Database initialization script."""
 
-from src.runtime.db import engine
-from src.core.rows.user_row import UserRow  # noqa: F401
-from src.core.rows.user_identity_row import UserIdentityRow  # noqa: F401
 from sqlmodel import SQLModel
+
+from src.entities.user import UserTable  # noqa: F401
+from src.entities.user_identity import UserIdentityTable  # noqa: F401
+from src.runtime.db import engine
 
 
 def init_db() -> None:

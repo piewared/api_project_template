@@ -2,7 +2,6 @@
 
 from typing import Any
 from urllib.parse import urlencode
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
@@ -34,16 +33,16 @@ class AuthState(BaseModel):
 
 
 @router_bff.get("/login")
-async def initiate_login(
-    request: Request, provider: str = "default", redirect_uri: str | None = None
-) -> RedirectResponse:
+async def initiate_login(request: Request, provider: str = "default", redirect_uri: str | None = None) -> RedirectResponse:
     """Initiate OIDC login flow with PKCE.
 
     Redirects to the identity provider's authorization endpoint.
     Stores PKCE verifier and state in session for security.
     """
-    if provider not in main_config.oidc_providers:
+    print(provider)
+    if provider not in get_config().oidc_providers:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+    print('hi2')
 
     # Generate PKCE challenge and state
     pkce_verifier, pkce_challenge = oidc_client_service.generate_pkce_pair()
@@ -56,9 +55,10 @@ async def initiate_login(
         provider=provider,
         redirect_uri=redirect_uri or "/",
     )
+    print('hi3')
 
     # Build authorization URL
-    provider_config = main_config.oidc_providers[provider]
+    provider_config = get_config().oidc_providers[provider]
     auth_params = {
         "client_id": provider_config.client_id,
         "response_type": "code",
@@ -68,6 +68,7 @@ async def initiate_login(
         "code_challenge": pkce_challenge,
         "code_challenge_method": "S256",
     }
+    print('hi4')
 
     auth_url = f"{provider_config.authorization_endpoint}?{urlencode(auth_params)}"
 
@@ -77,17 +78,19 @@ async def initiate_login(
         key="auth_session_id",
         value=session_id,
         httponly=True,
-        secure=main_config.environment == "production",
+        secure=get_config().environment == "production",
         samesite="lax",
         max_age=600,  # 10 minutes for auth flow
     )
+    print('hi5')
+    print(response.status_code)
 
     return response
 
 
 @router_bff.get("/callback")
 async def handle_callback(
-    request: Request, code: str, state: str, error: str | None = None
+    request: Request, state: str, code: str | None = None, error: str | None = None
 ) -> RedirectResponse:
     """Handle OIDC callback with authorization code.
 
@@ -95,6 +98,9 @@ async def handle_callback(
     """
     if error:
         raise HTTPException(status_code=400, detail=f"Authorization failed: {error}")
+
+    if not code:
+        raise HTTPException(status_code=400, detail="Missing authorization code")
 
     # Get auth session from cookie
     session_id = request.cookies.get("auth_session_id")
@@ -129,7 +135,7 @@ async def handle_callback(
 
         # Create user session
         user_session_id = session_service.create_user_session(
-            user_id=UUID(user.id),
+            user_id=user.id,
             provider=auth_session.provider,
             refresh_token=tokens.refresh_token,
             access_token=tokens.access_token,
@@ -148,9 +154,9 @@ async def handle_callback(
             key="user_session_id",
             value=user_session_id,
             httponly=True,
-            secure=main_config.environment == "production",
+            secure=get_config().environment == "production",
             samesite="lax",
-            max_age=main_config.session_max_age,
+            max_age=get_config().session_max_age,
         )
 
         # Clear auth session cookie
@@ -184,11 +190,11 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
         # Optionally trigger provider logout
         if (
             user_session
-            and main_config.oidc_providers[user_session.provider].end_session_endpoint
+            and get_config().oidc_providers[user_session.provider].end_session_endpoint
         ):
-            provider_config = main_config.oidc_providers[user_session.provider]
+            provider_config = get_config().oidc_providers[user_session.provider]
             logout_params = {
-                "post_logout_redirect_uri": main_config.base_url,
+                "post_logout_redirect_uri": get_config().base_url,
                 "client_id": provider_config.client_id,
             }
             logout_url = (
@@ -239,9 +245,9 @@ async def refresh_session(request: Request, response: Response) -> dict[str, str
             key="user_session_id",
             value=new_session_id,
             httponly=True,
-            secure=main_config.environment == "production",
+            secure=get_config().environment == "production",
             samesite="lax",
-            max_age=main_config.session_max_age,
+            max_age=get_config().session_max_age,
         )
 
         return {"message": "Session refreshed"}

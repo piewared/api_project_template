@@ -409,7 +409,7 @@ def _recursive_dict_merge(base_dict: dict, override_dict: dict) -> dict:
 
 
 @contextmanager
-def with_context(config_override: ApplicationConfig | dict | None = None, **kwargs):
+def with_context(config_override: ApplicationConfig | None = None):
     """Context manager for temporarily overriding the application context.
 
     This function merges the override configuration with the current context,
@@ -417,10 +417,8 @@ def with_context(config_override: ApplicationConfig | dict | None = None, **kwar
     the parent context.
 
     Args:
-        config_override: Optional ApplicationConfig instance or dict containing override values.
+        config_override: Optional ApplicationConfig instance.
                         If ApplicationConfig, nested fields are properly merged with inheritance.
-                        If dict, only specified keys are treated as overrides.
-        **kwargs: Additional override values as keyword arguments.
 
     Example:
         # Using dict overrides (recommended for partial overrides)
@@ -441,27 +439,6 @@ def with_context(config_override: ApplicationConfig | dict | None = None, **kwar
             config = get_config()
             # config.jwt.uid_claim is 'custom_uid', other jwt fields inherited
     """
-    # Handle kwargs first
-    if kwargs:
-        # Convert kwargs to dict and merge with any dict override
-        override_dict = {}
-        if isinstance(config_override, dict):
-            override_dict.update(config_override)
-        elif config_override is not None:
-            raise ValueError("Cannot use kwargs with ApplicationConfig override")
-        override_dict.update(kwargs)
-
-        # Use dict merging approach
-        current_config = get_context().config
-        merged_config = current_config.model_copy(update=override_dict)
-
-        token = set_context(replace(get_context(), config=merged_config))
-        try:
-            yield
-        finally:
-            _app_context.reset(token)
-        return
-
     if config_override is None:
         # No overrides, just yield current context
         yield
@@ -469,10 +446,7 @@ def with_context(config_override: ApplicationConfig | dict | None = None, **kwar
 
     current_config = get_context().config
 
-    if isinstance(config_override, dict):
-        # Use Pydantic's model_copy with update for simple dict merging
-        merged_config = current_config.model_copy(update=config_override)
-    elif isinstance(config_override, ApplicationConfig):
+    if isinstance(config_override, ApplicationConfig):
         # Get only explicitly set fields recursively using our custom function
         override_dict = _recursive_model_dump_exclude_unset(config_override)
 
@@ -484,7 +458,7 @@ def with_context(config_override: ApplicationConfig | dict | None = None, **kwar
         merged_config = ApplicationConfig.model_validate(merged_dict)
     else:
         raise ValueError(
-            f"config_override must be dict, ApplicationConfig, or None, got {type(config_override)}"
+            f"config_override must be ApplicationConfig, or None, got {type(config_override)}"
         )
 
     token = set_context(replace(get_context(), config=merged_config))

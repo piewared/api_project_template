@@ -74,10 +74,10 @@ DEVELOPMENT_USER_NAME="Development User"
 
 ```javascript
 // 1. Redirect to login
-window.location.href = '/web/login';
+window.location.href = '/auth/web/login';
 
 // 2. After successful authentication, get user info
-const response = await fetch('/web/me', {
+const response = await fetch('/auth/web/me', {
   credentials: 'include'  // Include session cookie
 });
 const user = await response.json();
@@ -88,17 +88,17 @@ const apiResponse = await fetch('/api/protected-endpoint', {
 });
 
 // 4. Logout
-await fetch('/web/logout', { 
+await fetch('/auth/web/logout', { 
   method: 'POST',
   credentials: 'include' 
 });
 ```
 
 **API Endpoints Available:**
-- `GET /web/login` - Initiate OIDC authentication flow
-- `GET /web/callback` - Handle OIDC callback (automatic)
-- `GET /web/me` - Get current user information
-- `POST /web/logout` - Logout and clear session
+- `GET /auth/web/login` - Initiate OIDC authentication flow
+- `GET /auth/web/callback` - Handle OIDC callback (automatic)
+- `GET /auth/web/me` - Get current user information
+- `POST /auth/web/logout` - Logout and clear session
 
 #### Mobile/API Integration (JWT Pattern)
 
@@ -292,7 +292,7 @@ def test_web_authentication_flow(client):
     assert response.status_code == 302
     
     # Simulate callback with mock token
-    response = client.get("/web/callback?code=mock-code&state=mock-state")
+    response = client.get("/auth/web/callback?code=mock-code&state=mock-state")
     assert response.status_code == 302  # Redirect after successful auth
 ```
 

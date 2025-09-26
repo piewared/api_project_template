@@ -10,17 +10,15 @@ from pydantic import BaseModel
 
 from src.runtime.config import get_config
 
-main_config = get_config()
-
 
 class TokenResponse(BaseModel):
     """OIDC token response model."""
 
-    access_token: str
-    token_type: str
-    expires_in: int
-    refresh_token: str | None = None
-    id_token: str | None = None
+    access_token: str # In the OIDC spec, this is always lowercase with an underscore. It refers to the token used to access protected resources for the user.
+    token_type: str # In the OIDC spec, this is always lowercase with an underscore. It indicates the type of token issued, typically "Bearer".
+    expires_in: int # Lifetime in seconds of the access token
+    refresh_token: str | None = None # Optional refresh token to obtain new access tokens
+    id_token: str | None = None # Optional ID token containing user claims
 
     @property
     def expires_at(self) -> int:
@@ -68,7 +66,7 @@ async def exchange_code_for_tokens(
     Returns:
         Token response with access/refresh tokens
     """
-    provider_config = main_config.oidc_providers[provider]
+    provider_config = get_config().oidc_providers[provider]
 
     token_data = {
         "grant_type": "authorization_code",
@@ -104,14 +102,14 @@ async def get_user_claims(
     """Get user claims from ID token or userinfo endpoint.
 
     Args:
-        access_token: Access token for userinfo endpoint
+        access_token: Access token for userinfo endpoint.
         id_token: ID token with user claims (optional)
         provider: OIDC provider identifier
 
     Returns:
         User claims dictionary
     """
-    provider_config = main_config.oidc_providers[provider]
+    provider_config = get_config().oidc_providers[provider]
 
     # If we have an ID token, decode it for user claims
     if id_token:
@@ -125,7 +123,17 @@ async def get_user_claims(
             # Fall back to userinfo endpoint if ID token validation fails
             pass
 
-    # Fall back to userinfo endpoint
+    # Fall back to userinfo endpoint. the user endpoint is an optional
+    # part of the OIDC spec, so not all providers will have it. It provides
+    # additional user information that may not be included in the ID token. The format is as follows:
+    #
+    # {
+    #     "sub": "user-12345",
+    #     "email": "test@example.com",
+    #     "name": "Test User",
+    #     "picture": "https://example.com/avatar.jpg"
+    # }
+
     if provider_config.userinfo_endpoint:
         headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -151,7 +159,7 @@ async def refresh_access_token(refresh_token: str, provider: str) -> TokenRespon
     Returns:
         New token response
     """
-    provider_config = main_config.oidc_providers[provider]
+    provider_config = get_config().oidc_providers[provider]
 
     token_data = {
         "grant_type": "refresh_token",

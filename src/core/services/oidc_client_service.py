@@ -144,6 +144,7 @@ async def get_user_claims(
             response.raise_for_status()
             return response.json()
 
+    # Best practice is to raise an exception, as this is an unexpected error state.
     raise ValueError(
         "Unable to retrieve user claims - no ID token or userinfo endpoint"
     )

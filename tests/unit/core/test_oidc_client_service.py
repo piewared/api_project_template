@@ -236,13 +236,11 @@ class TestOIDCClientService:
         temp_config = ApplicationConfig()
         temp_config.oidc_providers["test"] = mock_oidc_provider
 
-        with with_context(config_override=temp_config):
-            result = await oidc_client_service.get_user_claims(
-                access_token="mock-access-token", id_token=None, provider="test"
-            )
-
-            # Should return empty dict when no sources available
-            assert result == {}
+        with pytest.raises(ValueError):
+            with with_context(config_override=temp_config):
+                await oidc_client_service.get_user_claims(
+                    access_token="mock-access-token", id_token=None, provider="test"
+                )
 
     @pytest.mark.asyncio
     async def test_refresh_access_token_success(

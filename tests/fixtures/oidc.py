@@ -92,7 +92,7 @@ def mock_user_session(mock_user: User) -> UserSession:
     """Mock user session for testing."""
     return UserSession(
         id="user-session-456",
-        user_id=UUID(mock_user.id),
+        user_id=mock_user.id,
         provider="default",
         refresh_token="mock-refresh-token",
         access_token="mock-access-token",
@@ -165,7 +165,7 @@ def mock_httpx_response():
                 raise httpx.HTTPStatusError(
                     f"HTTP {self.status_code}",
                     request=mock_request,
-                    response=mock_response
+                    response=mock_response,
                 )
 
     return MockResponse
@@ -174,10 +174,11 @@ def mock_httpx_response():
 @pytest.fixture
 def mock_request_with_cookies():
     """Factory for creating mock FastAPI Request objects with cookies."""
+
     def _create_request(cookies: dict[str, str] | None = None) -> Request:
         if cookies is None:
             cookies = {}
-            
+
         scope = {
             "type": "http",
             "method": "GET",
@@ -185,12 +186,12 @@ def mock_request_with_cookies():
             "query_string": b"",
             "headers": [(b"host", b"localhost:8000")],
         }
-        
+
         request = Request(scope)
         request._cookies = cookies
-        
+
         return request
-    
+
     return _create_request
 
 
@@ -204,7 +205,7 @@ def mock_response():
 def oidc_test_config():
     """Test configuration with OIDC provider setup."""
     from src.runtime.config import ApplicationConfig, OIDCConfig
-    
+
     config = ApplicationConfig()
     config.oidc = OIDCConfig()
     config.oidc.providers = {
@@ -219,7 +220,7 @@ def oidc_test_config():
             redirect_uri="http://localhost:8000/auth/web/callback",
         )
     }
-    
+
     return config
 
 
@@ -228,7 +229,7 @@ def oidc_test_config():
 def mock_oidc_client_service():
     """Mock OIDC client service for testing."""
     mock_service = AsyncMock()
-    
+
     # Configure default return values
     mock_service.generate_pkce_pair.return_value = ("test-verifier", "test-challenge")
     mock_service.generate_state.return_value = "test-state"
@@ -252,7 +253,7 @@ def mock_oidc_client_service():
         expires_in=3600,
         refresh_token="new-refresh-token",
     )
-    
+
     return mock_service
 
 
@@ -260,7 +261,7 @@ def mock_oidc_client_service():
 def mock_session_service():
     """Mock session service for testing."""
     mock_service = AsyncMock()
-    
+
     # Configure default return values
     mock_service.create_auth_session.return_value = "auth-session-123"
     mock_service.get_auth_session.return_value = AuthSession(

@@ -13,6 +13,7 @@ router_jit = APIRouter(prefix="/jit", tags=["auth-jit"])
 
 class MeResponse(BaseModel):
     """Response model for the /me endpoint - useful for clients to understand their auth state."""
+
     user_id: str
     email: str
     scopes: list[str]
@@ -22,8 +23,7 @@ class MeResponse(BaseModel):
 
 @router_jit.get("/me", response_model=MeResponse)
 async def get_me(
-    request: Request,
-    user: User = Depends(get_authenticated_user)
+    request: Request, user: User = Depends(get_authenticated_user)
 ) -> dict[str, Any]:
     """Development/debugging endpoint - mirrors authenticated user context.
 
@@ -35,7 +35,7 @@ async def get_me(
     print(f"Request state: {request.state}")
     print(f"user: {user}")
     auth_method = getattr(request.state, "auth_method", "unknown")
-    
+
     return {
         "user_id": str(user.id),
         "email": user.email,
@@ -58,7 +58,7 @@ async def protected_scope(
 @router_jit.get("/protected-role")
 async def protected_role(
     user: User = Depends(get_authenticated_user),
-    dep: None = Depends(require_role("admin"))
+    dep: None = Depends(require_role("admin")),
 ) -> dict[str, Any]:
     """Example endpoint demonstrating role-based authorization."""
     return {"message": "You have the required role!", "user_id": str(user.id)}

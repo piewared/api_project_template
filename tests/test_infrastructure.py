@@ -229,9 +229,12 @@ class TestOIDCConfiguration:
 
             assert "google" in providers
             assert "microsoft" in providers
-            
+
             google = providers["google"]
-            assert google.authorization_endpoint == "https://accounts.google.com/o/oauth2/v2/auth"
+            assert (
+                google.authorization_endpoint
+                == "https://accounts.google.com/o/oauth2/v2/auth"
+            )
             assert google.issuer == "https://accounts.google.com"
 
     def test_yaml_overrides_default_provider(self):
@@ -243,14 +246,19 @@ class TestOIDCConfiguration:
             }
         }
 
-        with patch("src.runtime.config._load_oidc_yaml_config", return_value=yaml_content):
+        with patch(
+            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+        ):
             providers = _get_oidc_providers()
 
             google = providers["google"]
             assert google.scopes == ["openid", "profile"]
             assert google.issuer == "https://custom.google.com"
             # Other fields should remain from defaults
-            assert google.authorization_endpoint == "https://accounts.google.com/o/oauth2/v2/auth"
+            assert (
+                google.authorization_endpoint
+                == "https://accounts.google.com/o/oauth2/v2/auth"
+            )
 
     def test_yaml_adds_custom_provider(self):
         """Test YAML can add new providers."""
@@ -263,7 +271,9 @@ class TestOIDCConfiguration:
             }
         }
 
-        with patch("src.runtime.config._load_oidc_yaml_config", return_value=yaml_content):
+        with patch(
+            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+        ):
             providers = _get_oidc_providers()
 
             assert "custom_provider" in providers
@@ -279,7 +289,9 @@ class TestOIDCConfiguration:
             "google": {"scopes": ["openid", "profile"]},
         }
 
-        with patch("src.runtime.config._load_oidc_yaml_config", return_value=yaml_content):
+        with patch(
+            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+        ):
             providers = _get_oidc_providers()
 
             # Should have google (valid override)
@@ -320,13 +332,18 @@ class TestOIDCConfiguration:
             "OIDC_CUSTOM_PROVIDER_CLIENT_ID": "custom-client-id",
         }
 
-        with patch("src.runtime.config._load_oidc_yaml_config", return_value=yaml_content):
+        with patch(
+            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+        ):
             with patch.dict(os.environ, test_env, clear=True):
                 env_vars = EnvironmentVariables()
                 config = ApplicationConfig.from_environment(env_vars)
 
                 # Global config
-                assert config.oidc.global_redirect_uri == "https://api.myapp.com/auth/callback"
+                assert (
+                    config.oidc.global_redirect_uri
+                    == "https://api.myapp.com/auth/callback"
+                )
 
                 # Google provider with env credentials
                 google_provider = config.oidc.providers["google"]
@@ -334,10 +351,11 @@ class TestOIDCConfiguration:
 
                 # Custom provider from YAML + env
                 custom_provider = config.oidc.providers["custom_provider"]
-                assert custom_provider.authorization_endpoint == "https://auth.custom.com/authorize"
+                assert (
+                    custom_provider.authorization_endpoint
+                    == "https://auth.custom.com/authorize"
+                )
                 assert custom_provider.client_id == "custom-client-id"
-
-
 
 
 class TestRateLimiting:
@@ -550,6 +568,7 @@ class TestRateLimiting:
         with pytest.raises(HTTPException):
             await guard(request)
 
+
 class TestApplicationStartup:
     """Test application startup and initialization."""
 
@@ -566,7 +585,9 @@ class TestApplicationStartup:
         from src.api.http.app import app
 
         # Check that middleware is applied
-        middleware_types = [type(middleware.cls).__name__ for middleware in app.user_middleware]
+        middleware_types = [
+            type(middleware.cls).__name__ for middleware in app.user_middleware
+        ]
 
         # Should have CORS and potentially other middleware
         assert len(middleware_types) > 0

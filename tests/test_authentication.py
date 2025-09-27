@@ -439,6 +439,184 @@ class TestSessionService:
         for session_id in session_ids:
             session_service.delete_auth_session(session_id)
 
+    @pytest.mark.asyncio
+    async def test_refresh_user_session_success(self):
+        """Test successful user session refresh."""
+        user_id = "12345678-1234-5678-9abc-123456789012"
+
+        # Create initial session
+        session_id = session_service.create_user_session(
+            user_id=user_id,
+            provider="google",
+            refresh_token="old-refresh-token",
+            access_token="old-access-token",
+            expires_at=int(time.time()) + 3600,
+        )
+
+        # Mock the OIDC client service
+        with patch(
+            "src.core.services.oidc_client_service.refresh_access_token"
+        ) as mock_refresh:
+            from src.core.services.oidc_client_service import TokenResponse
+
+            mock_refresh.return_value = TokenResponse(
+                access_token="new-access-token",
+                token_type="Bearer",
+                expires_in=3600,
+                refresh_token="new-refresh-token",
+            )
+
+            # Refresh the session
+            new_session_id = await session_service.refresh_user_session(session_id)
+
+            # Should return new session ID
+            assert isinstance(new_session_id, str)
+            assert new_session_id != session_id
+
+            # Old session should be gone
+            assert session_service.get_user_session(session_id) is None
+
+            # New session should exist with updated tokens
+            new_session = session_service.get_user_session(new_session_id)
+            assert new_session is not None
+            assert new_session.access_token == "new-access-token"
+            assert new_session.refresh_token == "new-refresh-token"
+
+            # Mock should have been called correctly
+            mock_refresh.assert_called_once_with("old-refresh-token", "google")
+
+    @pytest.mark.asyncio
+    async def test_refresh_user_session_not_found(self):
+        """Test refreshing non-existent session raises error."""
+        with pytest.raises(ValueError, match="Session not found or expired"):
+            await session_service.refresh_user_session("nonexistent-session")
+
+    @pytest.mark.asyncio
+    async def test_refresh_user_session_no_refresh_token(self):
+        """Test refreshing session without refresh token raises error."""
+        user_id = "12345678-1234-5678-9abc-123456789012"
+
+        # Create session without refresh token
+        session_id = session_service.create_user_session(
+            user_id=user_id,
+            provider="google",
+            refresh_token=None,  # No refresh token
+            access_token="access-token",
+            expires_at=int(time.time()) + 3600,
+        )
+
+        with pytest.raises(ValueError, match="No refresh token available"):
+            await session_service.refresh_user_session(session_id)
+
+    @pytest.mark.asyncio
+    async def test_refresh_user_session_refresh_fails(self):
+        """Test refresh session when token refresh fails."""
+        user_id = "12345678-1234-5678-9abc-123456789012"
+
+        session_id = session_service.create_user_session(
+            user_id=user_id,
+            provider="google",
+            refresh_token="refresh-token",
+            access_token="access-token",
+            expires_at=int(time.time()) + 3600,
+        )
+
+        # Mock refresh to fail
+        with patch(
+            "src.core.services.oidc_client_service.refresh_access_token"
+        ) as mock_refresh:
+            mock_refresh.side_effect = Exception("Token refresh failed")
+
+            with pytest.raises(ValueError, match="Token refresh failed"):
+                await session_service.refresh_user_session(session_id)
+
+            # Session should be cleaned up on failure
+            assert session_service.get_user_session(session_id) is None
+
+    def test_csrf_token_malformed_handling(self):
+        """Test validating malformed CSRF token doesn't crash."""
+        session_id = "test-session-malformed"
+
+        # Should handle empty/None gracefully
+        is_valid = session_service.validate_csrf_token(session_id, "")
+        assert is_valid is False
+
+        is_valid = session_service.validate_csrf_token(session_id, None)
+        assert is_valid is False
+
+        # Should handle malformed tokens
+        is_valid = session_service.validate_csrf_token(session_id, "invalid-format")
+        assert is_valid is False
+
+    def test_session_memory_management(self):
+        """Test that session cleanup prevents memory leaks."""
+        initial_auth_count = len(session_service._auth_sessions)
+        initial_user_count = len(session_service._user_sessions)
+
+        # Create and immediately delete many sessions
+        for i in range(50):
+            # Auth sessions
+            auth_id = session_service.create_auth_session(
+                pkce_verifier=f"verifier-{i}",
+                state=f"state-{i}",
+                provider="test",
+                redirect_uri="/test",
+            )
+            session_service.delete_auth_session(auth_id)
+
+            # User sessions
+            user_session_id = session_service.create_user_session(
+                user_id=f"user-{i}",
+                provider="test",
+                refresh_token=f"refresh-{i}",
+                access_token=f"access-{i}",
+                expires_at=int(time.time()) + 3600,
+            )
+            session_service.delete_user_session(user_session_id)
+
+        # Memory should be cleaned up
+        final_auth_count = len(session_service._auth_sessions)
+        final_user_count = len(session_service._user_sessions)
+
+        assert final_auth_count == initial_auth_count
+        assert final_user_count == initial_user_count
+
+    def test_concurrent_session_operations(self):
+        """Test that concurrent session operations don't interfere."""
+        user_id = "12345678-1234-5678-9abc-123456789012"
+
+        # Create multiple user sessions for the same user
+        session_ids = []
+        for i in range(3):
+            session_id = session_service.create_user_session(
+                user_id=user_id,
+                provider=f"provider-{i}",
+                refresh_token=f"refresh-{i}",
+                access_token=f"access-{i}",
+                expires_at=int(time.time()) + 3600,
+            )
+            session_ids.append(session_id)
+
+        # Verify all sessions are independent
+        for i, session_id in enumerate(session_ids):
+            user_session = session_service.get_user_session(session_id)
+            assert user_session is not None
+            assert user_session.user_id == user_id
+            assert user_session.provider == f"provider-{i}"
+            assert user_session.refresh_token == f"refresh-{i}"
+
+        # Delete middle session
+        session_service.delete_user_session(session_ids[1])
+
+        # Verify other sessions are unaffected
+        assert session_service.get_user_session(session_ids[0]) is not None
+        assert session_service.get_user_session(session_ids[1]) is None
+        assert session_service.get_user_session(session_ids[2]) is not None
+
+        # Clean up
+        session_service.delete_user_session(session_ids[0])
+        session_service.delete_user_session(session_ids[2])
+
 
 class TestBFFAuthenticationRouter:
     """Test BFF authentication router endpoints."""

@@ -1,5 +1,7 @@
 """User domain entity."""
 
+from typing import Any
+
 from pydantic import Field
 
 from src.entities._base import Entity
@@ -17,3 +19,28 @@ class User(Entity):
     email: str | None = Field(default=None, description="User's email address")
     phone: str | None = Field(default=None, description="User's phone number")
     address: str | None = Field(default=None, description="User's address")
+
+    def __eq__(self, other: Any) -> bool:
+        """Compare users by business attributes, ignoring timestamps."""
+        if not isinstance(other, User):
+            return False
+
+        return (
+            self.id == other.id
+            and self.first_name == other.first_name
+            and self.last_name == other.last_name
+            and self.email == other.email
+            and self.phone == other.phone
+            and self.address == other.address
+        )
+
+    def __hash__(self) -> int:
+        """Hash based on business attributes, ignoring timestamps."""
+        return hash((
+            self.id,
+            self.first_name,
+            self.last_name,
+            self.email,
+            self.phone,
+            self.address,
+        ))

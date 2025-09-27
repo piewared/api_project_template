@@ -3,7 +3,9 @@
 from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, String, UniqueConstraint
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
+
+from src.entities._base import EntityTable
 
 
 def utc_now():
@@ -11,7 +13,7 @@ def utc_now():
     return datetime.now(UTC)
 
 
-class UserIdentityTable(SQLModel, table=True):
+class UserIdentityTable(EntityTable, table=True):
     """Database persistence model for user identities.
 
     This represents how UserIdentity entities are stored in the database,
@@ -20,17 +22,11 @@ class UserIdentityTable(SQLModel, table=True):
 
     __table_args__ = (
         UniqueConstraint("issuer", "subject", name="uq_identity_issuer_subject"),
-        UniqueConstraint("user_id", name="uq_identity_user"),
     )
 
-    id: str = Field(primary_key=True)
     issuer: str = Field(sa_column=Column(String(512), nullable=False, index=True))
     subject: str = Field(sa_column=Column(String(512), nullable=False, index=True))
     uid_claim: str | None = Field(
         default=None, sa_column=Column(String(512), nullable=True, index=True)
     )
     user_id: str = Field(foreign_key="usertable.id", index=True)
-    created_at: datetime = Field(
-        default_factory=utc_now,
-        sa_column=Column(DateTime(timezone=True), nullable=False),
-    )

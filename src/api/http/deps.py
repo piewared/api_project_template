@@ -190,7 +190,7 @@ async def _authenticate_with_session(
         return _DEV_USER
 
     # Try session-based authentication
-    session_id = request.cookies.get("session_id")
+    session_id = request.cookies.get("user_session_id")
     if not session_id:
         if required:
             raise HTTPException(status_code=401, detail="Session required")

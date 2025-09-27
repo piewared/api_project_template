@@ -1,9 +1,11 @@
 """User database table model."""
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field
+
+from src.entities._base import EntityTable
 
 
-class UserTable(SQLModel, table=True):
+class UserTable(EntityTable, table=True):
     """Database persistence model for users.
 
     This represents how the User entity is stored in the database.
@@ -11,7 +13,6 @@ class UserTable(SQLModel, table=True):
     while keeping related code together.
     """
 
-    id: str = Field(primary_key=True)
     first_name: str
     last_name: str
     email: str | None = None

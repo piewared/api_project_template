@@ -102,6 +102,117 @@ def check_postgres_status() -> bool:
         return False
 
 
+def check_redis_status() -> bool:
+    """Check if Redis is running and accessible."""
+    if not check_container_running("redis"):
+        print("❌ Redis container is not running")
+        return False
+
+    try:
+        # Get the container name
+        result = subprocess.run(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                "name=redis",
+                "--filter",
+                "status=running",
+                "--format",
+                "{{.Names}}",
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        container_names = result.stdout.strip().split("\n")
+        if not container_names or not container_names[0]:
+            print("❌ Could not find Redis container")
+            return False
+
+        container_name = container_names[0]
+
+        # Use docker exec to run redis-cli ping
+        result = subprocess.run(
+            ["docker", "exec", container_name, "redis-cli", "ping"],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        if result.returncode == 0 and "PONG" in result.stdout:
+            print("✅ Redis is running and accepting connections")
+            return True
+        else:
+            print("⚠️  Redis container is running but not ready")
+            return False
+
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("❌ Failed to check Redis status")
+        return False
+
+
+def check_temporal_status() -> bool:
+    """Check if Temporal server is running and accessible."""
+    if not check_container_running("temporal-server"):
+        print("❌ Temporal server container is not running")
+        return False
+
+    try:
+        # Get the container name for temporal server
+        result = subprocess.run(
+            [
+                "docker",
+                "ps",
+                "--filter",
+                "name=temporal-server",
+                "--filter",
+                "status=running",
+                "--format",
+                "{{.Names}}",
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        container_names = result.stdout.strip().split("\n")
+        if not container_names or not container_names[0]:
+            print("❌ Could not find Temporal server container")
+            return False
+
+        container_name = container_names[0]
+
+        # Use docker exec to run tctl cluster health check
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                container_name,
+                "tctl",
+                "--address",
+                "temporal-server:7233",
+                "cluster",
+                "health",
+            ],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+
+        if result.returncode == 0:
+            print("✅ Temporal server is running and healthy")
+            return True
+        else:
+            print("⚠️  Temporal server container is running but not ready")
+            return False
+
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("❌ Failed to check Temporal status")
+        return False
+
+
 def run_keycloak_setup() -> bool:
     """Run Keycloak setup script after Keycloak is ready."""
     if not check_keycloak_status():

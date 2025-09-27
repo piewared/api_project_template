@@ -18,6 +18,8 @@ from .dev_utils import (
     check_container_running,
     check_docker_running,
     check_postgres_status,
+    check_redis_status,
+    check_temporal_status,
     run_keycloak_setup,
     wait_for_keycloak,
 )
@@ -147,6 +149,8 @@ def setup_dev(
     This command starts Docker containers for development services:
     - Keycloak (OIDC provider for authentication testing)
     - PostgreSQL (Database for development and testing)
+    - Redis (Caching and session storage)
+    - Temporal (Workflow orchestration server)
 
     The services will be configured with test data and ready for development.
     """
@@ -169,8 +173,12 @@ def setup_dev(
     # Check if services are already running
     keycloak_running = check_container_running("keycloak")
     postgres_running = check_container_running("postgres")
+    redis_running = check_container_running("redis")
+    temporal_running = check_container_running("temporal-server")
 
-    if (keycloak_running or postgres_running) and not force:
+    if (
+        keycloak_running or postgres_running or redis_running or temporal_running
+    ) and not force:
         console.print(
             "[yellow]⚠️  Services are already running. Use --force to restart.[/yellow]"
         )
@@ -187,7 +195,9 @@ def setup_dev(
         # Start containers
         task1 = progress.add_task("Starting Docker containers...", total=1)
 
-        if force and (keycloak_running or postgres_running):
+        if force and (
+            keycloak_running or postgres_running or redis_running or temporal_running
+        ):
             console.print("[yellow]Stopping existing containers...[/yellow]")
             run_command(["docker-compose", "down"], cwd=dev_dir)
 
@@ -239,6 +249,42 @@ def setup_dev(
                 console.print("[red]❌ Keycloak failed to start within timeout[/red]")
                 raise typer.Exit(1)
 
+            # Wait for Redis to be ready
+            task5 = progress.add_task("Waiting for Redis to be ready...", total=1)
+            redis_ready = False
+            max_redis_wait = 20
+            redis_wait_time = 0
+
+            while redis_wait_time < max_redis_wait and not redis_ready:
+                redis_ready = check_redis_status()
+                if not redis_ready:
+                    time.sleep(2)
+                    redis_wait_time += 2
+
+            if redis_ready:
+                progress.update(task5, completed=1)
+                console.print("[green]✅ Redis is ready[/green]")
+            else:
+                console.print("[yellow]⚠️  Redis may not be fully ready yet[/yellow]")
+
+            # Wait for Temporal to be ready
+            task6 = progress.add_task("Waiting for Temporal to be ready...", total=1)
+            temporal_ready = False
+            max_temporal_wait = 60
+            temporal_wait_time = 0
+
+            while temporal_wait_time < max_temporal_wait and not temporal_ready:
+                temporal_ready = check_temporal_status()
+                if not temporal_ready:
+                    time.sleep(5)
+                    temporal_wait_time += 5
+
+            if temporal_ready:
+                progress.update(task6, completed=1)
+                console.print("[green]✅ Temporal is ready[/green]")
+            else:
+                console.print("[yellow]⚠️  Temporal may not be fully ready yet[/yellow]")
+
     console.print("\n[bold green]🎉 Development environment is ready![/bold green]")
     console.print("\n[blue]Available services:[/blue]")
     console.print("  • Keycloak: http://localhost:8080")
@@ -248,6 +294,12 @@ def setup_dev(
     console.print("  • PostgreSQL: localhost:5432")
     console.print("    - Database: devdb (devuser/devpass)")
     console.print("    - Test DB: testdb (devuser/devpass)")
+    console.print("  • Redis: localhost:6379")
+    console.print("    - Connection: redis://localhost:6379")
+    console.print("    - Persistence: AOF enabled")
+    console.print("  • Temporal: localhost:7233")
+    console.print("    - gRPC API: localhost:7233")
+    console.print("    - Web UI: http://localhost:8088")
 
     console.print("\n[dim]Use 'api-dev dev start-server' to start the API server[/dim]")
 
@@ -480,46 +532,51 @@ def status() -> None:
     console.print(f"PostgreSQL: {postgres_status}")
 
     if postgres_running:
-        # Check PostgreSQL health
-        try:
-            result = subprocess.run(
-                ["docker", "exec"]
-                + [
-                    name
-                    for name in subprocess.run(
-                        [
-                            "docker",
-                            "ps",
-                            "--filter",
-                            "name=postgres",
-                            "--filter",
-                            "status=running",
-                            "--format",
-                            "{{.Names}}",
-                        ],
-                        capture_output=True,
-                        check=False,
-                        text=True,
-                    )
-                    .stdout.strip()
-                    .split("\n")
-                    if name
-                ]
-                + ["pg_isready", "-U", "devuser", "-d", "devdb"],
-                capture_output=True,
-                check=False,
-                text=True,
-            )
+        # Check PostgreSQL health using the utility function
+        if check_postgres_status():
+            console.print("  [green]└─ Health check: ✅ Accepting connections[/green]")
+            console.print("  [green]└─ Databases: devdb, testdb[/green]")
+        else:
+            console.print("  [yellow]└─ Health check: ⚠️  Not ready[/yellow]")
 
-            if result.returncode == 0:
-                console.print(
-                    "  [green]└─ Health check: ✅ Accepting connections[/green]"
-                )
-                console.print("  [green]└─ Databases: devdb, testdb[/green]")
-            else:
-                console.print("  [yellow]└─ Health check: ⚠️  Not ready[/yellow]")
-        except Exception:
-            console.print("  [red]└─ Health check: ❌ Failed[/red]")
+    # Check Redis
+    redis_running = check_container_running("redis")
+    redis_status = (
+        "[green]✅ Running[/green]" if redis_running else "[red]❌ Not running[/red]"
+    )
+    console.print(f"Redis: {redis_status}")
+
+    if redis_running:
+        # Check Redis health using the utility function
+        if check_redis_status():
+            console.print("  [green]└─ Health check: ✅ Accepting connections[/green]")
+        else:
+            console.print("  [yellow]└─ Health check: ⚠️  Not ready[/yellow]")
+
+    # Check Temporal
+    temporal_server_running = check_container_running("temporal-server")
+    temporal_web_running = check_container_running("temporal-web")
+    temporal_status = (
+        "[green]✅ Running[/green]"
+        if temporal_server_running
+        else "[red]❌ Not running[/red]"
+    )
+    console.print(f"Temporal: {temporal_status}")
+
+    if temporal_server_running:
+        # Check Temporal health using the utility function
+        if check_temporal_status():
+            console.print("  [green]└─ Server: ✅ Healthy[/green]")
+            console.print("  [green]└─ gRPC API: localhost:7233[/green]")
+        else:
+            console.print("  [yellow]└─ Server: ⚠️  Not ready[/yellow]")
+
+        if temporal_web_running:
+            console.print(
+                "  [green]└─ Web UI: ✅ Running (http://localhost:8088)[/green]"
+            )
+        else:
+            console.print("  [yellow]└─ Web UI: ⚠️  Not running[/yellow]")
 
 
 @dev_app.command()

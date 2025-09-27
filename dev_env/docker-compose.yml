@@ -11,10 +11,36 @@ services:
       file: postgres/docker-compose.yml
       service: postgres
 
+  redis:
+    extends:
+      file: redis/docker-compose.yml
+      service: redis
+
+  temporal-postgresql:
+    extends:
+      file: temporal/docker-compose.yml
+      service: temporal-postgresql
+
+  temporal-server:
+    extends:
+      file: temporal/docker-compose.yml
+      service: temporal-server
+
+  temporal-web:
+    extends:
+      file: temporal/docker-compose.yml
+      service: temporal-web
+
 volumes:
   keycloak_data:
     driver: local
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  temporal_postgres_data:
+    driver: local
+  temporal_data:
     driver: local
 
 networks:

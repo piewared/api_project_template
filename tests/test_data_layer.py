@@ -3,7 +3,7 @@
 This module combines and consolidates tests for:
 - User entity operations (creation, validation, equality, UUID handling)
 - User table operations (entity-table conversions, database persistence)
-- User repository operations (both integration and mocked unit tests)
+- User repository operations (using in-memory SQLite for fast, real database testing)
 - UserIdentity entity, table, and repository operations
 - Repository patterns and data access functionality
 - Database session and transaction handling
@@ -11,7 +11,7 @@ This module combines and consolidates tests for:
 Replaces:
 - tests/unit/entities/test_user.py (complete coverage including equality tests)
 - tests/unit/entities/test_user_identity.py
-- tests/unit/core/test_repositories.py (both integration and mocked tests)
+- tests/unit/core/test_repositories.py (using real database instead of mocks)
 """
 
 import pytest
@@ -165,6 +165,49 @@ class TestUserEntity:
         assert user.first_name == ""
         assert user.last_name == ""
 
+    def test_user_with_extreme_values(self):
+        """Test user entity with boundary and edge case values."""
+        # Test very long strings
+        long_name = "A" * 1000
+        user = User(
+            first_name=long_name,
+            last_name="Test",
+            email="long.name@example.com",
+        )
+        assert user.first_name == long_name
+
+        # Test special characters and unicode
+        user_unicode = User(
+            first_name="José",
+            last_name="山田",  # Japanese characters
+            email="josé.yamada@example.com",
+        )
+        assert user_unicode.first_name == "José"
+        assert user_unicode.last_name == "山田"
+
+    def test_user_with_null_and_empty_values(self):
+        """Test user entity with various null/empty combinations."""
+        # Test with minimal required fields
+        user = User(
+            first_name="Min",
+            last_name="User",
+            email=None,
+            phone=None,
+            address=None,
+        )
+        assert user.email is None
+        assert user.phone is None
+        assert user.address is None
+
+        # Test with empty strings vs None
+        user_empty = User(
+            first_name="",
+            last_name="",
+            email="",  # Empty string, not None
+        )
+        assert user_empty.first_name == ""
+        assert user_empty.email == ""
+
 
 class TestUserTable:
     """Test User database table operations."""
@@ -313,71 +356,50 @@ class TestUserRepository:
         assert retrieved_user.first_name == "Updated"
         assert retrieved_user.email == "updated@example.com"
 
-
-class TestUserRepositoryMocked:
-    """Test the UserRepository with mocked dependencies for isolation."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        from unittest.mock import Mock
-        self.mock_session = Mock()
-        self.repo = UserRepository(self.mock_session)
-
-    def test_repository_initialization(self):
-        """Repository should initialize with session."""
-        assert self.repo._session == self.mock_session
-
-    def test_get_existing_user(self):
-        """get() should return User when record exists."""
-        # Mock database row
-        mock_row = UserTable(
-            id="test-id",
-            first_name="Test",
+    def test_repository_with_duplicate_emails(self, user_repo: UserRepository):
+        """Test repository behavior with duplicate email addresses."""
+        # Create first user
+        user1 = User(
+            first_name="First",
             last_name="User",
-            email="test@example.com",
-            phone=None,
-            address=None,
+            email="duplicate@example.com",
         )
-        self.mock_session.get.return_value = mock_row
+        user_repo.create(user1)
 
-        user = self.repo.get("test-id")
+        # Create second user with same email (should be allowed at entity level)
+        user2 = User(
+            first_name="Second",
+            last_name="User",
+            email="duplicate@example.com",
+        )
+        created_user2 = user_repo.create(user2)
 
-        # Verify session was called correctly
-        self.mock_session.get.assert_called_once_with(UserTable, "test-id")
+        # Both should exist as separate users
+        assert created_user2.id != user1.id
+        assert created_user2.email == user1.email
 
-        # Verify returned user
-        assert user is not None
-        assert user.id == "test-id"
-        assert user.first_name == "Test"
-        assert user.last_name == "User"
-        assert user.email == "test@example.com"
+    def test_repository_transaction_consistency(self, user_repo: UserRepository):
+        """Test repository maintains data consistency during operations."""
+        user = User(
+            first_name="Transaction",
+            last_name="Test",
+            email="transaction@example.com",
+        )
+        created_user = user_repo.create(user)
 
-    def test_get_nonexistent_user(self):
-        """get() should return None when record doesn't exist."""
-        self.mock_session.get.return_value = None
+        # Verify user exists
+        retrieved_before = user_repo.get(created_user.id)
+        assert retrieved_before is not None
 
-        user = self.repo.get("nonexistent-id")
+        # Update user
+        created_user.first_name = "Updated Transaction"
+        user_repo.update(created_user)
 
-        assert user is None
-        self.mock_session.get.assert_called_once_with(UserTable, "nonexistent-id")
-
-    def test_create_user(self):
-        """create() should persist User and return it unchanged."""
-        user = User(first_name="New", last_name="User", email="new@example.com")
-
-        result = self.repo.create(user)
-
-        # Verify session operations
-        self.mock_session.add.assert_called_once()
-        added_table = self.mock_session.add.call_args[0][0]
-        assert isinstance(added_table, UserTable)
-        assert added_table.id == user.id
-        assert added_table.first_name == user.first_name
-        assert added_table.last_name == user.last_name
-        assert added_table.email == user.email
-
-        # Verify return value is unchanged entity
-        assert result is user
+        # Verify update is consistent
+        retrieved_after = user_repo.get(created_user.id)
+        assert retrieved_after is not None
+        assert retrieved_after.first_name == "Updated Transaction"
+        assert retrieved_after.id == created_user.id
 
 
 class TestUserIdentityEntity:
@@ -460,7 +482,8 @@ class TestUserIdentityTable:
         session.add(identity2)
 
         # This should raise a constraint violation
-        with pytest.raises(Exception):  # SQLite/DB specific error
+        from sqlalchemy.exc import IntegrityError
+        with pytest.raises(IntegrityError):  # More specific database constraint error
             session.commit()
 
 

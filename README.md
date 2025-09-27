@@ -129,30 +129,155 @@ your-project/
 
 ### 1. Define Domain Entity
 
-Add your domain entities in `your_package/app/entities/service/__init__.py`:
+Create a complete entity following the template's pattern. Add your domain entities in `your_package/app/entities/service/product/`:
 
+**`your_package/app/entities/service/product/entity.py`:**
 ```python
-from dataclasses import dataclass
+"""Product domain entity."""
+
 from typing import Optional
 from datetime import datetime
+from decimal import Decimal
 
-@dataclass
-class Product:
-    """Product domain entity."""
-    id: str
-    name: str
-    price: float
-    description: Optional[str] = None
-    created_at: Optional[datetime] = None
+from pydantic import Field
+
+from your_package.app.entities.core._base import Entity
+
+
+class Product(Entity):
+    """Product entity representing a sellable item.
+
+    This is the domain model that contains business logic and validation.
+    It inherits from Entity to get auto-generated UUID identifiers.
+    """
+
+    name: str = Field(description="Product name")
+    price: Decimal = Field(description="Product price", ge=0)
+    description: Optional[str] = Field(default=None, description="Product description")
+    category: str = Field(description="Product category")
+    stock_quantity: int = Field(default=0, ge=0, description="Available stock")
+    is_active: bool = Field(default=True, description="Whether product is active")
     
-@dataclass  
-class Order:
-    """Order domain entity."""
-    id: str
-    customer_id: str
-    products: list[Product]
-    total: float
-    status: str = "pending"
+    def is_in_stock(self) -> bool:
+        """Check if product is in stock."""
+        return self.stock_quantity > 0 and self.is_active
+    
+    def can_fulfill_order(self, quantity: int) -> bool:
+        """Check if we can fulfill an order for the given quantity."""
+        return self.is_active and self.stock_quantity >= quantity
+```
+
+**`your_package/app/entities/service/product/table.py`:**
+```python
+"""Product database table model."""
+
+from typing import Optional
+from decimal import Decimal
+from sqlmodel import Field
+
+from your_package.app.entities.core._base import EntityTable
+
+
+class ProductTable(EntityTable, table=True):
+    """Database persistence model for products.
+
+    This represents how the Product entity is stored in the database.
+    It's separate from the domain entity to maintain clean architecture.
+    """
+
+    name: str
+    price: Decimal = Field(decimal_places=2)
+    description: Optional[str] = None
+    category: str
+    stock_quantity: int = Field(default=0)
+    is_active: bool = Field(default=True)
+    
+    # Additional database-specific fields
+    sku: Optional[str] = Field(default=None, index=True, description="Stock keeping unit")
+    barcode: Optional[str] = Field(default=None, index=True)
+```
+
+**`your_package/app/entities/service/product/repository.py`:**
+```python
+"""Product repository for data access."""
+
+from typing import List, Optional
+from sqlmodel import Session, select
+
+from .entity import Product
+from .table import ProductTable
+
+
+class ProductRepository:
+    """Data access layer for Product entities.
+
+    This handles all database operations for Products while keeping
+    the data access logic colocated with the Product entity.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def get(self, product_id: str) -> Optional[Product]:
+        """Get a product by ID."""
+        row = self._session.get(ProductTable, product_id)
+        if row is None:
+            return None
+        return Product.model_validate(row, from_attributes=True)
+
+    def save(self, product: Product) -> Product:
+        """Save a product to the database."""
+        # Convert domain entity to table row
+        product_data = product.model_dump(exclude={'id', 'created_at', 'updated_at'})
+        
+        if product.id:
+            # Update existing
+            row = self._session.get(ProductTable, product.id)
+            if row:
+                for key, value in product_data.items():
+                    setattr(row, key, value)
+            else:
+                raise ValueError(f"Product {product.id} not found")
+        else:
+            # Create new
+            row = ProductTable(**product_data)
+            self._session.add(row)
+        
+        self._session.commit()
+        self._session.refresh(row)
+        return Product.model_validate(row, from_attributes=True)
+
+    def list_active_products(self) -> List[Product]:
+        """Get all active products."""
+        statement = select(ProductTable).where(ProductTable.is_active == True)
+        rows = self._session.exec(statement).all()
+        return [Product.model_validate(row, from_attributes=True) for row in rows]
+
+    def find_by_category(self, category: str) -> List[Product]:
+        """Find products by category."""
+        statement = select(ProductTable).where(ProductTable.category == category)
+        rows = self._session.exec(statement).all()
+        return [Product.model_validate(row, from_attributes=True) for row in rows]
+
+    def delete(self, product_id: str) -> bool:
+        """Delete a product by ID."""
+        row = self._session.get(ProductTable, product_id)
+        if row:
+            self._session.delete(row)
+            self._session.commit()
+            return True
+        return False
+```
+
+**`your_package/app/entities/service/product/__init__.py`:**
+```python
+"""Product entity package."""
+
+from .entity import Product
+from .repository import ProductRepository
+from .table import ProductTable
+
+__all__ = ["Product", "ProductRepository", "ProductTable"]
 ```
 
 ### 2. Implement Business Service
@@ -160,75 +285,112 @@ class Order:
 Add business logic in `your_package/app/service/__init__.py`:
 
 ```python
-from typing import List
-from ..entities.service import Product, Order
+from typing import List, Optional
+from decimal import Decimal
+
+from ..entities.service.product import Product, ProductRepository
+
 
 class ProductService:
     """Business service for product operations."""
     
-    def __init__(self, product_repo, inventory_service):
+    def __init__(self, product_repo: ProductRepository):
         self.product_repo = product_repo
-        self.inventory_service = inventory_service
     
-    async def create_product(self, name: str, price: float, description: str = None) -> Product:
+    async def create_product(
+        self, 
+        name: str, 
+        price: Decimal, 
+        category: str,
+        description: Optional[str] = None,
+        stock_quantity: int = 0
+    ) -> Product:
         """Create a new product with business validation."""
-        # Business rules
+        # Business rules validation
         if price <= 0:
             raise ValueError("Price must be positive")
         if len(name.strip()) < 2:
-            raise ValueError("Product name too short")
+            raise ValueError("Product name must be at least 2 characters")
+        if len(category.strip()) == 0:
+            raise ValueError("Category is required")
             
+        # Create domain entity
         product = Product(
-            id=self.generate_product_id(),
             name=name.strip(),
             price=price,
-            description=description
+            category=category.strip(),
+            description=description.strip() if description else None,
+            stock_quantity=stock_quantity
         )
         
         # Save via repository
-        return await self.product_repo.save(product)
+        return self.product_repo.save(product)
     
-    def generate_product_id(self) -> str:
-        """Generate unique product ID."""
-        import uuid
-        return f"prod_{uuid.uuid4().hex[:8]}"
+    async def get_product(self, product_id: str) -> Optional[Product]:
+        """Get a product by ID."""
+        return self.product_repo.get(product_id)
+    
+    async def update_stock(self, product_id: str, new_quantity: int) -> Product:
+        """Update product stock with business rules."""
+        if new_quantity < 0:
+            raise ValueError("Stock quantity cannot be negative")
+            
+        product = self.product_repo.get(product_id)
+        if not product:
+            raise ValueError(f"Product {product_id} not found")
+        
+        # Apply business logic
+        product.stock_quantity = new_quantity
+        
+        return self.product_repo.save(product)
+    
+    async def get_products_by_category(self, category: str) -> List[Product]:
+        """Get all products in a category."""
+        return self.product_repo.find_by_category(category)
+    
+    async def get_available_products(self) -> List[Product]:
+        """Get all products that are active and in stock."""
+        products = self.product_repo.list_active_products()
+        return [p for p in products if p.is_in_stock()]
+
 
 class OrderService:
     """Business service for order operations."""
     
-    def __init__(self, product_service, order_repo):
-        self.product_service = product_service  
-        self.order_repo = order_repo
+    def __init__(self, product_service: ProductService):
+        self.product_service = product_service
     
-    async def create_order(self, customer_id: str, product_ids: List[str]) -> Order:
-        """Create order with business logic."""
-        # Fetch products
+    async def validate_order_items(self, product_ids: List[str], quantities: List[int]) -> List[Product]:
+        """Validate that all products exist and are available."""
+        if len(product_ids) != len(quantities):
+            raise ValueError("Product IDs and quantities must have same length")
+            
         products = []
-        for pid in product_ids:
-            product = await self.product_service.get_product(pid)
+        for product_id, quantity in zip(product_ids, quantities):
+            product = await self.product_service.get_product(product_id)
             if not product:
-                raise ValueError(f"Product {pid} not found")
+                raise ValueError(f"Product {product_id} not found")
+            
+            if not product.can_fulfill_order(quantity):
+                raise ValueError(f"Insufficient stock for product {product.name}")
+            
             products.append(product)
         
-        # Calculate total
-        total = sum(p.price for p in products)
+        return products
+    
+    async def calculate_total(self, products: List[Product], quantities: List[int]) -> Decimal:
+        """Calculate order total with business rules."""
+        total = Decimal('0.00')
         
-        # Apply business rules
-        if total < 0.01:
+        for product, quantity in zip(products, quantities):
+            line_total = product.price * quantity
+            total += line_total
+        
+        # Apply business rules (minimum order, etc.)
+        if total < Decimal('0.01'):
             raise ValueError("Order total too low")
             
-        order = Order(
-            id=self.generate_order_id(),
-            customer_id=customer_id,
-            products=products,
-            total=total
-        )
-        
-        return await self.order_repo.save(order)
-    
-    def generate_order_id(self) -> str:
-        import uuid
-        return f"order_{uuid.uuid4().hex[:8]}"
+        return total
 ```
 
 ### 3. Create API Router
@@ -236,52 +398,51 @@ class OrderService:
 Add HTTP endpoints in `your_package/app/api/routers/business.py`:
 
 ```python
-from fastapi import APIRouter, Depends, HTTPException
-from typing import List
+from fastapi import APIRouter, Depends, HTTPException, status
+from typing import List, Optional
+from decimal import Decimal
 
-from your_package.app.entities.service import Product, Order
+from your_package.app.entities.service.product import Product, ProductRepository
 from your_package.app.service import ProductService, OrderService
 from your_package.app.api.http.deps import get_current_user
 
 router = APIRouter(prefix="/api/v1", tags=["business"])
 
-# Dependency injection (implement these based on your needs)
+# Dependency injection with repository pattern
 def get_product_service() -> ProductService:
-    # Return configured ProductService instance
-    pass
+    """Get configured ProductService with repository."""
+    product_repo = ProductRepository()
+    return ProductService(product_repo)
 
 def get_order_service() -> OrderService: 
-    # Return configured OrderService instance
-    pass
+    """Get configured OrderService with dependencies."""
+    product_service = get_product_service()
+    return OrderService(product_service)
 
-@router.post("/products", response_model=Product)
+@router.post("/products", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_product(
     name: str,
-    price: float,
-    description: str = None,
+    price: Decimal,
+    category: str,
+    description: Optional[str] = None,
+    stock_quantity: int = 0,
     product_service: ProductService = Depends(get_product_service),
     current_user = Depends(get_current_user)
 ):
     """Create a new product."""
     try:
-        return await product_service.create_product(name, price, description)
+        product = await product_service.create_product(
+            name=name,
+            price=price, 
+            category=category,
+            description=description,
+            stock_quantity=stock_quantity
+        )
+        return {"id": product.id, "message": "Product created successfully"}
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@router.post("/orders", response_model=Order)  
-async def create_order(
-    customer_id: str,
-    product_ids: List[str],
-    order_service: OrderService = Depends(get_order_service),
-    current_user = Depends(get_current_user)
-):
-    """Create a new order."""
-    try:
-        return await order_service.create_order(customer_id, product_ids)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/products/{product_id}", response_model=Product)
+@router.get("/products/{product_id}", response_model=dict)
 async def get_product(
     product_id: str,
     product_service: ProductService = Depends(get_product_service),
@@ -291,7 +452,68 @@ async def get_product(
     product = await product_service.get_product(product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return product
+    
+    return {
+        "id": product.id,
+        "name": product.name,
+        "price": str(product.price),
+        "category": product.category,
+        "description": product.description,
+        "stock_quantity": product.stock_quantity,
+        "is_active": product.is_active,
+        "created_at": product.created_at.isoformat(),
+        "updated_at": product.updated_at.isoformat()
+    }
+
+@router.get("/products", response_model=List[dict])
+async def list_products(
+    category: Optional[str] = None,
+    available_only: bool = False,
+    product_service: ProductService = Depends(get_product_service),
+    current_user = Depends(get_current_user)
+):
+    """List products with filtering."""
+    try:
+        if category:
+            products = await product_service.get_products_by_category(category)
+        elif available_only:
+            products = await product_service.get_available_products()
+        else:
+            # Would need a list_all method in service
+            products = []
+        
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "price": str(p.price),
+                "category": p.category,
+                "stock_quantity": p.stock_quantity,
+                "is_active": p.is_active
+            }
+            for p in products
+        ]
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.put("/products/{product_id}/stock", response_model=dict)
+async def update_product_stock(
+    product_id: str,
+    new_quantity: int,
+    product_service: ProductService = Depends(get_product_service),
+    current_user = Depends(get_current_user)
+):
+    """Update product stock quantity."""
+    try:
+        product = await product_service.update_stock(product_id, new_quantity)
+        return {
+            "id": product.id,
+            "name": product.name,
+            "new_stock": product.stock_quantity,
+            "message": "Stock updated successfully"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 ```
 
 ## 🔧 Development Commands

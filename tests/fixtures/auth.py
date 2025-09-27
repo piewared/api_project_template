@@ -135,7 +135,7 @@ def populated_session(session: Session) -> Session:
     """Session populated with test user and identity data."""
     user_repo = UserRepository(session)
     identity_repo = UserIdentityRepository(session)
-    
+
     # Create test user
     test_user = User(
         first_name="Test",
@@ -143,7 +143,7 @@ def populated_session(session: Session) -> Session:
         email="test@example.com",
     )
     user_repo.create(test_user)
-    
+
     # Create test identity
     test_identity = UserIdentity(
         issuer="https://test.example.com",
@@ -152,7 +152,7 @@ def populated_session(session: Session) -> Session:
         user_id=test_user.id,
     )
     identity_repo.create(test_identity)
-    
+
     return session
 
 
@@ -187,7 +187,9 @@ def mock_oidc_client_service():
 
 
 @pytest.fixture
-def mock_session_service(test_user: User, test_auth_session: AuthSession, test_user_session: UserSession):
+def mock_session_service(
+    test_user: User, test_auth_session: AuthSession, test_user_session: UserSession
+):
     """Mock session service with standard responses."""
     mock_service = AsyncMock()
     mock_service.create_auth_session.return_value = test_auth_session.id
@@ -218,6 +220,7 @@ def auth_test_client(client, auth_test_config):
 def mock_http_response_factory():
     """Factory for creating mock HTTP responses."""
     from unittest.mock import Mock
+
     import httpx
 
     def create_response(json_data: dict, status_code: int = 200) -> Mock:
@@ -233,11 +236,10 @@ def mock_http_response_factory():
                 raise httpx.HTTPStatusError(
                     f"HTTP {status_code}",
                     request=mock_request,
-                    response=mock_response_obj
+                    response=mock_response_obj,
                 )
 
         mock_response.raise_for_status = raise_for_status
         return mock_response
 
     return create_response
-

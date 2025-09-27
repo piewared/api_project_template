@@ -1,89 +1,356 @@
-# FastAPI Clean Architecture Template
+# 🚀 FastAPI Production Template
 
-⚠️ **Alpha Release**: This project is currently in alpha. While functional and tested, APIs and structure may change. Use in production at your own discretion and expect potential breaking changes.
+A comprehensive, production-ready FastAPI template with built-in authentication, development tools, and modern Python architecture patterns.
 
-A modern, production-ready [Cookiecutter](https://cookiecutter.readthedocs.io/) template for creating FastAPI applications with clean architecture and hexagonal principles. Build scalable REST APIs with built-in authentication, authorization, rate limiting, and automated template updates with [Cruft](https://python-basics-tutorial.readthedocs.io/en/latest/packs/templating/cruft.html).
+## 📋 Overview
 
-## 🎯 Motivation
+This template provides a complete foundation for building scalable FastAPI applications with:
 
-This project exists to **accelerate the development of production-enabled microservices and SaaS APIs** by providing all the necessary primitives, components, and architectural templates that adhere to industry best practices.
+- **🔐 Built-in OIDC Authentication** - Complete auth flow with session management
+- **🏗️ Clean Architecture** - Organized entity/service layer with clear separation of concerns
+- **⚡ Development Environment** - Integrated Keycloak and PostgreSQL via Docker
+- **🔄 Template Updates** - Automatic updates using Cruft
+- **🗄️ Flexible Database Support** - PostgreSQL for production, SQLite for development/testing
+- **🧪 Comprehensive Testing** - Unit, integration, and fixture-based testing
+- **📊 Entity Modeling** - SQLModel for type-safe ORM with Pydantic integration
+- **🛠️ Development CLI** - Rich command-line tools for development workflow
 
-## 🔐 Authentication & Authorization
+## 🎯 Key Features
 
-This template provides a **hybrid authentication system** that supports two distinct patterns to meet different client needs:
+### Authentication & Security
+- **OpenID Connect (OIDC)** integration with configurable providers
+- **Session-based authentication** with secure cookie handling  
+- **JWT token validation** and refresh mechanisms
+- **Rate limiting** with Redis backend
+- **CORS and security headers** configured for production
 
-### Authentication Patterns
+### Development Experience  
+- **Integrated development environment** with Docker Compose
+- **Keycloak** for local OIDC testing and user management
+- **PostgreSQL** database with migration support
+- **Hot reload** development server with uvicorn
+- **Rich CLI** with entity management and dev environment commands
+- **Structured logging** with request tracing
 
-#### 1. **BFF (Backend-for-Frontend) Pattern** 
-**Best for: Web applications, SPAs, trusted first-party clients**
+### Architecture & Code Quality
+- **Clean architecture** with entities, services, and API layers
+- **Type safety** throughout with Pydantic and SQLModel
+- **Dependency injection** patterns for testability  
+- **Comprehensive testing** with pytest and fixtures
+- **Code formatting** and linting with Ruff
+- **Type checking** with MyPy
 
-Uses server-side sessions with HTTP-only cookies for maximum security:
-- 🛡️ **OIDC Authorization Code Flow** with PKCE for secure authentication
-- 🍪 **HTTP-only session cookies** (immune to XSS attacks)
-- 🔄 **Automatic token refresh** handled server-side
-- 🛡️ **CSRF protection** built-in
-- 🔒 **No sensitive tokens** exposed to client JavaScript
+### Database & Storage
+- **SQLModel ORM** for type-safe database operations
+- **PostgreSQL** support for production environments
+- **SQLite** for development and testing
+- **Database migrations** and initialization scripts
+- **Repository patterns** for data access abstraction
 
-#### 2. **JWT Bearer Token Pattern**
-**Best for: Mobile apps, third-party integrations, microservice-to-microservice communication**
+## 🛠️ Requirements
 
-Uses JWT tokens for stateless authentication:
-- 🗝️ **Bearer token authentication** in Authorization header
-- 📱 **Mobile-friendly** token-based flow
-- 🔗 **API integration ready** for third-party services
-- ⚡ **Stateless** - no server-side session storage required
-- 🔄 **Multi-provider support** (Google, Microsoft, Auth0, etc.)
+- **Python 3.13+**
+- **Docker & Docker Compose** (for development environment)
+- **uv** (recommended) or pip for package management
 
-### Quick Setup
+## 🚀 Quick Start
 
-#### Environment Configuration
+### 1. Create New Project from Template
+
+Using Cruft (recommended for updates):
 
 ```bash
+# Install cruft
+pip install cruft
+
+# Create project from template
+cruft create https://github.com/your-org/api-project-template
+
+# Follow the prompts to configure your project
+```
+
+Using Cookiecutter:
+
+```bash
+# Install cookiecutter  
+pip install cookiecutter
+
+# Create project from template
+cookiecutter https://github.com/your-org/api-project-template
+```
+
+### 2. Set Up Development Environment
+
+```bash
+# Navigate to your new project
+cd your-project-name
+
 # Copy environment template
 cp .env.example .env
 
-# Configure OIDC settings
-OIDC_DISCOVERY_URL=https://your-provider.com/.well-known/openid_configuration
-OIDC_CLIENT_ID=your-client-id
-OIDC_CLIENT_SECRET=your-client-secret
+# Edit .env with your configuration
+nano .env
 
-# Configure session security
-SESSION_SECRET_KEY=your-256-bit-secret-key
-JWT_SECRET_KEY=your-jwt-secret-key
+# Start development environment (Keycloak + PostgreSQL)
+uv run your-project-dev start-dev-env
+
+# Initialize database
+uv run init-db
+
+# Start development server
+uv run your-project-dev start-server
 ```
 
-#### Development Mode
+Your API will be available at:
+- **API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs (development only)
+- **Keycloak Admin**: http://localhost:8080 (admin/admin)
 
-For development and testing, you can bypass OIDC with mock authentication:
+## 🏗️ Architecture Overview
+
+```
+your-project/
+├── your_package/
+│   ├── app/                    # Application layer
+│   │   ├── api/http/          # HTTP API (routes, middleware, schemas)  
+│   │   ├── core/services/     # Core infrastructure services
+│   │   ├── entities/          # Entity definitions
+│   │   │   ├── core/         # Infrastructure entities (User, Auth)
+│   │   │   └── service/      # Domain entities (your business models)
+│   │   ├── service/          # Business service layer  
+│   │   └── runtime/          # Infrastructure (DB, settings, init)
+│   └── dev/                   # Development CLI tools
+├── tests/                     # Comprehensive test suite
+├── dev_env/                   # Development environment (Docker)
+└── main.py                   # Application entry point
+```
+
+## 💡 Adding Business Logic
+
+### 1. Define Domain Entity
+
+Add your domain entities in `your_package/app/entities/service/__init__.py`:
+
+```python
+from dataclasses import dataclass
+from typing import Optional
+from datetime import datetime
+
+@dataclass
+class Product:
+    """Product domain entity."""
+    id: str
+    name: str
+    price: float
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+    
+@dataclass  
+class Order:
+    """Order domain entity."""
+    id: str
+    customer_id: str
+    products: list[Product]
+    total: float
+    status: str = "pending"
+```
+
+### 2. Implement Business Service
+
+Add business logic in `your_package/app/service/__init__.py`:
+
+```python
+from typing import List
+from ..entities.service import Product, Order
+
+class ProductService:
+    """Business service for product operations."""
+    
+    def __init__(self, product_repo, inventory_service):
+        self.product_repo = product_repo
+        self.inventory_service = inventory_service
+    
+    async def create_product(self, name: str, price: float, description: str = None) -> Product:
+        """Create a new product with business validation."""
+        # Business rules
+        if price <= 0:
+            raise ValueError("Price must be positive")
+        if len(name.strip()) < 2:
+            raise ValueError("Product name too short")
+            
+        product = Product(
+            id=self.generate_product_id(),
+            name=name.strip(),
+            price=price,
+            description=description
+        )
+        
+        # Save via repository
+        return await self.product_repo.save(product)
+    
+    def generate_product_id(self) -> str:
+        """Generate unique product ID."""
+        import uuid
+        return f"prod_{uuid.uuid4().hex[:8]}"
+
+class OrderService:
+    """Business service for order operations."""
+    
+    def __init__(self, product_service, order_repo):
+        self.product_service = product_service  
+        self.order_repo = order_repo
+    
+    async def create_order(self, customer_id: str, product_ids: List[str]) -> Order:
+        """Create order with business logic."""
+        # Fetch products
+        products = []
+        for pid in product_ids:
+            product = await self.product_service.get_product(pid)
+            if not product:
+                raise ValueError(f"Product {pid} not found")
+            products.append(product)
+        
+        # Calculate total
+        total = sum(p.price for p in products)
+        
+        # Apply business rules
+        if total < 0.01:
+            raise ValueError("Order total too low")
+            
+        order = Order(
+            id=self.generate_order_id(),
+            customer_id=customer_id,
+            products=products,
+            total=total
+        )
+        
+        return await self.order_repo.save(order)
+    
+    def generate_order_id(self) -> str:
+        import uuid
+        return f"order_{uuid.uuid4().hex[:8]}"
+```
+
+### 3. Create API Router
+
+Add HTTP endpoints in `your_package/app/api/routers/business.py`:
+
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List
+
+from your_package.app.entities.service import Product, Order
+from your_package.app.service import ProductService, OrderService
+from your_package.app.api.http.deps import get_current_user
+
+router = APIRouter(prefix="/api/v1", tags=["business"])
+
+# Dependency injection (implement these based on your needs)
+def get_product_service() -> ProductService:
+    # Return configured ProductService instance
+    pass
+
+def get_order_service() -> OrderService: 
+    # Return configured OrderService instance
+    pass
+
+@router.post("/products", response_model=Product)
+async def create_product(
+    name: str,
+    price: float,
+    description: str = None,
+    product_service: ProductService = Depends(get_product_service),
+    current_user = Depends(get_current_user)
+):
+    """Create a new product."""
+    try:
+        return await product_service.create_product(name, price, description)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/orders", response_model=Order)  
+async def create_order(
+    customer_id: str,
+    product_ids: List[str],
+    order_service: OrderService = Depends(get_order_service),
+    current_user = Depends(get_current_user)
+):
+    """Create a new order."""
+    try:
+        return await order_service.create_order(customer_id, product_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/products/{product_id}", response_model=Product)
+async def get_product(
+    product_id: str,
+    product_service: ProductService = Depends(get_product_service),
+    current_user = Depends(get_current_user)
+):
+    """Get product by ID."""
+    product = await product_service.get_product(product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product
+```
+
+## 🔧 Development Commands
+
+The template includes a rich CLI for development tasks:
 
 ```bash
-# Enable development mode
-DEVELOPMENT_MODE=true
+# Entity management
+uv run your-project-dev entity add Product    # Add new entity
+uv run your-project-dev entity ls             # List entities  
+uv run your-project-dev entity rm Product     # Remove entity
 
-# Optional: Set default development user
-DEVELOPMENT_USER_SUB=dev-user-123
-DEVELOPMENT_USER_EMAIL=dev@example.com
-DEVELOPMENT_USER_NAME="Development User"
+# Development environment
+uv run your-project-dev dev start-dev-env     # Start Keycloak + PostgreSQL
+uv run your-project-dev dev start-server      # Start API server
+uv run your-project-dev dev --help            # Show all dev commands
+
+# Database operations
+uv run init-db                                 # Initialize database
+
+# Testing
+pytest                                         # Run test suite
+pytest -v tests/unit/                         # Run unit tests only
+pytest --cov                                  # Run with coverage
+
+# Code quality  
+ruff check .                                   # Lint code
+ruff format .                                  # Format code
+mypy .                                        # Type checking
 ```
 
-### Usage Examples
+## 🔐 Authentication Integration
 
-#### Web Application (BFF Pattern)
+The template provides a complete authentication system with a Backend-for-Frontend (BFF) pattern.
 
-**Frontend (JavaScript/TypeScript):**
+### Using the Auth BFF Endpoint
+
+Your frontend applications can authenticate users through the `/auth/web/` endpoints:
 
 ```javascript
-// 1. Redirect to login
+// 1. Redirect user to start OIDC login flow
 window.location.href = '/auth/web/login';
 
-// 2. After successful authentication, get user info
+// 2. After successful login, user is redirected back to your app
+// Check authentication status
 const response = await fetch('/auth/web/me', {
-  credentials: 'include'  // Include session cookie
+  credentials: 'include'  // Important: include session cookies
 });
-const user = await response.json();
+
+if (response.ok) {
+  const user = await response.json();
+  console.log('Authenticated user:', user);
+  // User object contains: id, email, name, roles, etc.
+} else {
+  console.log('User not authenticated');
+}
 
 // 3. Make authenticated API calls
-const apiResponse = await fetch('/api/protected-endpoint', {
+const apiResponse = await fetch('/api/v1/products', {
   credentials: 'include'  // Session cookie automatically included
 });
 
@@ -94,786 +361,153 @@ await fetch('/auth/web/logout', {
 });
 ```
 
-**API Endpoints Available:**
+### Available Auth Endpoints
+
 - `GET /auth/web/login` - Initiate OIDC authentication flow
-- `GET /auth/web/callback` - Handle OIDC callback (automatic)
+- `GET /auth/web/callback` - Handle OIDC callback (automatic redirect)  
 - `GET /auth/web/me` - Get current user information
-- `POST /auth/web/logout` - Logout and clear session
+- `POST /auth/web/logout` - End user session
+- `POST /auth/web/refresh` - Refresh authentication tokens
 
-#### Mobile/API Integration (JWT Pattern)
+### Frontend Integration Examples
 
-**Mobile App or API Client:**
-
-```python
-import requests
-
-# 1. Get JWT token from your OIDC provider
-# (Implementation varies by provider - Google, Auth0, etc.)
-jwt_token = get_token_from_your_oidc_provider()
-
-# 2. Use token in API requests
-headers = {
-    'Authorization': f'Bearer {jwt_token}',
-    'Content-Type': 'application/json'
+**React/Next.js:**
+```typescript
+// hooks/useAuth.ts
+export function useAuth() {
+  const [user, setUser] = useState(null);
+  
+  useEffect(() => {
+    fetch('/auth/web/me', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(setUser);
+  }, []);
+  
+  const login = () => window.location.href = '/auth/web/login';
+  const logout = () => fetch('/auth/web/logout', { method: 'POST', credentials: 'include' });
+  
+  return { user, login, logout };
 }
-
-# 3. Make authenticated API calls
-response = requests.get(
-    'http://localhost:8000/api/protected-endpoint',
-    headers=headers
-)
-
-user_data = response.json()
 ```
 
-**cURL Examples:**
+**Vue.js:**
+```javascript  
+// composables/useAuth.js
+export function useAuth() {
+  const user = ref(null);
+  
+  const checkAuth = async () => {
+    try {
+      const response = await $fetch('/auth/web/me', { credentials: 'include' });
+      user.value = response;
+    } catch {
+      user.value = null;
+    }
+  };
+  
+  const login = () => window.location.href = '/auth/web/login';
+  const logout = async () => {
+    await $fetch('/auth/web/logout', { method: 'POST', credentials: 'include' });
+    user.value = null;
+  };
+  
+  return { user: readonly(user), checkAuth, login, logout };
+}
+```
+
+## 🔄 Template Updates
+
+Keep your project up-to-date with template improvements using Cruft:
 
 ```bash
-# Using JWT Bearer token
-curl -H "Authorization: Bearer eyJhbGciOiJSUzI1NiIs..." \
-     http://localhost:8000/api/users/me
+# Check for template updates
+cruft check
 
-# Using session cookie (after web login)
-curl -b "session=abc123..." \
-     http://localhost:8000/api/users/me
+# Apply template updates  
+cruft update
+
+# View differences before updating
+cruft diff
 ```
 
-### Protecting API Endpoints
+## 🧪 Testing
 
-The template provides flexible dependency injection for different authentication requirements:
-
-```python
-from fastapi import APIRouter, Depends
-from your_package.api.http.deps import (
-    get_authenticated_user,    # Accepts both JWT and session auth
-    get_session_only_user,     # Web clients only (BFF pattern)
-    get_current_user          # JWT bearer token only
-)
-from your_package.entities.user import User
-
-router = APIRouter()
-
-@router.get("/flexible-endpoint")
-async def flexible_endpoint(
-    user: User = Depends(get_authenticated_user)
-):
-    """Accessible via both JWT tokens AND session cookies"""
-    return {"message": f"Hello {user.email}", "auth_type": "hybrid"}
-
-@router.get("/web-only-endpoint") 
-async def web_only_endpoint(
-    user: User = Depends(get_session_only_user)
-):
-    """Only accessible via session cookies (web clients)"""
-    return {"message": f"Hello web user {user.email}"}
-
-@router.get("/api-only-endpoint")
-async def api_only_endpoint(
-    user: User = Depends(get_current_user)
-):
-    """Only accessible via JWT bearer tokens"""
-    return {"message": f"Hello API user {user.email}"}
-
-@router.get("/public-endpoint")
-async def public_endpoint():
-    """No authentication required"""
-    return {"message": "This is public"}
-```
-
-### Role-Based Access Control (RBAC)
-
-The system includes built-in support for roles and scopes:
-
-```python
-from your_package.api.http.deps import require_roles, require_scopes
-
-@router.delete("/admin/users/{user_id}")
-async def delete_user(
-    user_id: str,
-    current_user: User = Depends(require_roles(["admin", "moderator"]))
-):
-    """Only users with admin or moderator roles can access"""
-    pass
-
-@router.get("/api/analytics")  
-async def get_analytics(
-    current_user: User = Depends(require_scopes(["read:analytics"]))
-):
-    """Only users with read:analytics scope can access"""
-    pass
-```
-
-### Security Features
-
-#### Automatic Security Headers
-```python
-# Automatically applied to all responses:
-# - HSTS (HTTP Strict Transport Security)
-# - CSRF protection for web clients
-# - Content Security Policy headers
-# - X-Frame-Options, X-Content-Type-Options
-```
-
-#### Rate Limiting
-```python
-from your_package.api.http.deps import rate_limit
-
-@router.get("/limited-endpoint")
-@rate_limit(max_requests=100, window_seconds=3600)  # 100 requests per hour
-async def limited_endpoint():
-    return {"message": "Rate limited endpoint"}
-```
-
-#### Request Validation
-```python
-# All endpoints automatically validate:
-# - JWT signature and expiration
-# - OIDC token claims and issuer
-# - Session validity and CSRF tokens
-# - Request size and content type
-```
-
-### Advanced Configuration
-
-#### Multiple OIDC Providers
+The template includes comprehensive testing infrastructure:
 
 ```bash
-# Support multiple identity providers
-OIDC_DISCOVERY_URL=https://accounts.google.com/.well-known/openid_configuration
-ALLOWED_ISSUERS=["https://accounts.google.com", "https://your-auth0-domain.auth0.com"]
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=your_package --cov-report=html
+
+# Run specific test categories
+pytest tests/unit/           # Unit tests
+pytest tests/integration/    # Integration tests  
+pytest tests/e2e/           # End-to-end tests
+
+# Run tests matching pattern
+pytest -k "test_auth"       # Only auth-related tests
+
+# Verbose output
+pytest -v -s               # Show print statements
 ```
 
-#### Custom User Provisioning
+## 📝 Configuration
 
-```python
-# Customize how users are created from OIDC claims
-from your_package.core.services.session_service import SessionService
+Key configuration files:
 
-class CustomSessionService(SessionService):
-    def provision_user_from_claims(self, claims: dict) -> User:
-        # Custom logic for mapping OIDC claims to your User model
-        return User(
-            id=claims["sub"],
-            email=claims["email"],
-            name=claims["name"],
-            roles=self.extract_roles_from_claims(claims),
-            # Add your custom fields here
-        )
-```
+- `.env` - Environment variables (database, auth, etc.)
+- `pyproject.toml` - Python project configuration
+- `dev_env/docker-compose.yml` - Development services
+- `dev_env/keycloak-data/` - Keycloak configuration
 
-#### Session Storage Options
-
-```python
-# Configure session storage (default: in-memory)
-# Production: Use Redis or database storage
-SESSION_STORAGE="redis"  # or "database" or "memory"
-REDIS_URL="redis://localhost:6379/0"
-```
-
-### Testing Authentication
-
-The template includes comprehensive test utilities:
-
-```python
-# Test with mock authentication
-def test_protected_endpoint(client, mock_user):
-    """Test endpoint with authenticated user"""
-    response = client.get(
-        "/api/protected-endpoint",
-        headers={"Authorization": f"Bearer {mock_user.jwt_token}"}
-    )
-    assert response.status_code == 200
-
-# Test BFF flow
-def test_web_authentication_flow(client):
-    """Test complete web authentication flow"""
-    # Login redirects to OIDC provider
-    response = client.get("/web/login", follow_redirects=False)
-    assert response.status_code == 302
-    
-    # Simulate callback with mock token
-    response = client.get("/auth/web/callback?code=mock-code&state=mock-state")
-    assert response.status_code == 302  # Redirect after successful auth
-```
-
-### Migration Guide
-
-#### From JWT-Only Systems
-```python
-# Your existing JWT endpoints work unchanged
-@router.get("/api/endpoint")
-async def endpoint(user: User = Depends(get_current_user)):
-    return {"user": user.email}
-```
-
-#### From Session-Only Systems  
-```python
-# Upgrade to hybrid authentication
-@router.get("/api/endpoint")
-async def endpoint(user: User = Depends(get_authenticated_user)):  # Now accepts both!
-    return {"user": user.email}
-```
-
-**🔐 Your API now supports both modern web applications and mobile/API integrations with a single, unified authentication system!**
-
-## 🗺️ Roadmap & Planned Featuresin authentication, authorization, rate limiting, and automated template updates with [Cruft](https://python-basics-tutorial.readthedocs.io/en/latest/packs/templating/cruft.html).
-
-## 🎯 Motivation
-
-This project exists to **accelerate the development of production-enabled microservices and SaaS APIs** by providing all the necessary primitives, components, and architectural templates that adhere to industry best practices.
-
-### Intended Use Cases
-
-This template is specifically designed for:
-
-✅ **User-to-Service Microservices** - Backend APIs that serve client applications (web, mobile, desktop)  
-✅ **SaaS Backend Development** - Multi-tenant service APIs with authentication and rate limiting  
-✅ **REST API Services** - Standalone API services that integrate with existing systems  
-✅ **Microservice Architecture** - Individual services within a larger distributed system  
-✅ **Backend-as-a-Service** - APIs that provide core functionality to frontend applications  
-
-### ❌ What This Template Is NOT
-
-This template is **not intended** for:
-
-❌ **Full-Stack Applications** - Does not include frontend frameworks, UI components, or client-side code  
-❌ **Monolithic Web Applications** - Not designed for traditional server-rendered web apps  
-❌ **Turnkey Complete Solutions** - Requires integration with your chosen frontend and infrastructure  
-❌ **All-in-One Platforms** - Focuses purely on API development, not complete application stacks  
-
-**Focus**: This template excels at creating the **backend API layer** that powers modern applications, leaving frontend technology choices and infrastructure decisions to you.
-
-### The Problem This Template Solves
-
-Building production-ready APIs from scratch involves solving the same challenges repeatedly:
-- **Authentication & Authorization**: JWT handling, role-based access control, security middleware
-- **Architectural Decisions**: Clean separation of concerns, testable code structure
-- **Infrastructure Integration**: Database connections, caching, rate limiting, health checks
-- **Developer Experience**: Type safety, testing frameworks, documentation generation
-- **Operational Readiness**: Monitoring, logging, error handling, graceful degradation
-
-### The Solution Provided
-
-Instead of rebuilding these foundational elements for every project, this template provides:
-
-✅ **Complete API Primitives** - Authentication, rate limiting, database integration, and security middleware  
-✅ **Clean Architecture** - Layered design with dependency inversion and separation of concerns  
-✅ **Production Components** - Health checks, error handling, logging, and monitoring hooks  
-✅ **Best Practices** - Type safety, comprehensive testing, documentation, and CI/CD pipelines  
-✅ **Developer Velocity** - Skip the boilerplate and focus on your unique business logic  
-
-**Result**: Transform weeks of setup and architectural decisions into minutes of configuration, allowing you to focus on building features that matter to your users.
-
-## 🎯 Why Use This Template?
-
-Create enterprise-grade FastAPI applications in minutes with:
-- **Production-ready architecture** with clean separation of concerns
-- **Complete authentication system** with JWT/OIDC support
-- **Comprehensive testing** (62 tests) with CI/CD pipeline
-- **Auto-updating template** to keep projects current
-- **Type-safe codebase** with full Pydantic integration
-
-Perfect for building microservices, REST APIs, and backend services that need to scale.
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **Python 3.10+** (3.13 recommended)
-- **[Cookiecutter](https://cookiecutter.readthedocs.io/en/latest/installation.html)**: `pip install cookiecutter`
-- **[Cruft](https://cruft.github.io/cruft/)** (recommended): `pip install cruft`
-
-### Create Your Project
-
-#### Option 1: With Auto-Updates (Recommended)
-```bash
-# Create with update capabilities
-cruft create https://github.com/piewared/api_template
-
-# Follow interactive prompts
-```
-
-#### Option 2: Standard Generation
-```bash
-# One-time generation
-cookiecutter https://github.com/piewared/api_template
-```
-
-#### Option 3: Non-Interactive
-```bash
-# Automated generation
-cruft create https://github.com/piewared/api_template \
-  --no-input \
-  project_name="My API" \
-  project_description="A FastAPI service" \
-  author_name="Your Name" \
-  author_email="you@example.com"
-```
-
-### Get Started with Your New Project
+### Essential Environment Variables
 
 ```bash
-# Navigate to your project
-cd your-project-name
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/dbname
+# or for development:  
+DATABASE_URL=sqlite:///./database.db
 
-# Project is ready! Dependencies installed, git initialized
-# Configure environment
-cp .env.example .env
+# Authentication
+OIDC_CLIENT_ID=your-client-id
+OIDC_CLIENT_SECRET=your-client-secret  
+OIDC_DISCOVERY_URL=http://localhost:8080/realms/master/.well-known/openid_configuration
 
-# Initialize database
-uv run init-db
+# Session Security
+SESSION_SECRET_KEY=your-secret-key-here
+SESSION_COOKIE_DOMAIN=localhost
 
-# Start development server
-uvicorn main:app --reload
+# Redis (optional, for rate limiting)
+REDIS_URL=redis://localhost:6379
+
+# Environment
+ENVIRONMENT=development  # development|production|test
 ```
 
-Your API is ready at:
-- **Application**: http://localhost:8000
-- **Documentation**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
-
-### Adding Your First Business Entity & API
-
-Once your project is running, here's how to add your own business logic using the hybrid entity-centric structure:
-
-#### 1. Create Entity Package Structure
-
-```bash
-# Create a new product entity package
-mkdir -p your_package/entities/product
-touch your_package/entities/product/__init__.py
-touch your_package/entities/product/entity.py
-touch your_package/entities/product/table.py
-touch your_package/entities/product/repository.py
-```
-
-#### 2. Create Domain Entity
-
-```python
-# your_package/entities/product/entity.py
-from decimal import Decimal
-from pydantic import Field
-from your_package.core.entities._base import Entity
-
-class Product(Entity):
-    """Product entity representing an item for sale.
-    
-    This is the domain model that contains business logic and validation.
-    It inherits from Entity to get auto-generated UUID identifiers.
-    """
-    
-    name: str = Field(description="Product name")
-    price: Decimal = Field(description="Product price")
-    description: str | None = Field(default=None, description="Product description")
-    in_stock: bool = Field(default=True, description="Whether product is in stock")
-```
-
-#### 3. Create Database Table Model
-
-```python
-# your_package/entities/product/table.py
-from decimal import Decimal
-from sqlmodel import SQLModel, Field
-
-class ProductTable(SQLModel, table=True):
-    """Database persistence model for products.
-    
-    This represents how the Product entity is stored in the database.
-    It's separate from the domain entity to maintain clean architecture
-    while keeping related code together.
-    """
-    
-    __tablename__ = "products"
-    
-    id: str = Field(primary_key=True)
-    name: str = Field(max_length=255)
-    price: Decimal = Field(decimal_places=2)
-    description: str | None = Field(default=None, max_length=1000)
-    in_stock: bool = Field(default=True)
-```
-
-#### 4. Create Repository
-
-```python
-# your_package/entities/product/repository.py
-from sqlmodel import Session, select
-from .entity import Product
-from .table import ProductTable
-
-class ProductRepository:
-    """Data access layer for Product entities.
-    
-    This handles all database operations for Products while keeping
-    the data access logic colocated with the Product entity.
-    """
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def get(self, product_id: str) -> Product | None:
-        """Get a product by ID."""
-        row = self._session.get(ProductTable, product_id)
-        if row is None:
-            return None
-        return Product.model_validate(row, from_attributes=True)
-
-    def create(self, product: Product) -> Product:
-        """Create a new product and return it. ID is auto-generated by the entity."""
-        row = ProductTable.model_validate(product, from_attributes=True)
-        self._session.add(row)
-        return product  # No need for flush/refresh - entity already has its ID!
-
-    def list(self, in_stock_only: bool = False) -> list[Product]:
-        """List all products, optionally filtering by stock status."""
-        query = select(ProductTable)
-        if in_stock_only:
-            query = query.where(ProductTable.in_stock == True)
-        
-        rows = self._session.exec(query).all()
-        return [Product.model_validate(row, from_attributes=True) for row in rows]
-```
-
-#### 5. Create Package Exports
-
-```python
-# your_package/entities/product/__init__.py
-"""Product entity module.
-
-This module contains all Product-related classes organized by responsibility:
-- Product: Domain entity with business logic
-- ProductTable: Database persistence model  
-- ProductRepository: Data access layer
-
-This structure keeps all Product-related code together while maintaining
-separation of concerns within the module.
-"""
-
-from .entity import Product
-from .repository import ProductRepository
-from .table import ProductTable
-
-__all__ = ["Product", "ProductTable", "ProductRepository"]
-```
-
-#### 6. Create API Router
-
-```python
-# your_package/api/http/routers/products.py
-from fastapi import APIRouter, Depends
-from sqlmodel import Session
-
-from your_package.entities.product import Product, ProductRepository
-from your_package.runtime.db import get_session
-
-router = APIRouter(prefix="/products", tags=["products"])
-
-@router.get("/{product_id}")
-def get_product(
-    product_id: str,
-    session: Session = Depends(get_session)
-) -> Product:
-    """Get a product by ID."""
-    repo = ProductRepository(session)
-    product = repo.get(product_id)
-    if product is None:
-        raise HTTPException(status_code=404, detail="Product not found")
-    return product
-
-@router.post("/")
-def create_product(
-    product_data: dict,  # In real apps, use Pydantic models for input validation
-    session: Session = Depends(get_session)
-) -> Product:
-    """Create a new product."""
-    repo = ProductRepository(session)
-    product = Product(**product_data)  # Auto-generates UUID
-    return repo.create(product)
-
-```
-
-This clean structure keeps everything organized while being easy to use and test.
-
-## ⚙️ Configuration Options
-```
-
-#### 4. Create API Schemas
-
-```python
-# your_package/api/http/schemas/product.py
-from decimal import Decimal
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
-
-class ProductCreate(BaseModel):
-    name: str
-    price: Decimal
-    description: Optional[str] = None
-    in_stock: bool = True
-
-class ProductRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-    name: str
-    price: Decimal
-    description: Optional[str]
-    in_stock: bool
-
-class ProductUpdate(BaseModel):
-    name: Optional[str] = None
-    price: Optional[Decimal] = None
-    description: Optional[str] = None
-    in_stock: Optional[bool] = None
-```
-
-#### 5. Create API Router
-
-```python
-# your_package/api/http/routers/products.py
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session
-
-from your_package.api.http.deps import get_session, get_current_user
-from your_package.api.http.schemas.product import ProductCreate, ProductRead, ProductUpdate
-from your_package.core.repositories.product_repo import ProductRepository
-from your_package.core.entities.user import User
-
-router = APIRouter()
-
-def get_product_repo(db: Session = Depends(get_session)) -> ProductRepository:
-    return ProductRepository(db)
-
-@router.get("/", response_model=List[ProductRead])
-async def list_products(
-    in_stock_only: bool = False,
-    repo: ProductRepository = Depends(get_product_repo)
-):
-    """List all products, optionally filtering to in-stock items only."""
-    return repo.list(in_stock_only=in_stock_only)
-
-@router.post("/", response_model=ProductRead)
-async def create_product(
-    product_data: ProductCreate,
-    repo: ProductRepository = Depends(get_product_repo),
-    current_user: User = Depends(get_current_user)
-):
-    """Create a new product (requires authentication)."""
-    product = Product(**product_data.model_dump())
-    return repo.create(product)
-
-@router.get("/{product_id}", response_model=ProductRead)
-async def get_product(
-    product_id: int,
-    repo: ProductRepository = Depends(get_product_repo)
-):
-    """Get a specific product by ID."""
-    product = repo.get(product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    return product
-```
-
-#### 6. Register the Router
-
-```python
-# Add to your_package/api/http/app.py (in the router registration section)
-from your_package.api.http.routers import products
-
-app.include_router(products.router, prefix="/api/products", tags=["products"])
-```
-
-#### 7. Update Database Schema
-
-```bash
-# Add the new table to your database
-# Update your_package/runtime/init_db.py to include ProductRow
-python -m your_package.runtime.init_db
-```
-
-#### 8. Test Your API
-
-```bash
-# List products
-curl http://localhost:8000/api/products/
-
-# Create a product (requires authentication in production)
-curl -X POST http://localhost:8000/api/products/ \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Sample Product", "price": "29.99", "description": "A great product"}'
-
-# Get product by ID
-curl http://localhost:8000/api/products/1
-```
-
-**🎉 You now have a complete CRUD API following clean architecture principles!**
-
-## ⚙️ Configuration Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `project_name` | Human-readable project name | "My API Project" |
-| `project_slug` | URL/filesystem safe name | auto-generated |
-| `project_description` | Brief project description | "A FastAPI service..." |
-| `author_name` | Your name | "Your Name" |
-| `author_email` | Your email | "you@example.com" |
-| `version` | Initial version | "0.1.0" |
-| `python_version` | Minimum Python version | "3.13" |
-| `use_redis` | Include Redis rate limiting | "y" |
-| `use_postgres` | Include PostgreSQL examples | "n" |
-| `license` | License type | "MIT" |
-
-## 🏗️ What's Included
-
-Your generated project includes:
-
-### Core Features
-- ✅ **FastAPI application** with clean architecture and layered design
-- ✅ **JWT/OIDC authentication** with role-based access control
-- ✅ **SQLModel database** integration (SQLite default, PostgreSQL ready)
-- ✅ **Redis rate limiting** with in-memory fallback
-- ✅ **Security middleware** (CORS, HSTS, security headers)
-- ✅ **Comprehensive testing** with 3 example tests ready to extend
-- ✅ **GitHub Actions CI/CD** pipeline
-- ✅ **Auto-documentation** with OpenAPI/Swagger
-
-### Developer Tools
-- 🔧 **Code quality**: Ruff (linting & formatting), MyPy (type checking)
-- 🧪 **Testing**: pytest with async support and coverage
-- 📦 **Dependencies**: uv for fast package management
-- 🔄 **Template updates**: Cruft integration for staying current
-- ⚙️ **Environment**: Pydantic Settings with .env support
-
-### Project Structure
-```
-your-project/
-├── main.py                    # FastAPI app entry point
-├── your_package/
-│   ├── api/http/             # HTTP layer (routes, middleware, schemas)
-│   ├── core/                 # Core infrastructure services (JWT, OIDC, sessions)
-│   ├── entities/             # Entity definitions
-│   │   ├── core/            # Core infrastructure entities (User, UserIdentity)
-│   │   └── service/         # Domain/service-specific entities
-│   ├── service/             # Domain/business service layer
-│   └── runtime/             # Runtime infrastructure (database, settings)
-├── dev/                     # Development tools and CLI
-├── tests/                   # Test suite
-├── .github/workflows/       # CI/CD
-└── .env.example            # Environment template
-```
-
-## �️ Roadmap & Planned Features
-
-We're continuously improving this template to provide the most comprehensive FastAPI development experience. Here's what's coming:
-
-### 🔐 Enhanced Security & Authentication
-- [ ] **Multi-Factor Authentication (MFA)** - TOTP and SMS-based 2FA support
-- [ ] **OAuth2 Provider Templates** - Ready-to-use integration with Google, GitHub, Microsoft
-- [ ] **API Key Management** - Built-in API key generation, rotation, and scoping
-- [ ] **Advanced RBAC** - Fine-grained permissions with resource-based access control
-- [ ] **Security Audit Logging** - Comprehensive audit trails for compliance requirements
-- [ ] **Rate Limiting Strategies** - Multiple rate limiting algorithms (sliding window, token bucket)
-
-### 📊 Observability & Monitoring
-- [ ] **OpenTelemetry Integration** - Distributed tracing with Jaeger/Zipkin support
-- [ ] **Prometheus Metrics** - Built-in application and business metrics collection
-- [ ] **Health Check Dashboard** - Advanced health monitoring with dependency checks
-- [ ] **Error Tracking** - Integration with Sentry, Rollbar, or Bugsnag
-- [ ] **Performance Profiling** - Built-in APM with request profiling capabilities
-- [ ] **Custom Alerting** - Configurable alerts for critical application events
-
-### 🗄️ Database & Storage Enhancements
-- [ ] **Database Migrations** - Alembic integration with automated migration workflows
-- [ ] **Connection Pooling** - Advanced connection pool management and monitoring
-- [ ] **Read/Write Splitting** - Automatic routing for read replicas and write masters
-- [ ] **Caching Strategies** - Redis caching patterns with cache-aside, write-through
-- [ ] **Event Sourcing Support** - Event store integration for audit and replay capabilities
-
-### 🚀 Performance & Scalability
-- [ ] **Async Task Processing** - Celery/RQ integration for background job processing
-- [ ] **WebSocket Templates** - Real-time communication patterns and connection management
-- [ ] **API Gateway Integration** - Kong, Ambassador, or Istio service mesh templates
-- [ ] **Auto-scaling Configs** - Kubernetes HPA and Docker Swarm scaling configurations
-- [ ] **Circuit Breaker Pattern** - Resilient external service integration
-
-### 🧪 Testing & Quality Assurance
-- [ ] **Contract Testing** - Pact-based consumer-driven contract testing
-- [ ] **Load Testing Templates** - Locust and Artillery test scenarios
-- [ ] **Mutation Testing** - Code quality validation with mutation testing tools
-- [ ] **Security Testing** - OWASP ZAP integration for automated security scanning
-- [ ] **Property-Based Testing** - Hypothesis integration for robust test generation
-- [ ] **Visual Regression Testing** - Automated UI testing for API documentation
-
-### 🏗️ Development Experience
-- [ ] **IDE Integration** - VS Code/PyCharm project templates and debugging configs
-- [ ] **Hot Reloading** - Advanced development server with instant API updates
-- [ ] **API Versioning** - Built-in versioning strategies (header, URL, content negotiation)
-- [ ] **Documentation Generation** - Enhanced OpenAPI docs with examples and tutorials
-- [ ] **CLI Tools** - Project-specific CLI for common development tasks
-- [ ] **Template Customization** - Plugin system for extending template functionality
-
-### ☁️ Cloud & Deployment
-- [ ] **Cloud Provider Templates** - AWS, GCP, Azure deployment configurations
-- [ ] **Serverless Support** - AWS Lambda, Google Cloud Functions deployment options
-- [ ] **Container Orchestration** - Advanced Kubernetes manifests with Helm charts
-- [ ] **Infrastructure as Code** - Terraform/Pulumi modules for complete stack deployment
-- [ ] **CI/CD Pipelines** - GitHub Actions, GitLab CI, Jenkins templates
-- [ ] **Blue-Green Deployments** - Zero-downtime deployment strategies
-
-### 🔌 Integration & Ecosystem
-- [ ] **Message Queue Integration** - RabbitMQ, Apache Kafka, AWS SQS templates
-- [ ] **External API Clients** - Type-safe client generation for common APIs
-- [ ] **Webhook Handlers** - Secure webhook processing with signature validation
-- [ ] **File Upload/Storage** - S3, MinIO, local storage with image processing
-- [ ] **Email Service Integration** - SendGrid, Mailgun, AWS SES template configurations
-- [ ] **Search Integration** - Elasticsearch, Solr, or Algolia search capabilities
-
-### 🎯 Specialized Templates
-- [ ] **E-commerce APIs** - Product catalog, cart, payment processing templates
-- [ ] **Content Management** - CMS APIs with media handling and content workflows
-- [ ] **IoT Data Processing** - Time-series data ingestion and processing patterns
-- [ ] **Financial Services** - Payment processing, compliance, and audit-ready templates
-- [ ] **Healthcare APIs** - HIPAA-compliant templates with data privacy features
-- [ ] **Real-time Analytics** - Stream processing and dashboard APIs
-
-
-## 🤝 Contributing to the Roadmap
-
-Community input on the roadmap is welcome! Here's how you can contribute:
-
-- **🗳️ Vote on Features**: Comment on [GitHub Issues](https://github.com/piewared/api_template/issues) with 👍 for features you want
-- **💡 Suggest Features**: Open a feature request with detailed use cases
-- **🔧 Submit PRs**: Help implement roadmap items or propose new ones
-- **📖 Documentation**: Help improve docs and examples for new features
-- **🧪 Beta Testing**: Test pre-release features and provide feedback
-
-### Priority Levels
-- **🔥 High Priority**: Core functionality improvements (Security, Performance, Testing)
-- **⭐ Medium Priority**: Developer experience enhancements (IDE, CLI, Documentation)
-- **💡 Future Exploration**: Advanced features (Specialized templates, BI features)
-
-## �📚 Documentation
-
-- **[Features](FEATURES.md)** - Complete feature list and capabilities
-- **[Architecture](ARCHITECTURE.md)** - Hexagonal architecture details and design patterns
-- **[Development](DEVELOPMENT.md)** - Contributing, template development, and deployment guide
-
-## 🔄 Staying Updated
-
-Generated projects automatically receive template updates:
-- Weekly GitHub Action checks for updates
-- Pull requests created with migration notes
-- Manual updates: `cruft update`
-
-
-## 🆘 Support
-
-- **Issues**: [GitHub Issues](https://github.com/piewared/api_template/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/piewared/api_template/discussions)
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature-name`  
+3. Make your changes with tests
+4. Run the full test suite: `pytest`
+5. Submit a pull request
 
 ## 📄 License
 
-MIT License. Generated projects can use any license you specify.
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
+
+- **Documentation**: Check the generated project's README for detailed usage
+- **Issues**: Report bugs and feature requests on GitHub
+- **Discussions**: Join our community discussions for help and ideas
 
 ---
 
-**⭐ Star this repo** if it helped you build better APIs!
+**Ready to build something amazing?** 🚀
+
+```bash
+cruft create https://github.com/your-org/api-project-template
+```

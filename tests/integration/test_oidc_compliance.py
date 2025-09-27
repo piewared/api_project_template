@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.http.app import app
-from src.runtime.config import ApplicationConfig, with_context
+from src.app.api.http.app import app
+from src.app.runtime.config import ApplicationConfig, with_context
 
 
 @pytest.fixture

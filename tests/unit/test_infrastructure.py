@@ -24,15 +24,15 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
-from src.api.http.middleware.limiter import DefaultLocalRateLimiter
-from src.runtime.config import (
+from src.app.api.http.middleware.limiter import DefaultLocalRateLimiter
+from src.app.runtime.config import (
     ApplicationConfig,
     _get_oidc_providers,
     _load_oidc_yaml_config,
     get_config,
     with_context,
 )
-from src.runtime.settings import EnvironmentVariables
+from src.app.runtime.settings import EnvironmentVariables
 
 
 class TestEnvironmentSettings:
@@ -219,7 +219,7 @@ class TestOIDCConfiguration:
     @pytest.fixture(autouse=True)
     def mock_yaml_loading(self):
         """Mock YAML loading to prevent interference."""
-        with patch("src.runtime.config._load_oidc_yaml_config", return_value={}):
+        with patch("src.app.runtime.config._load_oidc_yaml_config", return_value={}):
             yield
 
     def test_default_oidc_providers(self):
@@ -247,7 +247,7 @@ class TestOIDCConfiguration:
         }
 
         with patch(
-            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+            "src.app.runtime.config._load_oidc_yaml_config", return_value=yaml_content
         ):
             providers = _get_oidc_providers()
 
@@ -272,7 +272,7 @@ class TestOIDCConfiguration:
         }
 
         with patch(
-            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+            "src.app.runtime.config._load_oidc_yaml_config", return_value=yaml_content
         ):
             providers = _get_oidc_providers()
 
@@ -290,7 +290,7 @@ class TestOIDCConfiguration:
         }
 
         with patch(
-            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+            "src.app.runtime.config._load_oidc_yaml_config", return_value=yaml_content
         ):
             providers = _get_oidc_providers()
 
@@ -333,7 +333,7 @@ class TestOIDCConfiguration:
         }
 
         with patch(
-            "src.runtime.config._load_oidc_yaml_config", return_value=yaml_content
+            "src.app.runtime.config._load_oidc_yaml_config", return_value=yaml_content
         ):
             with patch.dict(os.environ, test_env, clear=True):
                 env_vars = EnvironmentVariables()
@@ -574,7 +574,7 @@ class TestApplicationStartup:
 
     def test_app_creation(self):
         """Test that the FastAPI app can be created."""
-        from src.api.http.app import app
+        from src.app.api.http.app import app
 
         assert app is not None
         assert hasattr(app, "routes")
@@ -582,7 +582,7 @@ class TestApplicationStartup:
 
     def test_middleware_configuration(self):
         """Test that middleware is properly configured."""
-        from src.api.http.app import app
+        from src.app.api.http.app import app
 
         # Check that middleware is applied
         middleware_types = [
@@ -607,7 +607,7 @@ class TestInfrastructureIntegration:
 
     def test_dependency_injection_chain(self):
         """Test that dependency injection works for complex chains."""
-        from src.api.http.deps import get_session
+        from src.app.api.http.deps import get_session
 
         # Should be able to get session factory
         assert get_session is not None

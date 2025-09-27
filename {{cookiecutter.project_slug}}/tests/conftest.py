@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from {{cookiecutter.package_name}}.api.http.app import app
+from {{cookiecutter.package_name}}.app.api.http.app import app
 
 
 @pytest.fixture(name="client")

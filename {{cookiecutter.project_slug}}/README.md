@@ -52,39 +52,35 @@ This template follows **clean architecture principles with hexagonal influences*
 
 ```
 {{cookiecutter.package_name}}/
-├── api/
-│   └── http/
-│       ├── app.py              # FastAPI application factory
-│       ├── deps.py             # Dependency injection
-│       ├── middleware/         # Custom middleware
-│       ├── routers/            # API route handlers
-│       └── schemas/            # Pydantic request/response models
-├── application/
-│   ├── entities/               # Application domain models
-│   ├── repositories/           # Repository implementations
-│   ├── rows/                   # Database persistence models
-│   └── services/               # Application services
-├── core/
-│   ├── entities/               # Core domain entities
-│   │   ├── user.py            # User domain model
-│   │   └── user_identity.py   # Identity mapping model
-│   ├── repositories/           # Abstract repository interfaces
-│   │   └── user_repo.py       # User repository interfaces
-│   ├── rows/                   # Core database models
-│   │   ├── user_row.py        # User persistence model
-│   │   └── user_identity_row.py # Identity persistence model
-│   └── services/               # Domain services
-│       └── jwt_service.py     # JWT validation service
-└── runtime/
-    ├── db.py                   # Database connection
-    ├── init_db.py             # Database initialization
-    └── settings.py            # Configuration management
+├── app/                        # Infrastructure layer
+│   ├── api/
+│   │   └── http/
+│   │       ├── app.py          # FastAPI application factory
+│   │       ├── deps.py         # Dependency injection
+│   │       ├── middleware/     # Custom middleware
+│   │       └── routers/        # API routes
+│   ├── core/
+│   │   └── services/           # Core infrastructure services
+│   │       ├── jwt_service.py  # JWT validation service
+│   │       ├── oidc_client_service.py # OIDC client
+│   │       └── session_service.py     # Session management
+│   ├── entities/               # Entity definitions
+│   │   ├── core/              # Core infrastructure entities
+│   │   │   ├── user/          # User authentication entity
+│   │   │   └── user_identity/ # Identity provider mapping
+│   │   └── service/           # Domain/service-specific entities
+│   ├── service/               # Domain/business service layer
+│   └── runtime/               # Runtime infrastructure
+│       ├── db.py              # Database connection
+│       ├── init_db.py         # Database initialization
+│       └── settings.py        # Configuration management
+├── dev/                        # Development tools
+│   └── cli.py                 # Development CLI
+└── __init__.py
 
 tests/
-├── unit/
-│   ├── core/                   # Core layer tests
-│   └── infrastructure/        # Infrastructure tests
-├── integration/               # Cross-layer integration tests
+├── unit/                       # Unit tests
+├── integration/               # Integration tests
 └── fixtures/                  # Test utilities and fixtures
 ```
 
@@ -397,8 +393,8 @@ gunicorn -w 4 -k uvicorn.workers.UnicornWorker main:app  # Alternative ASGI serv
 
 This template is designed to be a starting point for your projects. Key principles:
 
-1. **Maintain Layer Separation**: Keep domain logic in core, application logic in application layer
-2. **Dependency Direction**: Dependencies should flow inward (infrastructure → application → core)
+1. **Maintain Layer Separation**: Keep domain entities in app/entities/service, business logic in app/service
+2. **Dependency Direction**: Dependencies should flow inward (infrastructure → service → entities)
 3. **Pragmatic Compromises**: Balance architectural purity with development velocity
 4. **Test Coverage**: Maintain comprehensive tests across all layers
 5. **Type Safety**: Use typing throughout for better development experience

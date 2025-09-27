@@ -69,6 +69,6 @@ def test_template_variables_replaced():
         project_dir = Path(temp_dir) / "test_project"
         main_py = (project_dir / "main.py").read_text()
 
-        # Check that variables were replaced
-        assert "test_project.api.http.app" in main_py
+        # Check that variables were replaced with the new structure
+        assert "test_project.app.api.http.app" in main_py
         assert "{{cookiecutter" not in main_py

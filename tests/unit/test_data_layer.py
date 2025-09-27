@@ -17,8 +17,8 @@ Replaces:
 import pytest
 from sqlmodel import Session, select
 
-from src.entities.user import User, UserRepository, UserTable
-from src.entities.user_identity import (
+from src.app.entities.core.user import User, UserRepository, UserTable
+from src.app.entities.core.user_identity import (
     UserIdentity,
     UserIdentityRepository,
     UserIdentityTable,

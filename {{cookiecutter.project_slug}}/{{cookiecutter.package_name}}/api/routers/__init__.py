@@ -1,1 +1,0 @@
-"""Custom routers for {{cookiecutter.project_name}}."""

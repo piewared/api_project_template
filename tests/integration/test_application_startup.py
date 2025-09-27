@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.runtime.config import get_config
-from src.runtime.settings import EnvironmentVariables
+from src.app.runtime.config import get_config
+from src.app.runtime.settings import EnvironmentVariables
 
 config = get_config()
 
@@ -15,7 +15,7 @@ class TestApplicationStartup:
     async def test_startup_initializes_rate_limiter_with_redis(self, monkeypatch):
         """Startup should initialize rate limiter when Redis is configured."""
         # Import app module late to allow monkeypatching
-        import src.api.http.app as application
+        import src.app.api.http.app as application
 
         # Ensure no JWKS checks by clearing issuer map
         original_issuer_map = config.oidc_providers
@@ -67,7 +67,7 @@ class TestApplicationStartup:
         self, monkeypatch, oidc_provider_config
     ):
         """Startup should fail in production when rate limiter dependencies are missing."""
-        import src.api.http.app as application
+        import src.app.api.http.app as application
 
         # Store original values
         original_environment = config.environment
@@ -83,7 +83,7 @@ class TestApplicationStartup:
                 return {"keys": []}
 
             monkeypatch.setattr(
-                "src.core.services.jwt_service.fetch_jwks", fake_fetch_jwks
+                "src.app.core.services.jwt_service.fetch_jwks", fake_fetch_jwks
             )
 
             # Simulate missing dependencies

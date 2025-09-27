@@ -6,7 +6,7 @@ Add your own business logic tests here.
 
 from fastapi.testclient import TestClient
 
-from {{cookiecutter.package_name}}.api.http.app import app
+from {{cookiecutter.package_name}}.app.api.http.app import app
 
 
 def test_health_endpoint():

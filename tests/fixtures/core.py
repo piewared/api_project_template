@@ -11,12 +11,12 @@ from sqlalchemy import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 from starlette.requests import Request
 
-from src.api.http.app import app
-from src.api.http.deps import get_session
-from src.api.http.middleware.limiter import configure_rate_limiter
-from src.core.services import jwt_service
-from src.runtime.config import OIDCProviderConfig, get_config
-from src.runtime.settings import EnvironmentVariables
+from src.app.api.http.app import app
+from src.app.api.http.deps import get_session
+from src.app.api.http.middleware.limiter import configure_rate_limiter
+from src.app.core.services import jwt_service
+from src.app.runtime.config import OIDCProviderConfig, get_config
+from src.app.runtime.settings import EnvironmentVariables
 from tests.utils import oct_jwk
 
 main_config = get_config()
@@ -142,8 +142,8 @@ def persistent_session() -> Generator[Session]:
     )
 
     # Import models to register them with the metadata
-    from src.entities.user import UserTable  # noqa: F401
-    from src.entities.user_identity import UserIdentityTable  # noqa: F401
+    from src.app.entities.core.user import UserTable  # noqa: F401
+    from src.app.entities.core.user_identity import UserIdentityTable  # noqa: F401
 
     # Create all tables using the current metadata state
     SQLModel.metadata.create_all(engine)
@@ -164,8 +164,8 @@ def session() -> Generator[Session]:
 
     # Import models to register them with the metadata
     # This needs to happen after engine creation but before table creation
-    from src.entities.user import UserTable  # noqa: F401
-    from src.entities.user_identity import UserIdentityTable  # noqa: F401
+    from src.app.entities.core.user import UserTable  # noqa: F401
+    from src.app.entities.core.user_identity import UserIdentityTable  # noqa: F401
 
     # Create all tables using the current metadata state
     SQLModel.metadata.create_all(engine)

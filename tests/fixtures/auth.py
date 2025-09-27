@@ -8,11 +8,11 @@ import httpx
 import pytest
 from sqlmodel import Session
 
-from src.core.services.oidc_client_service import TokenResponse
-from src.core.services.session_service import AuthSession, UserSession
-from src.entities.user import User, UserRepository
-from src.entities.user_identity import UserIdentity, UserIdentityRepository
-from src.runtime.config import ApplicationConfig, OIDCConfig, OIDCProviderConfig
+from src.app.core.services.oidc_client_service import TokenResponse
+from src.app.core.services.session_service import AuthSession, UserSession
+from src.app.entities.core.user import User, UserRepository
+from src.app.entities.core.user_identity import UserIdentity, UserIdentityRepository
+from src.app.runtime.config import ApplicationConfig, OIDCConfig, OIDCProviderConfig
 
 
 # Base Data Fixtures
@@ -209,7 +209,7 @@ def mock_session_service(
 @pytest.fixture
 def auth_test_client(client, auth_test_config):
     """Test client configured with authentication setup."""
-    from src.runtime.config import with_context
+    from src.app.runtime.config import with_context
 
     with with_context(config_override=auth_test_config):
         yield client

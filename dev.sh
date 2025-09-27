@@ -24,7 +24,7 @@ case "${1:-help}" in
         ;;
     "serve")
         echo "Starting infrastructure development server..."
-        PYTHONPATH=src uv run uvicorn src.api.http.app:app --reload
+        PYTHONPATH=src uv run uvicorn src.app.api.http.app:app --reload
         ;;
     "serve-dev")
         echo "Starting legacy development server..."
@@ -32,7 +32,7 @@ case "${1:-help}" in
         ;;
     "init-db")
         echo "Initializing database..."
-        PYTHONPATH=src uv run python -c "from src.runtime.init_db import init_db; init_db()"
+        PYTHONPATH=src uv run python -c "from src.app.runtime.init_db import init_db; init_db()"
         ;;
     "help"|*)
         echo "Development commands for API Template:"

@@ -749,13 +749,16 @@ your-project/
 ├── main.py                    # FastAPI app entry point
 ├── your_package/
 │   ├── api/http/             # HTTP layer (routes, middleware, schemas)
-│   ├── core/                 # Domain logic (entities, services)
-│   ├── application/          # Application services
-│   ├── business/             # Business logic
-│   └── runtime/              # Infrastructure (database, settings)
-├── tests/                    # Test suite
-├── .github/workflows/        # CI/CD
-└── .env.example             # Environment template
+│   ├── core/                 # Core infrastructure services (JWT, OIDC, sessions)
+│   ├── entities/             # Entity definitions
+│   │   ├── core/            # Core infrastructure entities (User, UserIdentity)
+│   │   └── service/         # Domain/service-specific entities
+│   ├── service/             # Domain/business service layer
+│   └── runtime/             # Runtime infrastructure (database, settings)
+├── dev/                     # Development tools and CLI
+├── tests/                   # Test suite
+├── .github/workflows/       # CI/CD
+└── .env.example            # Environment template
 ```
 
 ## �️ Roadmap & Planned Features

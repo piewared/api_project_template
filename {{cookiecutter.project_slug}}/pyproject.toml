@@ -41,7 +41,8 @@ dev = [
 ]
 
 [project.scripts]
-init-db = "{{cookiecutter.package_name}}.runtime.init_db:init_db"
+init-db = "{{cookiecutter.package_name}}.app.runtime.init_db:init_db"
+{{cookiecutter.project_slug}}-dev = "{{cookiecutter.package_name}}.dev.cli:main"
 
 [tool.ruff]
 line-length = 88

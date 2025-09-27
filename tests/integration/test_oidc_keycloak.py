@@ -7,8 +7,8 @@ import pytest
 import requests
 from fastapi.testclient import TestClient
 
-from src.api.http.app import app
-from src.runtime.config import (
+from src.app.api.http.app import app
+from src.app.runtime.config import (
     ApplicationConfig,
     OIDCConfig,
     OIDCProviderConfig,
@@ -39,7 +39,7 @@ def keycloak_config():
 @pytest.fixture
 def integration_client(keycloak_config):
     """Test client configured for integration tests with local Keycloak."""
-    with patch("src.runtime.config.get_config") as mock_get_config:
+    with patch("src.app.runtime.config.get_config") as mock_get_config:
         config = ApplicationConfig()
         config.environment = "test"
         config.oidc = OIDCConfig()
@@ -219,7 +219,7 @@ class TestWithoutKeycloak:
         # It verifies that the application handles OIDC provider unavailability
 
         with patch(
-            "src.core.services.oidc_client_service.httpx.AsyncClient"
+            "src.app.core.services.oidc_client_service.httpx.AsyncClient"
         ) as mock_client:
             mock_client.return_value.__aenter__.return_value.post.side_effect = (
                 Exception("Connection error")

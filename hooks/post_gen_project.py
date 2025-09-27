@@ -12,10 +12,11 @@ def copy_infrastructure():
     """Copy infrastructure code from template's src/ to the generated project."""
     project_root = Path(".").absolute()
     package_name = "{{cookiecutter.package_name}}"
-    template_path = "{{cookiecutter._template}}"
+    project_slug = "{{cookiecutter.project_slug}}"
+    template_path_str = "{{cookiecutter._template}}"
 
     print("🔧 Merging infrastructure with business logic...")
-    print(f"📁 Template path: {template_path}")
+    print(f"📁 Template path: {template_path_str}")
     print(f"📁 Current directory: {project_root}")
     print(f"📁 Package name: {package_name}")
 
@@ -25,8 +26,8 @@ def copy_infrastructure():
     search_paths = []
 
     # Strategy 1: Check if this is a local template (direct path)
-    if not template_path.startswith(("git@", "https://", "http://")):
-        local_template = Path(template_path).resolve()
+    if not template_path_str.startswith(("git@", "https://", "http://")):
+        local_template = Path(template_path_str).resolve()
         if local_template.exists():
             potential_src = local_template / "src"
             if potential_src.exists():
@@ -86,15 +87,36 @@ def copy_infrastructure():
             continue
 
         # Verify this looks like our template by checking for required structure
-        required_dirs = ["api", "core", "runtime"]
-        missing_dirs = [d for d in required_dirs if not (potential_src / d).exists()]
-
-        if missing_dirs:
-            print(f"       ❌ Missing required directories: {missing_dirs}")
-            continue
+        # Check for new src/app/ structure first
+        app_dir = potential_src / "app"
+        if app_dir.exists():
+            required_dirs = ["api", "core", "runtime"]
+            missing_dirs = [d for d in required_dirs if not (app_dir / d).exists()]
+            
+            if not missing_dirs:
+                print("       ✅ Found new src/app/ structure")
+                # Keep the src directory as our source to preserve folder structure
+                # potential_src stays as the src directory
+            else:
+                print(f"       ❌ Missing required directories in app/: {missing_dirs}")
+                continue
+        else:
+            # Fallback: check for old flat structure under src/
+            required_dirs = ["api", "core", "runtime"]
+            missing_dirs = [d for d in required_dirs if not (potential_src / d).exists()]
+            
+            if missing_dirs:
+                print(f"       ❌ Missing required directories: {missing_dirs}")
+                continue
 
         # Additional validation: check for key files
-        key_files = ["api/http/app.py", "runtime/db.py", "entities/__init__.py"]
+        if app_dir.exists():
+            # New structure: files are under app/
+            key_files = ["app/api/http/app.py", "app/runtime/db.py", "app/entities/__init__.py"]
+        else:
+            # Old structure: files are directly under src/
+            key_files = ["api/http/app.py", "runtime/db.py", "entities/__init__.py"]
+        
         missing_files = [f for f in key_files if not (potential_src / f).exists()]
 
         if missing_files:
@@ -139,17 +161,99 @@ def copy_infrastructure():
     fix_imports_in_directory(package_dir, package_name)
 
     print("✅ Infrastructure and business logic merged successfully!")
+
+    # Copy and process configuration files from source
+    # Get template path from the src directory we found
+    template_root = src_dir.parent if src_dir else None
+    if template_root:
+        copy_config_files(template_root, project_root, package_name, project_slug)
+    else:
+        print("⚠️  Warning: Could not locate template root for config file copying")
+
     return True
+
+
+def copy_config_files(template_path: Path, project_root: Path, package_name: str, project_slug: str):
+    """Copy and process configuration files from the source project."""
+    config_files = {
+        "pyproject.toml": process_pyproject_toml,
+        "README.md": process_readme,
+        ".env.example": lambda content, **kwargs: content,  # Copy as-is
+        ".gitignore": lambda content, **kwargs: content,    # Copy as-is
+    }
+    
+    for filename, processor in config_files.items():
+        source_file = template_path / filename
+        target_file = project_root / filename
+        
+        if source_file.exists():
+            try:
+                with open(source_file) as f:
+                    content = f.read()
+                
+                # Process the content with placeholders
+                processed_content = processor(
+                    content, 
+                    package_name=package_name, 
+                    project_slug=project_slug
+                )
+                
+                with open(target_file, "w") as f:
+                    f.write(processed_content)
+                
+                print(f"🔧 Copied and processed {filename}")
+            except Exception as e:
+                print(f"⚠️  Warning: Could not process {filename}: {e}")
+        else:
+            print(f"⚠️  Warning: Source {filename} not found")
+
+
+def process_pyproject_toml(content: str, package_name: str, project_slug: str, **kwargs) -> str:
+    """Process pyproject.toml to replace project-specific placeholders."""
+    # Replace the project name and dependencies
+    processed = content.replace("api_project_template3", project_slug)
+    processed = processed.replace('"src"', f'"{package_name}"')
+    
+    # Update entry points to use the generated package name
+    # Handle both hatch build config and scripts
+    processed = processed.replace("src.app.runtime.init_db:init_db", f"{package_name}.app.runtime.init_db:init_db")
+    processed = processed.replace("src.dev.cli:main", f"{package_name}.dev.cli:main")
+    processed = processed.replace("api-dev", f"{project_slug}-dev")
+    
+    # Also handle any remaining src. references in entry points
+    import re
+    # Replace patterns like "src.something = "package_name.something"
+    processed = re.sub(r'([\"\']?)src\.', f'\\1{package_name}.', processed)
+    
+    return processed
+
+
+def process_readme(content: str, package_name: str, project_slug: str, **kwargs) -> str:
+    """Process README.md to replace project-specific placeholders."""
+    # Replace project name references
+    processed = content.replace("API Project Template", project_slug.replace("_", " ").title())
+    processed = processed.replace("api_project_template3", project_slug)
+    processed = processed.replace("src/", f"{package_name}/")
+    processed = processed.replace("api-dev", f"{project_slug}-dev")
+    processed = processed.replace("uv run api-dev", f"uv run {project_slug}-dev")
+    
+    return processed
 
 
 def fix_imports_in_directory(directory: Path, package_name: str):
     """Fix src. imports to use the actual package name."""
     for py_file in directory.rglob("*.py"):
-        with open(py_file, "r") as f:
+        with open(py_file) as f:
             content = f.read()
 
-        # Replace src. imports with the actual package name
-        updated_content = content.replace("from src.", f"from {package_name}.")
+        # Replace src.app. imports with the actual package name (new structure)
+        updated_content = content.replace("from src.app.", f"from {package_name}.app.")
+        updated_content = updated_content.replace(
+            "import src.app.", f"import {package_name}.app."
+        )
+        
+        # Also handle any remaining old-style src. imports for backward compatibility
+        updated_content = updated_content.replace("from src.", f"from {package_name}.")
         updated_content = updated_content.replace(
             "import src.", f"import {package_name}."
         )
@@ -364,7 +468,12 @@ def create_virtual_environment():
         subprocess.run(["uv", "--version"], check=True, capture_output=True)
         print("📦 Using uv for dependency management")
         try:
-            subprocess.run(["uv", "sync"], check=True)
+            # Set environment to suppress UV warnings
+            env = os.environ.copy()
+            env.pop('VIRTUAL_ENV', None)  # Remove VIRTUAL_ENV to avoid mismatch warning
+            env['UV_LINK_MODE'] = 'copy'  # Use copy mode to suppress hardlink warning
+            
+            subprocess.run(["uv", "sync"], check=True, env=env)
             print("✅ Dependencies installed with uv")
             return
         except subprocess.CalledProcessError as e:
@@ -431,9 +540,9 @@ def print_next_steps():
     print("   - Format code: ruff format .")
 
     print(f"\n🏗️  Add your domain logic:")
-    print(f"   - Business entities: {package_name}/business/entities.py")
-    print(f"   - Business services: {package_name}/business/services.py")
-    print(f"   - API routes: {package_name}/api/routers/business.py")
+    print(f"   - Domain entities: {package_name}/app/entities/service/__init__.py")
+    print(f"   - Business services: {package_name}/app/service/__init__.py")
+    print(f"   - API routes: {package_name}/app/api/routers/business.py")
     print(f"   - Tests: tests/")
 
     print("\n📖 Template updates:")

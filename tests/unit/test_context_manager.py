@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from src.runtime.config import (
+from src.app.runtime.config import (
     AppContext,
     ApplicationConfig,
     get_config,

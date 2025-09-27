@@ -9,10 +9,10 @@ import pytest
 from authlib.jose import JsonWebToken
 from fastapi import Request, Response
 
-from src.core.services.oidc_client_service import TokenResponse
-from src.core.services.session_service import AuthSession, UserSession
-from src.entities.user import User
-from src.runtime.config import OIDCProviderConfig
+from src.app.core.services.oidc_client_service import TokenResponse
+from src.app.core.services.session_service import AuthSession, UserSession
+from src.app.entities.core.user import User
+from src.app.runtime.config import OIDCProviderConfig
 
 
 @pytest.fixture
@@ -204,7 +204,7 @@ def mock_response():
 @pytest.fixture
 def oidc_test_config():
     """Test configuration with OIDC provider setup."""
-    from src.runtime.config import ApplicationConfig, OIDCConfig
+    from src.app.runtime.config import ApplicationConfig, OIDCConfig
 
     config = ApplicationConfig()
     config.oidc = OIDCConfig()

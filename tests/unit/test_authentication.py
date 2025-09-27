@@ -26,13 +26,13 @@ from authlib.jose import jwt
 from fastapi import HTTPException, Request, status
 from fastapi.testclient import TestClient
 
-from src.api.http.deps import require_role, require_scope
-from src.core.services import jwt_service, oidc_client_service, session_service
-from src.core.services.oidc_client_service import TokenResponse
-from src.core.services.session_service import AuthSession, UserSession
-from src.entities.user import User
-from src.entities.user_identity import UserIdentity
-from src.runtime.config import ApplicationConfig, OIDCProviderConfig, with_context
+from src.app.api.http.deps import require_role, require_scope
+from src.app.core.services import jwt_service, oidc_client_service, session_service
+from src.app.core.services.oidc_client_service import TokenResponse
+from src.app.core.services.session_service import AuthSession, UserSession
+from src.app.entities.core.user import User
+from src.app.entities.core.user_identity import UserIdentity
+from src.app.runtime.config import ApplicationConfig, OIDCProviderConfig, with_context
 from tests.utils import encode_token, oct_jwk
 
 
@@ -116,7 +116,7 @@ class TestOIDCClientService:
         self, base_oidc_provider, test_user_claims, auth_test_config
     ):
         """Test extracting user claims from ID token."""
-        with patch("src.core.services.jwt_service.verify_jwt") as mock_verify:
+        with patch("src.app.core.services.jwt_service.verify_jwt") as mock_verify:
             mock_verify.return_value = test_user_claims
 
             with with_context(config_override=auth_test_config):
@@ -173,7 +173,7 @@ class TestOIDCClientService:
         """Test extracting user claims from userinfo endpoint when ID token fails."""
         mock_response = mock_http_response_factory(test_user_claims)
 
-        with patch("src.core.services.jwt_service.verify_jwt") as mock_verify:
+        with patch("src.app.core.services.jwt_service.verify_jwt") as mock_verify:
             # Make JWT verification fail to force fallback to userinfo
             mock_verify.side_effect = Exception("JWT verification failed")
 
@@ -202,7 +202,7 @@ class TestOIDCClientService:
         # Configure provider without userinfo endpoint
         auth_test_config.oidc.providers["default"].userinfo_endpoint = None
 
-        with patch("src.core.services.jwt_service.verify_jwt") as mock_verify:
+        with patch("src.app.core.services.jwt_service.verify_jwt") as mock_verify:
             mock_verify.side_effect = Exception("JWT verification failed")
 
             with with_context(config_override=auth_test_config):
@@ -385,7 +385,7 @@ class TestSessionService:
         }
 
         with patch(
-            "src.core.services.session_service.session", return_value=populated_session
+            "src.app.core.services.session_service.session", return_value=populated_session
         ):
             with patch.object(populated_session, "close", return_value=None):
                 user = await session_service.provision_user_from_claims(claims, "test")
@@ -401,8 +401,8 @@ class TestSessionService:
     ):
         """Test JIT user provisioning returns existing user with updated info."""
         # Populate session with the specific test fixtures
-        from src.entities.user import UserRepository
-        from src.entities.user_identity import UserIdentityRepository
+        from src.app.entities.core.user import UserRepository
+        from src.app.entities.core.user_identity import UserIdentityRepository
 
         user_repo = UserRepository(session)
         identity_repo = UserIdentityRepository(session)
@@ -420,7 +420,7 @@ class TestSessionService:
             "family_name": "User",
         }
 
-        with patch("src.core.services.session_service.session", return_value=session):
+        with patch("src.app.core.services.session_service.session", return_value=session):
             with patch.object(session, "close", return_value=None):
                 user = await session_service.provision_user_from_claims(claims, "test")
 
@@ -604,9 +604,9 @@ class TestSessionService:
 
         # Mock the OIDC client service
         with patch(
-            "src.core.services.oidc_client_service.refresh_access_token"
+            "src.app.core.services.oidc_client_service.refresh_access_token"
         ) as mock_refresh:
-            from src.core.services.oidc_client_service import TokenResponse
+            from src.app.core.services.oidc_client_service import TokenResponse
 
             mock_refresh.return_value = TokenResponse(
                 access_token="new-access-token",
@@ -672,7 +672,7 @@ class TestSessionService:
 
         # Mock refresh to fail
         with patch(
-            "src.core.services.oidc_client_service.refresh_access_token"
+            "src.app.core.services.oidc_client_service.refresh_access_token"
         ) as mock_refresh:
             mock_refresh.side_effect = Exception("Token refresh failed")
 
@@ -774,11 +774,11 @@ class TestBFFAuthenticationRouter:
         """Test successful login initiation."""
         with (
             patch(
-                "src.core.services.oidc_client_service.generate_pkce_pair"
+                "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.core.services.oidc_client_service.generate_state") as mock_state,
+            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
             patch(
-                "src.core.services.session_service.create_auth_session"
+                "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_session,
         ):
             mock_pkce.return_value = ("test-verifier", "test-challenge")
@@ -811,26 +811,26 @@ class TestBFFAuthenticationRouter:
         """Test successful callback handling."""
         with (
             patch(
-                "src.core.services.session_service.get_auth_session",
+                "src.app.core.services.session_service.get_auth_session",
                 return_value=test_auth_session,
             ),
             patch(
-                "src.core.services.oidc_client_service.exchange_code_for_tokens",
+                "src.app.core.services.oidc_client_service.exchange_code_for_tokens",
                 return_value=test_token_response,
             ),
             patch(
-                "src.core.services.oidc_client_service.get_user_claims",
+                "src.app.core.services.oidc_client_service.get_user_claims",
                 return_value=test_user_claims,
             ),
             patch(
-                "src.core.services.session_service.provision_user_from_claims",
+                "src.app.core.services.session_service.provision_user_from_claims",
                 return_value=test_user,
             ),
             patch(
-                "src.core.services.session_service.create_user_session",
+                "src.app.core.services.session_service.create_user_session",
                 return_value="user-session-456",
             ),
-            patch("src.core.services.session_service.delete_auth_session"),
+            patch("src.app.core.services.session_service.delete_auth_session"),
         ):
             # Set auth session cookie
             auth_test_client.cookies.set("auth_session_id", test_auth_session.id)
@@ -846,7 +846,7 @@ class TestBFFAuthenticationRouter:
     def test_callback_invalid_state(self, auth_test_client, test_auth_session):
         """Test callback with invalid state parameter."""
         with patch(
-            "src.core.services.session_service.get_auth_session",
+            "src.app.core.services.session_service.get_auth_session",
             return_value=test_auth_session,
         ):
             auth_test_client.cookies.set("auth_session_id", test_auth_session.id)
@@ -871,8 +871,8 @@ class TestBFFAuthenticationRouter:
     ):
         """Test /me endpoint with valid session."""
         with (
-            patch("src.api.http.deps.get_user_session", return_value=test_user_session),
-            patch("src.entities.user.UserRepository.get", return_value=test_user),
+            patch("src.app.api.http.deps.get_user_session", return_value=test_user_session),
+            patch("src.app.entities.core.user.UserRepository.get", return_value=test_user),
         ):
             auth_test_client.cookies.set("user_session_id", test_user_session.id)
 
@@ -897,11 +897,11 @@ class TestBFFAuthenticationRouter:
         """Test successful logout."""
         with (
             patch(
-                "src.core.services.session_service.get_user_session",
+                "src.app.core.services.session_service.get_user_session",
                 return_value=test_user_session,
             ),
             patch(
-                "src.core.services.session_service.delete_user_session"
+                "src.app.core.services.session_service.delete_user_session"
             ) as mock_delete,
         ):
             auth_test_client.cookies.set("user_session_id", test_user_session.id)
@@ -929,7 +929,7 @@ class TestBFFAuthenticationRouter:
     def test_callback_missing_code_parameter(self, auth_test_client, test_auth_session):
         """Test callback without required code parameter."""
         with patch(
-            "src.core.services.session_service.get_auth_session",
+            "src.app.core.services.session_service.get_auth_session",
             return_value=test_auth_session,
         ):
             auth_test_client.cookies.set("auth_session_id", test_auth_session.id)
@@ -946,11 +946,11 @@ class TestBFFAuthenticationRouter:
         """Test callback when token exchange fails."""
         with (
             patch(
-                "src.core.services.session_service.get_auth_session",
+                "src.app.core.services.session_service.get_auth_session",
                 return_value=test_auth_session,
             ),
             patch(
-                "src.core.services.oidc_client_service.exchange_code_for_tokens",
+                "src.app.core.services.oidc_client_service.exchange_code_for_tokens",
                 side_effect=httpx.HTTPStatusError(
                     "Token exchange failed", request=Mock(), response=Mock()
                 ),
@@ -971,15 +971,15 @@ class TestBFFAuthenticationRouter:
         """Test callback when user claims extraction fails."""
         with (
             patch(
-                "src.core.services.session_service.get_auth_session",
+                "src.app.core.services.session_service.get_auth_session",
                 return_value=test_auth_session,
             ),
             patch(
-                "src.core.services.oidc_client_service.exchange_code_for_tokens",
+                "src.app.core.services.oidc_client_service.exchange_code_for_tokens",
                 return_value=test_token_response,
             ),
             patch(
-                "src.core.services.oidc_client_service.get_user_claims",
+                "src.app.core.services.oidc_client_service.get_user_claims",
                 side_effect=HTTPException(status_code=401, detail="Invalid ID token"),
             ),
         ):
@@ -999,19 +999,19 @@ class TestBFFAuthenticationRouter:
         """Test callback when user provisioning fails."""
         with (
             patch(
-                "src.core.services.session_service.get_auth_session",
+                "src.app.core.services.session_service.get_auth_session",
                 return_value=test_auth_session,
             ),
             patch(
-                "src.core.services.oidc_client_service.exchange_code_for_tokens",
+                "src.app.core.services.oidc_client_service.exchange_code_for_tokens",
                 return_value=test_token_response,
             ),
             patch(
-                "src.core.services.oidc_client_service.get_user_claims",
+                "src.app.core.services.oidc_client_service.get_user_claims",
                 return_value=test_user_claims,
             ),
             patch(
-                "src.core.services.session_service.provision_user_from_claims",
+                "src.app.core.services.session_service.provision_user_from_claims",
                 side_effect=Exception("Database connection failed"),
             ),
         ):
@@ -1029,7 +1029,7 @@ class TestBFFAuthenticationRouter:
         # Set invalid session cookie
         auth_test_client.cookies.set("user_session_id", "invalid-session-id-12345")
 
-        with patch("src.api.http.deps.get_user_session", return_value=None):
+        with patch("src.app.api.http.deps.get_user_session", return_value=None):
             response = auth_test_client.get("/auth/web/me")
 
             assert response.status_code == status.HTTP_200_OK
@@ -1040,7 +1040,7 @@ class TestBFFAuthenticationRouter:
     def test_logout_without_session(self, auth_test_client):
         """Test logout without active session."""
         with patch(
-            "src.core.services.session_service.get_user_session",
+            "src.app.core.services.session_service.get_user_session",
             return_value=None,
         ):
             response = auth_test_client.post("/auth/web/logout")
@@ -1072,11 +1072,11 @@ class TestAuthenticationIntegration:
         # Step 1: Initiate login
         with (
             patch(
-                "src.core.services.oidc_client_service.generate_pkce_pair"
+                "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.core.services.oidc_client_service.generate_state") as mock_state,
+            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
             patch(
-                "src.core.services.session_service.create_auth_session"
+                "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
         ):
             mock_pkce.return_value = ("verifier", "challenge")
@@ -1108,24 +1108,24 @@ class TestAuthenticationIntegration:
 
             with (
                 patch(
-                    "src.core.services.session_service.get_auth_session",
+                    "src.app.core.services.session_service.get_auth_session",
                     return_value=test_auth_session,
                 ),
                 patch(
-                    "src.core.services.oidc_client_service.exchange_code_for_tokens"
+                    "src.app.core.services.oidc_client_service.exchange_code_for_tokens"
                 ) as mock_exchange,
                 patch(
-                    "src.core.services.oidc_client_service.get_user_claims"
+                    "src.app.core.services.oidc_client_service.get_user_claims"
                 ) as mock_claims,
                 patch(
-                    "src.core.services.session_service.provision_user_from_claims",
+                    "src.app.core.services.session_service.provision_user_from_claims",
                     return_value=test_user,
                 ),
                 patch(
-                    "src.core.services.session_service.create_user_session",
+                    "src.app.core.services.session_service.create_user_session",
                     return_value="user-session-id",
                 ),
-                patch("src.core.services.session_service.delete_auth_session"),
+                patch("src.app.core.services.session_service.delete_auth_session"),
             ):
                 mock_exchange.return_value = TokenResponse(
                     access_token="access-token",
@@ -1161,11 +1161,11 @@ class TestAuthenticationIntegration:
 
                 with (
                     patch(
-                        "src.api.http.deps.get_user_session",
+                        "src.app.api.http.deps.get_user_session",
                         return_value=test_user_session,
                     ),
                     patch(
-                        "src.entities.user.UserRepository.get", return_value=test_user
+                        "src.app.entities.core.user.UserRepository.get", return_value=test_user
                     ),
                 ):
                     auth_test_client.cookies.set("user_session_id", "user-session-id")
@@ -1182,11 +1182,11 @@ class TestAuthenticationIntegration:
         # Step 1: Start login normally
         with (
             patch(
-                "src.core.services.oidc_client_service.generate_pkce_pair"
+                "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.core.services.oidc_client_service.generate_state") as mock_state,
+            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
             patch(
-                "src.core.services.session_service.create_auth_session"
+                "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
         ):
             mock_pkce.return_value = ("verifier", "challenge")
@@ -1200,7 +1200,7 @@ class TestAuthenticationIntegration:
 
             # Step 2: Simulate session loss during callback
             with patch(
-                "src.core.services.session_service.get_auth_session", return_value=None
+                "src.app.core.services.session_service.get_auth_session", return_value=None
             ):
                 callback_response = auth_test_client.get(
                     "/auth/web/callback?code=auth-code&state=state123",
@@ -1225,11 +1225,11 @@ class TestAuthenticationIntegration:
         # Step 1: Start login normally
         with (
             patch(
-                "src.core.services.oidc_client_service.generate_pkce_pair"
+                "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.core.services.oidc_client_service.generate_state") as mock_state,
+            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
             patch(
-                "src.core.services.session_service.create_auth_session"
+                "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
         ):
             mock_pkce.return_value = ("verifier", "challenge")
@@ -1243,7 +1243,7 @@ class TestAuthenticationIntegration:
 
             # Step 2: Attempt callback with wrong state (CSRF attack simulation)
             with patch(
-                "src.core.services.session_service.get_auth_session",
+                "src.app.core.services.session_service.get_auth_session",
                 return_value=test_auth_session,
             ):
                 auth_test_client.cookies.set("auth_session_id", "auth-session-id")
@@ -1263,13 +1263,13 @@ class TestAuthenticationIntegration:
         for i in range(3):
             with (
                 patch(
-                    "src.core.services.oidc_client_service.generate_pkce_pair"
+                    "src.app.core.services.oidc_client_service.generate_pkce_pair"
                 ) as mock_pkce,
                 patch(
-                    "src.core.services.oidc_client_service.generate_state"
+                    "src.app.core.services.oidc_client_service.generate_state"
                 ) as mock_state,
                 patch(
-                    "src.core.services.session_service.create_auth_session"
+                    "src.app.core.services.session_service.create_auth_session"
                 ) as mock_create_auth,
             ):
                 mock_pkce.return_value = (f"verifier-{i}", f"challenge-{i}")
@@ -1303,7 +1303,7 @@ class TestAuthenticationIntegration:
 
             # Should be able to complete each session independently
             with patch(
-                "src.core.services.session_service.get_auth_session",
+                "src.app.core.services.session_service.get_auth_session",
                 return_value=test_auth_session,
             ):
                 # Simulate proper callback for this specific session
@@ -1326,11 +1326,11 @@ class TestAuthenticationIntegration:
         # Step 1: Failed first attempt due to network issue
         with (
             patch(
-                "src.core.services.oidc_client_service.generate_pkce_pair"
+                "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.core.services.oidc_client_service.generate_state") as mock_state,
+            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
             patch(
-                "src.core.services.session_service.create_auth_session"
+                "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
         ):
             mock_pkce.return_value = ("verifier1", "challenge1")
@@ -1344,11 +1344,11 @@ class TestAuthenticationIntegration:
         # Step 2: Second attempt should work independently
         with (
             patch(
-                "src.core.services.oidc_client_service.generate_pkce_pair"
+                "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.core.services.oidc_client_service.generate_state") as mock_state,
+            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
             patch(
-                "src.core.services.session_service.create_auth_session"
+                "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
         ):
             mock_pkce.return_value = ("verifier2", "challenge2")

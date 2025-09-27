@@ -1,7 +1,5 @@
 """User database table model."""
 
-from sqlmodel import Field
-
 from src.entities._base import EntityTable
 
 

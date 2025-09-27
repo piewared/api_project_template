@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, DateTime, String, UniqueConstraint
+from sqlalchemy import Column, String, UniqueConstraint
 from sqlmodel import Field
 
 from src.entities._base import EntityTable

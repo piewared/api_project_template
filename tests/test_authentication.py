@@ -1,12 +1,14 @@
 """Consolidated authentication system tests.
 
 This module combines and consolidates tests for:
+- JWT service (claim extraction, JWKS fetching, JWT verification)
 - OIDC client service (token exchange, user claims, PKCE flow)
 - Session service (auth sessions, user sessions, JIT provisioning)
 - BFF authentication router (login initiation, callback handling, /me endpoint)
 - Authentication dependencies and state management
 
 Replaces:
+- tests/unit/core/test_services.py (JWT service functionality)
 - tests/unit/core/test_oidc_client_service.py
 - tests/unit/core/test_session_service.py
 - tests/unit/api/test_auth_bff_router.py (partially)
@@ -14,20 +16,22 @@ Replaces:
 """
 
 import time
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from fastapi import status
+from authlib.jose import jwt
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
-from src.core.services import oidc_client_service, session_service
+from src.core.services import jwt_service, oidc_client_service, session_service
 from src.core.services.oidc_client_service import TokenResponse
 from src.core.services.session_service import AuthSession, UserSession
 from src.entities.user import User
 from src.entities.user_identity import UserIdentity
-from src.runtime.config import with_context
+from src.runtime.config import ApplicationConfig, OIDCProviderConfig, with_context
+from tests.utils import encode_token, oct_jwk
 
 
 class TestOIDCClientService:
@@ -552,3 +556,194 @@ class TestAuthenticationIntegration:
                     data = me_response.json()
                     assert data["authenticated"] is True
                     assert data["user"]["email"] == "test@example.com"
+
+
+class TestJWTService:
+    """Test JWT service functionality in isolation."""
+
+    @pytest.fixture
+    def valid_jwks(self):
+        """Return valid JWKS data for testing."""
+        return {
+            "keys": [
+                oct_jwk(b"test-secret-key", "test-key"),
+                oct_jwk(b"another-key", "key-2"),
+            ]
+        }
+
+    @pytest.fixture
+    def oidc_provider_config(self):
+        """Return OIDC provider configuration for testing."""
+        return OIDCProviderConfig(
+            client_id="test-client-id",
+            authorization_endpoint="https://test.issuer/auth",
+            token_endpoint="https://test.issuer/token",
+            issuer="https://test.issuer",
+            jwks_uri="https://test.issuer/.well-known/jwks.json",
+            redirect_uri="http://localhost:8000/callback",
+        )
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        """Clear JWKS cache before each test."""
+        jwt_service._JWKS_CACHE.clear()
+        yield
+        jwt_service._JWKS_CACHE.clear()
+
+    def test_extract_uid_with_custom_claim(self):
+        """Should extract UID from custom claim when configured."""
+        claims = {"iss": "issuer", "sub": "subject", "custom_uid": "user-123"}
+
+        # Create test config with custom uid claim
+        test_config = ApplicationConfig()
+        test_config.jwt.uid_claim = "custom_uid"
+
+        with with_context(test_config):
+            result = jwt_service.extract_uid(claims)
+            assert result == "user-123"
+
+    def test_extract_uid_fallback_to_issuer_subject(self):
+        """Should fall back to issuer|subject when custom claim missing."""
+        claims = {"iss": "https://issuer.example", "sub": "user-456"}
+
+        # Create test config with missing uid claim
+        test_config = ApplicationConfig()
+        test_config.jwt.uid_claim = "missing_claim"
+
+        with with_context(config_override=test_config):
+            result = jwt_service.extract_uid(claims)
+            assert result == "https://issuer.example|user-456"
+
+    def test_extract_scopes_from_string(self):
+        """Should parse space-separated scope string."""
+        claims = {"scope": "read write admin"}
+
+        result = jwt_service.extract_scopes(claims)
+        assert result == {"read", "write", "admin"}
+
+    def test_extract_scopes_from_list(self):
+        """Should handle scope as list."""
+        claims = {"scp": ["read", "write"]}
+
+        result = jwt_service.extract_scopes(claims)
+        assert result == {"read", "write"}
+
+    def test_extract_scopes_from_multiple_sources(self):
+        """Should combine scopes from multiple claim sources."""
+        claims = {"scope": "read write", "scp": ["admin"]}
+
+        result = jwt_service.extract_scopes(claims)
+        assert result == {"read", "write", "admin"}
+
+    def test_extract_roles_from_string(self):
+        """Should parse space-separated roles string."""
+        claims = {"roles": "user admin"}
+
+        result = jwt_service.extract_roles(claims)
+        assert set(result) == {"user", "admin"}
+
+    def test_extract_roles_from_realm_access(self):
+        """Should extract roles from Keycloak-style realm_access."""
+        claims = {"realm_access": {"roles": ["admin", "user"]}, "roles": "guest"}
+
+        result = jwt_service.extract_roles(claims)
+        # Convert to set for comparison since order doesn't matter
+        assert set(result) == {"admin", "user", "guest"}
+
+    def test_extract_empty_claims(self):
+        """Should handle missing or empty claims gracefully."""
+        claims = {}
+
+        assert jwt_service.extract_uid(claims) == "None|None"
+        assert jwt_service.extract_scopes(claims) == set()
+        assert jwt_service.extract_roles(claims) == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_jwks_success(self, valid_jwks, oidc_provider_config):
+        """Should fetch and cache JWKS successfully."""
+        with patch("httpx.AsyncClient") as mock_client:
+            mock_response = Mock()
+            mock_response.json.return_value = valid_jwks
+            mock_response.raise_for_status = Mock()
+
+            # Only the .get() call is async
+            mock_client.return_value.__aenter__.return_value.get = AsyncMock(
+                return_value=mock_response
+            )
+
+            result = await jwt_service.fetch_jwks(oidc_provider_config)
+
+            assert result == valid_jwks
+            # Verify the correct URL was called
+            mock_client.return_value.__aenter__.return_value.get.assert_called_once_with(
+                "https://test.issuer/.well-known/jwks.json"
+            )
+
+    @pytest.mark.asyncio
+    async def test_fetch_jwks_uses_cache(self, valid_jwks, oidc_provider_config):
+        """Should return cached JWKS without making HTTP request."""
+        cache_key = oidc_provider_config.jwks_uri
+        jwt_service._JWKS_CACHE[cache_key] = valid_jwks
+
+        # No HTTP client mock - should not be called
+        result = await jwt_service.fetch_jwks(oidc_provider_config)
+
+        assert result == valid_jwks
+
+    @pytest.mark.asyncio
+    async def test_verify_valid_jwt(self, valid_jwks, oidc_provider_config):
+        """Should verify valid JWT successfully."""
+        # Create test config with test provider
+        test_config = ApplicationConfig()
+        test_config.oidc.providers = {"test": oidc_provider_config}
+        test_config.jwt.allowed_algorithms = ["HS256"]
+        test_config.jwt.audiences = ["api://test"]
+        test_config.jwt.clock_skew = 10
+
+        with with_context(config_override=test_config):
+            # Setup JWKS cache
+            cache_key = oidc_provider_config.jwks_uri
+            jwt_service._JWKS_CACHE[cache_key] = valid_jwks
+
+            # Create valid token
+            token = encode_token(
+                issuer="https://test.issuer",
+                audience="api://test",
+                key=b"test-secret-key",
+                kid="test-key",
+                extra_claims={"sub": "user-123"},
+            )
+
+            result = await jwt_service.verify_jwt(token)
+
+            assert result["iss"] == "https://test.issuer"
+            assert result["aud"] == "api://test"
+            assert result["sub"] == "user-123"
+
+    @pytest.mark.asyncio
+    async def test_verify_jwt_wrong_audience(self, valid_jwks, oidc_provider_config):
+        """Should reject JWT with wrong audience."""
+        # Create test config with test provider
+        test_config = ApplicationConfig()
+        test_config.oidc.providers = {"test": oidc_provider_config}
+        test_config.jwt.allowed_algorithms = ["HS256"]
+        test_config.jwt.audiences = ["api://test"]
+        test_config.jwt.clock_skew = 10
+
+        with with_context(config_override=test_config):
+            # Setup JWKS cache
+            cache_key = oidc_provider_config.jwks_uri
+            jwt_service._JWKS_CACHE[cache_key] = valid_jwks
+
+            token = encode_token(
+                issuer="https://test.issuer",
+                audience="api://wrong",  # Wrong audience
+                key=b"test-secret-key",
+                kid="test-key",
+                extra_claims={"sub": "user-123"},
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await jwt_service.verify_jwt(token)
+
+            assert exc_info.value.status_code == 401

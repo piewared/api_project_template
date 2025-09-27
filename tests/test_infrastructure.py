@@ -22,14 +22,14 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
+from src.api.http.deps import require_role, require_scope
+from src.api.http.middleware.limiter import DefaultLocalRateLimiter
 from src.runtime.config import (
     ApplicationConfig,
     get_config,
     with_context,
 )
 from src.runtime.settings import EnvironmentVariables
-from src.api.http.deps import require_scope, require_role
-from src.api.http.middleware.limiter import DefaultLocalRateLimiter
 
 
 class TestEnvironmentSettings:

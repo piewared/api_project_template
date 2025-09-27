@@ -16,17 +16,10 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
-# Create and set permissions for keycloak-data directory
-echo "📁 Setting up keycloak data directory..."
-mkdir -p "$DEV_DIR/keycloak-data"
-# Set ownership to current user
-chown -R $(id -u):$(id -g) "$DEV_DIR/keycloak-data"
-chmod -R 755 "$DEV_DIR/keycloak-data"
-
-# Start Keycloak
-echo "📦 Starting Keycloak container..."
+# Start development services
+echo "📦 Starting development services..."
 cd "$DEV_DIR"
-docker-compose up -d keycloak
+docker-compose up -d
 
 # Wait for Keycloak to be ready
 echo "⏳ Waiting for Keycloak to be ready..."
@@ -52,9 +45,13 @@ python3 "$DEV_DIR/setup_keycloak.py"
 echo ""
 echo "🎉 Development environment ready!"
 echo ""
-echo "Keycloak Admin Console: http://localhost:8080"
-echo "  Username: admin"
-echo "  Password: admin"
+echo "Services:"
+echo "  Keycloak Admin: http://localhost:8080 (admin/admin)"
+echo "  PostgreSQL: localhost:5432 (devuser/devpass)"
+echo ""
+echo "Databases:"
+echo "  Development: postgresql://devuser:devpass@localhost:5432/devdb"
+echo "  Test: postgresql://devuser:devpass@localhost:5432/testdb"
 echo ""
 echo "Test Realm: test-realm"
 echo "Test Client: test-client"
@@ -63,5 +60,5 @@ echo "  - testuser1@example.com / password123"
 echo "  - testuser2@example.com / password123"
 echo ""
 echo "To stop the environment:"
-echo "  cd dev && docker-compose down"
+echo "  cd dev_env && docker-compose down"
 echo ""

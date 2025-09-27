@@ -15,12 +15,34 @@ cd "$DEV_DIR"
 echo "🛑 Stopping containers..."
 docker-compose down
 
+#!/bin/bash
+
+# Development environment cleanup script
+# This script stops and removes containers and optionally removes data volumes
+
+set -e
+
+DEV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "🧹 Cleaning up development environment..."
+
+cd "$DEV_DIR"
+
+# Stop and remove containers
+echo "🛑 Stopping containers..."
+docker-compose down
+
 # Remove volumes (optional)
 if [ "$1" = "--remove-data" ]; then
-    echo "🗑️  Removing persistent data..."
+    echo "🗑️  Removing persistent data volumes..."
     docker-compose down -v
-    rm -rf keycloak-data/
+    docker volume rm dev-env_keycloak_data dev-env_postgres_data 2>/dev/null || true
 fi
+
+echo "✅ Development environment cleaned up!"
+echo ""
+echo "To restart the environment:"
+echo "  ./setup_dev.sh"
 
 echo "✅ Development environment cleaned up!"
 echo ""

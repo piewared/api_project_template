@@ -1,28 +1,99 @@
 # Development Environment
 
-This package contains utilities and scripts for setting up a local development environment with OIDC services.
+This directory contains the development environment setup with separate services for authentication and database.
+
+## Structure
+
+```
+dev_env/
+├── docker-compose.yml       # Main orchestration file
+├── setup_dev.sh            # Environment setup script
+├── cleanup_dev.sh          # Environment cleanup script
+├── keycloak/               # Keycloak OIDC service
+│   ├── docker-compose.yml
+│   ├── keycloak-data/      # Persistent data
+│   └── README.md
+└── postgres/               # PostgreSQL database service
+    ├── docker-compose.yml
+    ├── init/               # DB initialization scripts
+    └── README.md
+```
 
 ## Quick Start
 
 1. **Start the development environment:**
    ```bash
-   ./dev/setup_dev.sh
+   ./setup_dev.sh
    ```
 
-2. **Access Keycloak Admin Console:**
-   - URL: http://localhost:8080
-   - Username: `admin`
-   - Password: `admin`
+2. **Access services:**
+   - **Keycloak Admin**: http://localhost:8080 (admin/admin)
+   - **PostgreSQL**: localhost:5432 (devuser/devpass)
 
 3. **Stop the development environment:**
    ```bash
-   ./dev/cleanup_dev.sh
+   ./cleanup_dev.sh
    ```
 
 4. **Stop and remove all data:**
    ```bash
-   ./dev/cleanup_dev.sh --remove-data
+   ./cleanup_dev.sh --remove-data
    ```
+
+## Services
+
+### Keycloak (Authentication)
+- **Port**: 8080
+- **Admin Console**: http://localhost:8080
+- **Credentials**: admin/admin
+- **Data**: Stored in Docker named volume `keycloak_data`
+
+### PostgreSQL (Database)  
+- **Port**: 5432
+- **Host**: localhost
+- **Databases**: `devdb` (main), `testdb` (testing)
+- **Credentials**: devuser/devpass
+- **Connection**: `postgresql://devuser:devpass@localhost:5432/devdb`
+- **Data**: Stored in Docker named volume `postgres_data`
+
+## Data Persistence Strategy
+
+This development environment uses **Docker named volumes** for data persistence:
+
+### Why Named Volumes?
+- ✅ **Platform agnostic**: Works consistently across Linux, macOS, Windows
+- ✅ **Git-safe**: No risk of accidentally committing database files
+- ✅ **Docker-managed**: Automatic permission handling and optimization
+- ✅ **Isolated**: Data survives container recreation and updates
+
+### Managing Data
+
+**View volumes:**
+```bash
+docker volume ls | grep dev-env
+```
+
+**Backup data:**
+```bash
+# Backup PostgreSQL
+docker run --rm -v dev-env_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres-backup.tar.gz -C /data .
+
+# Backup Keycloak  
+docker run --rm -v dev-env_keycloak_data:/data -v $(pwd):/backup alpine tar czf /backup/keycloak-backup.tar.gz -C /data .
+```
+
+**Restore data:**
+```bash
+# Restore PostgreSQL (stop services first)
+docker-compose down
+docker run --rm -v dev-env_postgres_data:/data -v $(pwd):/backup alpine tar xzf /backup/postgres-backup.tar.gz -C /data
+docker-compose up -d
+```
+
+**Complete reset:**
+```bash
+./cleanup_dev.sh --remove-data  # Removes all data volumes
+```
 
 ## What Gets Configured
 
@@ -46,11 +117,20 @@ The setup script automatically creates:
 - **testuser1@example.com** / password: `password123`
 - **testuser2@example.com** / password: `password123`
 
+### PostgreSQL Databases
+- **devdb** - Main development database
+- **testdb** - Testing database  
+- **Initialized with**: Basic schema and permissions
+
 ## Environment Configuration
 
-Add these variables to your `.env` file to connect your application to the local Keycloak:
+Add these variables to your `.env` file:
 
 ```bash
+# Database Configuration
+DATABASE_URL=postgresql://devuser:devpass@localhost:5432/devdb
+TEST_DATABASE_URL=postgresql://devuser:devpass@localhost:5432/testdb
+
 # Keycloak OIDC Configuration
 OIDC_DEFAULT_CLIENT_ID=test-client
 OIDC_DEFAULT_CLIENT_SECRET=test-client-secret

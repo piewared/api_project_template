@@ -3,16 +3,16 @@
 This module combines and consolidates tests for:
 - Settings and environment variable handling
 - Context manager and configuration management
-- Dependencies and dependency injection
 - Rate limiting functionality
 - Application startup and infrastructure components
 
 Replaces:
 - tests/unit/infrastructure/test_settings.py (most critical parts)
 - tests/unit/runtime/test_context_manager.py (key functionality)
-- tests/unit/infrastructure/test_deps.py
 - tests/unit/infrastructure/test_rate_limiter.py (core functionality)
 - tests/integration/test_application_startup.py
+
+Note: Authentication dependency tests (require_scope, require_role) are now in test_authentication.py
 """
 
 import os
@@ -22,7 +22,6 @@ import pytest
 from fastapi import HTTPException, Request
 from fastapi.testclient import TestClient
 
-from src.api.http.deps import require_role, require_scope
 from src.api.http.middleware.limiter import DefaultLocalRateLimiter
 from src.runtime.config import (
     ApplicationConfig,
@@ -107,61 +106,6 @@ class TestConfigurationManagement:
 
             # Should revert to first override
             assert get_config().environment == "test"
-
-
-class TestAuthenticationDependencies:
-    """Test FastAPI authentication dependencies."""
-
-    def create_mock_request(self, scopes: list[str] | None = None, roles: list[str] | None = None) -> Request:
-        """Create mock request with auth context."""
-        scopes = scopes or []
-        roles = roles or []
-
-        request = Mock(spec=Request)
-        request.state = Mock()
-        request.state.scopes = set(scopes)
-        request.state.roles = set(roles)
-        return request
-
-    @pytest.mark.asyncio
-    async def test_require_scope_success(self):
-        """Test scope requirement with valid scope."""
-        request = self.create_mock_request(scopes=["read", "write"])
-
-        # Should not raise for valid scope
-        await require_scope("read")(request)
-        await require_scope("write")(request)
-
-    @pytest.mark.asyncio
-    async def test_require_scope_failure(self):
-        """Test scope requirement with missing scope."""
-        request = self.create_mock_request(scopes=["read"])
-
-        with pytest.raises(HTTPException) as exc_info:
-            await require_scope("admin")(request)
-
-        assert exc_info.value.status_code == 403
-        assert "admin" in str(exc_info.value.detail)
-
-    @pytest.mark.asyncio
-    async def test_require_role_success(self):
-        """Test role requirement with valid role."""
-        request = self.create_mock_request(roles=["user", "admin"])
-
-        # Should not raise for valid roles
-        await require_role("user")(request)
-        await require_role("admin")(request)
-
-    @pytest.mark.asyncio
-    async def test_require_role_failure(self):
-        """Test role requirement with missing role."""
-        request = self.create_mock_request(roles=["user"])
-
-        with pytest.raises(HTTPException) as exc_info:
-            await require_role("admin")(request)
-
-        assert exc_info.value.status_code == 403
-        assert "admin" in str(exc_info.value.detail)
 
 
 class TestRateLimiting:

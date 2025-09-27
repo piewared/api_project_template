@@ -6,13 +6,22 @@ environment, including starting services, managing containers, and entities.
 """
 
 import subprocess
-import time
 from pathlib import Path
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+
+# Import development utilities
+from .dev_utils import (
+    check_docker_running,
+    check_container_running,
+    check_keycloak_status,
+    check_postgres_status,
+    wait_for_keycloak,
+    run_keycloak_setup
+)
 
 # Initialize Rich console for colored output
 console = Console()
@@ -70,45 +79,6 @@ def run_command(
         raise typer.Exit(1) from e
 
 
-def check_docker() -> bool:
-    """Check if Docker is running."""
-    try:
-        result = run_command(["docker", "info"], capture_output=True, check=False)
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
-
-
-def check_keycloak_running() -> bool:
-    """Check if Keycloak container is running."""
-    try:
-        result = run_command(
-            ["docker", "ps", "--filter", "name=keycloak", "--filter", "status=running", "--quiet"],
-            capture_output=True,
-            check=False
-        )
-        return bool(result.stdout.strip())
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-
-
-def wait_for_keycloak(timeout: int = 60) -> bool:
-    """Wait for Keycloak to be ready."""
-    import requests
-
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        try:
-            response = requests.get("http://localhost:8080/health", timeout=5)
-            if response.status_code == 200:
-                return True
-        except requests.exceptions.RequestException:
-            pass
-        time.sleep(2)
-
-    return False
-
-
 @dev_app.command(name="start-server")
 def start_dev_server(
     host: str = typer.Option("0.0.0.0", help="Host to bind the server to"),
@@ -164,6 +134,7 @@ def setup_dev(
     
     This command starts Docker containers for development services:
     - Keycloak (OIDC provider for authentication testing)
+    - PostgreSQL (Database for development and testing)
     
     The services will be configured with test data and ready for development.
     """
@@ -173,15 +144,18 @@ def setup_dev(
     ))
     
     # Check Docker
-    if not check_docker():
+    if not check_docker_running():
         console.print("[red]❌ Docker is not running. Please start Docker and try again.[/red]")
         raise typer.Exit(1)
     
     console.print("[green]✅ Docker is running[/green]")
     
-    # Check if Keycloak is already running
-    if check_keycloak_running() and not force:
-        console.print("[yellow]⚠️  Keycloak is already running. Use --force to restart.[/yellow]")
+    # Check if services are already running
+    keycloak_running = check_container_running("keycloak")
+    postgres_running = check_container_running("postgres")
+    
+    if (keycloak_running or postgres_running) and not force:
+        console.print("[yellow]⚠️  Services are already running. Use --force to restart.[/yellow]")
         return
     
     dev_dir = get_dev_dir()
@@ -193,38 +167,52 @@ def setup_dev(
         transient=True
     ) as progress:
         
-        # Setup keycloak data directory
-        task1 = progress.add_task("Setting up Keycloak data directory...", total=1)
-        keycloak_data_dir = dev_dir / "keycloak-data"
-        keycloak_data_dir.mkdir(exist_ok=True)
-        
-        # Set permissions
-        try:
-            import stat
-            keycloak_data_dir.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
-        except (OSError, ImportError):
-            # Permissions might not work on all systems, but that's okay
-            pass
-        
-        progress.update(task1, completed=1)
-        
         # Start containers
-        task2 = progress.add_task("Starting Docker containers...", total=1)
+        task1 = progress.add_task("Starting Docker containers...", total=1)
         
-        if force and check_keycloak_running():
+        if force and (keycloak_running or postgres_running):
             console.print("[yellow]Stopping existing containers...[/yellow]")
             run_command(["docker-compose", "down"], cwd=dev_dir)
         
         run_command(["docker-compose", "up", "-d"], cwd=dev_dir)
-        progress.update(task2, completed=1)
+        progress.update(task1, completed=1)
         
         if not no_wait:
+            # Wait for PostgreSQL to be ready first
+            task2 = progress.add_task("Waiting for PostgreSQL to be ready...", total=1)
+            
+            # Wait with timeout for PostgreSQL
+            import time
+            postgres_ready = False
+            max_postgres_wait = 30
+            postgres_wait_time = 0
+            
+            while postgres_wait_time < max_postgres_wait and not postgres_ready:
+                postgres_ready = check_postgres_status()
+                if not postgres_ready:
+                    time.sleep(2)
+                    postgres_wait_time += 2
+            
+            if postgres_ready:
+                progress.update(task2, completed=1)
+                console.print("[green]✅ PostgreSQL is ready[/green]")
+            else:
+                console.print("[yellow]⚠️  PostgreSQL may not be fully ready yet[/yellow]")
+            
             # Wait for Keycloak to be ready
             task3 = progress.add_task("Waiting for Keycloak to be ready...", total=1)
             
             if wait_for_keycloak():
                 progress.update(task3, completed=1)
                 console.print("[green]✅ Keycloak is ready[/green]")
+                
+                # Run Keycloak setup automatically
+                task4 = progress.add_task("Configuring Keycloak...", total=1)
+                if run_keycloak_setup():
+                    progress.update(task4, completed=1)
+                    console.print("[green]✅ Keycloak configured[/green]")
+                else:
+                    console.print("[yellow]⚠️  Keycloak setup failed - you may need to run it manually[/yellow]")
             else:
                 console.print("[red]❌ Keycloak failed to start within timeout[/red]")
                 raise typer.Exit(1)
@@ -234,9 +222,12 @@ def setup_dev(
     console.print("  • Keycloak: http://localhost:8080")
     console.print("    - Admin console: http://localhost:8080/admin")
     console.print("    - Username: admin, Password: admin")
+    console.print("  • PostgreSQL: localhost:5432")
+    console.print("    - Database: devdb (devuser/devpass)")
+    console.print("    - Test DB: testdb (devuser/devpass)")
     console.print("  • Test realm: http://localhost:8080/realms/test-realm")
     
-    console.print("\n[dim]Use 'api-dev start-dev-server' to start the API server[/dim]")
+    console.print("\n[dim]Use 'api-dev dev start-server' to start the API server[/dim]")
 
 
 # Entity Management Commands
@@ -391,7 +382,7 @@ if __name__ == "__main__":
     app()
 
 
-@app.command()
+@dev_app.command()
 def status() -> None:
     """
     📊 Check the status of development services.
@@ -404,7 +395,7 @@ def status() -> None:
     ))
     
     # Check Docker
-    docker_running = check_docker()
+    docker_running = check_docker_running()
     docker_status = "[green]✅ Running[/green]" if docker_running else "[red]❌ Not running[/red]"
     console.print(f"Docker: {docker_status}")
     
@@ -413,7 +404,7 @@ def status() -> None:
         return
     
     # Check Keycloak
-    keycloak_running = check_keycloak_running()
+    keycloak_running = check_container_running("keycloak")
     keycloak_status = "[green]✅ Running[/green]" if keycloak_running else "[red]❌ Not running[/red]"
     console.print(f"Keycloak: {keycloak_status}")
     
@@ -421,16 +412,55 @@ def status() -> None:
         # Check if Keycloak is responding
         try:
             import requests
-            response = requests.get("http://localhost:8080/health", timeout=5)
+            response = requests.get("http://localhost:8080/realms/master", timeout=5)
             if response.status_code == 200:
                 console.print("  [green]└─ Health check: ✅ OK[/green]")
+                
+                # Check if configured
+                try:
+                    response = requests.get("http://localhost:8080/realms/test-realm", timeout=5)
+                    if response.status_code == 200:
+                        console.print("  [green]└─ Configuration: ✅ test-realm exists[/green]")
+                    else:
+                        console.print("  [yellow]└─ Configuration: ⚠️  test-realm not found[/yellow]")
+                except Exception:
+                    console.print("  [yellow]└─ Configuration: ⚠️  Unable to check[/yellow]")
             else:
                 console.print("  [yellow]└─ Health check: ⚠️  Not responding[/yellow]")
         except Exception:
             console.print("  [red]└─ Health check: ❌ Failed[/red]")
+    
+    # Check PostgreSQL
+    postgres_running = check_container_running("postgres")
+    postgres_status = "[green]✅ Running[/green]" if postgres_running else "[red]❌ Not running[/red]"
+    console.print(f"PostgreSQL: {postgres_status}")
+    
+    if postgres_running:
+        # Check PostgreSQL health
+        try:
+            result = subprocess.run(
+                ["docker", "exec"] + 
+                [name for name in subprocess.run(
+                    ["docker", "ps", "--filter", "name=postgres", 
+                     "--filter", "status=running", "--format", "{{.Names}}"],
+                    capture_output=True, check=False, text=True
+                ).stdout.strip().split('\n') if name] +
+                ["pg_isready", "-U", "devuser", "-d", "devdb"],
+                capture_output=True,
+                check=False,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                console.print("  [green]└─ Health check: ✅ Accepting connections[/green]")
+                console.print("  [green]└─ Databases: devdb, testdb[/green]")
+            else:
+                console.print("  [yellow]└─ Health check: ⚠️  Not ready[/yellow]")
+        except Exception:
+            console.print("  [red]└─ Health check: ❌ Failed[/red]")
 
 
-@app.command()
+@dev_app.command()
 def stop() -> None:
     """
     ⏹️  Stop all development services.
@@ -450,7 +480,7 @@ def stop() -> None:
     console.print("[green]✅ All development services stopped[/green]")
 
 
-@app.command()
+@dev_app.command()
 def logs(
     service: str = typer.Argument("keycloak", help="Service to show logs for"),
     follow: bool = typer.Option(False, "-f", "--follow", help="Follow log output"),

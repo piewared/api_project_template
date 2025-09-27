@@ -11,6 +11,12 @@ services:
       file: postgres/docker-compose.yml
       service: postgres
 
+volumes:
+  keycloak_data:
+    driver: local
+  postgres_data:
+    driver: local
+
 networks:
   dev-network:
     name: dev-network

@@ -5,16 +5,131 @@ import argparse
 import json
 import subprocess
 import sys
-from urllib.parse import urljoin
 
 import requests
+
+
+def check_docker_running() -> bool:
+    """Check if Docker is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "info"], 
+            capture_output=True, 
+            check=False, 
+            text=True
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def check_container_running(container_name: str) -> bool:
+    """Check if a specific container is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "ps", "--filter", f"name={container_name}", 
+             "--filter", "status=running", "--quiet"],
+            capture_output=True,
+            check=False,
+            text=True
+        )
+        return bool(result.stdout.strip())
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def check_postgres_status() -> bool:
+    """Check if PostgreSQL is running and accessible."""
+    if not check_container_running("postgres"):
+        print("❌ PostgreSQL container is not running")
+        return False
+    
+    try:
+        # Get the container name
+        result = subprocess.run(
+            ["docker", "ps", "--filter", "name=postgres", 
+             "--filter", "status=running", "--format", "{{.Names}}"],
+            capture_output=True,
+            check=False,
+            text=True
+        )
+        
+        container_names = result.stdout.strip().split('\n')
+        if not container_names or not container_names[0]:
+            print("❌ Could not find PostgreSQL container")
+            return False
+        
+        container_name = container_names[0]
+        
+        # Use docker exec to run pg_isready inside the container
+        result = subprocess.run(
+            ["docker", "exec", container_name, "pg_isready", "-U", "devuser", "-d", "devdb"],
+            capture_output=True,
+            check=False,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            print("✅ PostgreSQL is running and accepting connections")
+            return True
+        else:
+            print("⚠️  PostgreSQL container is running but not ready")
+            return False
+            
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("❌ Failed to check PostgreSQL status")
+        return False
+
+
+def run_keycloak_setup() -> bool:
+    """Run Keycloak setup script after Keycloak is ready."""
+    if not check_keycloak_status():
+        print("❌ Keycloak is not ready for configuration")
+        return False
+    
+    try:
+        print("⚙️  Configuring Keycloak realm and client...")
+        result = subprocess.run(
+            ["python", "-m", "src.dev.setup_keycloak"],
+            check=False,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            print("✅ Keycloak configuration completed successfully")
+            return True
+        else:
+            print(f"❌ Keycloak configuration failed: {result.stderr}")
+            return False
+            
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"❌ Failed to run Keycloak setup: {e}")
+        return False
+
+
+def wait_for_keycloak(timeout: int = 120) -> bool:
+    """Wait for Keycloak to be ready."""
+    import time
+    
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            response = requests.get("http://localhost:8080/realms/master", timeout=5)
+            if response.status_code == 200:
+                return True
+        except requests.exceptions.RequestException:
+            pass
+        time.sleep(2)
+    
+    return False
 
 
 def check_keycloak_status():
     """Check if Keycloak is running and configured."""
     try:
-        # Check if Keycloak is running
-        response = requests.get("http://localhost:8080/health", timeout=5)
+        # Check if Keycloak is running - use realms/master endpoint
+        response = requests.get("http://localhost:8080/realms/master", timeout=5)
         if response.status_code != 200:
             print("❌ Keycloak is not responding")
             return False
@@ -33,7 +148,7 @@ def check_keycloak_status():
         return False
 
 
-def get_access_token(username: str, password: str, realm: str = "test-realm") -> str:
+def get_access_token(username: str, password: str, realm: str = "test-realm") -> str | None:
     """Get access token for a test user."""
     token_url = f"http://localhost:8080/realms/{realm}/protocol/openid-connect/token"
 

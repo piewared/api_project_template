@@ -47,7 +47,7 @@ dev = [
 
 [project.scripts]
 init-db = "app.runtime.init_db:init_db"
-api-dev = "dev.cli:main"
+cli = "dev.cli:main"
 
 [tool.ruff]
 line-length = 88

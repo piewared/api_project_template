@@ -491,25 +491,16 @@ def status() -> None:
     console.print(f"Keycloak: {keycloak_status}")
 
     if keycloak_running:
-        # Check Keycloak health endpoint
+        # Check Keycloak health using master realm endpoint
         try:
-            response = requests.get("http://localhost:8080/auth/health", timeout=5)
+            response = requests.get("http://localhost:8080/realms/master", timeout=5)
             if response.status_code == 200:
                 console.print("  [green]└─ Health: ✅ Ready[/green]")
-                console.print("  [green]└─ Admin UI: http://localhost:8080/auth/admin[/green]")
+                console.print("  [green]└─ Admin UI: http://localhost:8080/admin/master/console/[/green]")
             else:
                 console.print("  [yellow]└─ Health: ⚠️  Not ready[/yellow]")
         except requests.exceptions.RequestException:
-            try:
-                # Try alternate endpoint
-                response = requests.get("http://localhost:8080/health", timeout=5)
-                if response.status_code == 200:
-                    console.print("  [green]└─ Health: ✅ Ready[/green]")
-                    console.print("  [green]└─ Admin UI: http://localhost:8080/admin[/green]")
-                else:
-                    console.print("  [yellow]└─ Health: ⚠️  Not ready[/yellow]")
-            except requests.exceptions.RequestException:
-                console.print("  [yellow]└─ Health: ⚠️  Cannot reach health endpoint[/yellow]")
+            console.print("  [yellow]└─ Health: ⚠️  Cannot reach Keycloak[/yellow]")
 
     # Check PostgreSQL
     postgres_running = check_container_running("dev_env_postgres_1")

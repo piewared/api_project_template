@@ -1,58 +1,59 @@
-version: "3.8"
-
+version: "3.5"
 services:
-  temporal-postgresql:
-    image: postgres:13
+  postgresql:
+    container_name: api-template-temporal-postgresql
     environment:
       POSTGRES_PASSWORD: temporal
       POSTGRES_USER: temporal
-      POSTGRES_DB: temporal
-    volumes:
-      - temporal_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U temporal"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    image: postgres:16
     networks:
       - dev-network
-
-  temporal-server:
-    image: temporalio/auto-setup:1.24.2
-    ports:
-      - "7233:7233"
+    expose:
+      - 5432
+    volumes:
+      - api-template-temporal-postgres-data:/var/lib/postgresql/data
+  temporal:
+    container_name: api-template-temporal
+    depends_on:
+      - postgresql
     environment:
       - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=temporal
       - POSTGRES_PWD=temporal
-      - POSTGRES_SEEDS=temporal-postgresql
-    healthcheck:
-      test: ["CMD", "tctl", "--address", "temporal-server:7233", "cluster", "health"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      - POSTGRES_SEEDS=postgresql
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    image: temporalio/auto-setup:1.28.1
     networks:
       - dev-network
-
-  temporal-web:
-    image: temporalio/ui:2.28.0
     ports:
-      - "8088:8088"
+      - 7233:7233
+  temporal-ui:
+    container_name: api-template-temporal-ui
+    depends_on:
+      - temporal
     environment:
-      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    image: temporalio/ui:2.34.0
     networks:
       - dev-network
+    ports:
+      - 8081:8080
 
 volumes:
-  temporal_postgres_data:
+  api-template-temporal-postgres-data:
     name: api-template-temporal-postgres-data
-  temporal_data:
-    name: api-template-temporal-data
 
 networks:
   dev-network:
     external: true
-    name: dev-network
+
+volumes:
+  api-template-temporal-postgres-data:
+    name: api-template-temporal-postgres-data
+
+networks:
+  dev-network:
+    external: true

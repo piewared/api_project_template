@@ -6,6 +6,7 @@ environment, including starting services, managing containers, and entities.
 """
 
 import subprocess
+import requests
 from pathlib import Path
 
 import typer
@@ -458,10 +459,6 @@ def entity_list() -> None:
     console.print(f"\n[dim]Total: {len(entities)} entities[/dim]")
 
 
-if __name__ == "__main__":
-    app()
-
-
 @dev_app.command()
 def status() -> None:
     """
@@ -483,79 +480,70 @@ def status() -> None:
     console.print(f"Docker: {docker_status}")
 
     if not docker_running:
-        console.print("[yellow]Cannot check services without Docker[/yellow]")
+        console.print("[yellow]⚠️  Docker is not running. Please start Docker first.[/yellow]")
         return
 
     # Check Keycloak
-    keycloak_running = check_container_running("keycloak")
+    keycloak_running = check_container_running("dev_env_keycloak_1")
     keycloak_status = (
         "[green]✅ Running[/green]" if keycloak_running else "[red]❌ Not running[/red]"
     )
     console.print(f"Keycloak: {keycloak_status}")
 
     if keycloak_running:
-        # Check if Keycloak is responding
+        # Check Keycloak health endpoint
         try:
-            import requests
-
-            response = requests.get("http://localhost:8080/realms/master", timeout=5)
+            response = requests.get("http://localhost:8080/auth/health", timeout=5)
             if response.status_code == 200:
-                console.print("  [green]└─ Health check: ✅ OK[/green]")
-
-                # Check if configured
-                try:
-                    response = requests.get(
-                        "http://localhost:8080/realms/test-realm", timeout=5
-                    )
-                    if response.status_code == 200:
-                        console.print(
-                            "  [green]└─ Configuration: ✅ test-realm exists[/green]"
-                        )
-                    else:
-                        console.print(
-                            "  [yellow]└─ Configuration: ⚠️  test-realm not found[/yellow]"
-                        )
-                except Exception:
-                    console.print(
-                        "  [yellow]└─ Configuration: ⚠️  Unable to check[/yellow]"
-                    )
+                console.print("  [green]└─ Health: ✅ Ready[/green]")
+                console.print("  [green]└─ Admin UI: http://localhost:8080/auth/admin[/green]")
             else:
-                console.print("  [yellow]└─ Health check: ⚠️  Not responding[/yellow]")
-        except Exception:
-            console.print("  [red]└─ Health check: ❌ Failed[/red]")
+                console.print("  [yellow]└─ Health: ⚠️  Not ready[/yellow]")
+        except requests.exceptions.RequestException:
+            try:
+                # Try alternate endpoint
+                response = requests.get("http://localhost:8080/health", timeout=5)
+                if response.status_code == 200:
+                    console.print("  [green]└─ Health: ✅ Ready[/green]")
+                    console.print("  [green]└─ Admin UI: http://localhost:8080/admin[/green]")
+                else:
+                    console.print("  [yellow]└─ Health: ⚠️  Not ready[/yellow]")
+            except requests.exceptions.RequestException:
+                console.print("  [yellow]└─ Health: ⚠️  Cannot reach health endpoint[/yellow]")
 
     # Check PostgreSQL
-    postgres_running = check_container_running("postgres")
+    postgres_running = check_container_running("dev_env_postgres_1")
     postgres_status = (
         "[green]✅ Running[/green]" if postgres_running else "[red]❌ Not running[/red]"
     )
     console.print(f"PostgreSQL: {postgres_status}")
 
     if postgres_running:
-        # Check PostgreSQL health using the utility function
+        # Check PostgreSQL connection using utility function
         if check_postgres_status():
-            console.print("  [green]└─ Health check: ✅ Accepting connections[/green]")
+            console.print("  [green]└─ Connection: ✅ Ready[/green]")
             console.print("  [green]└─ Databases: devdb, testdb[/green]")
         else:
-            console.print("  [yellow]└─ Health check: ⚠️  Not ready[/yellow]")
+            console.print("  [yellow]└─ Connection: ⚠️  Not ready[/yellow]")
 
     # Check Redis
-    redis_running = check_container_running("redis")
+    redis_running = check_container_running("dev_env_redis_1")
     redis_status = (
         "[green]✅ Running[/green]" if redis_running else "[red]❌ Not running[/red]"
     )
     console.print(f"Redis: {redis_status}")
 
     if redis_running:
-        # Check Redis health using the utility function
+        # Check Redis connection using utility function
         if check_redis_status():
-            console.print("  [green]└─ Health check: ✅ Accepting connections[/green]")
+            console.print("  [green]└─ Connection: ✅ Ready[/green]")
+            console.print("  [green]└─ Server: localhost:6379[/green]")
         else:
-            console.print("  [yellow]└─ Health check: ⚠️  Not ready[/yellow]")
+            console.print("  [yellow]└─ Connection: ⚠️  Not ready[/yellow]")
 
     # Check Temporal
-    temporal_server_running = check_container_running("temporal-server")
-    temporal_web_running = check_container_running("temporal-web")
+    temporal_server_running = check_container_running("temporal_temporal-server_1")
+    temporal_web_running = check_container_running("temporal_temporal-web_1")
     temporal_status = (
         "[green]✅ Running[/green]"
         if temporal_server_running
@@ -578,6 +566,9 @@ def status() -> None:
         else:
             console.print("  [yellow]└─ Web UI: ⚠️  Not running[/yellow]")
 
+
+if __name__ == "__main__":
+    app()
 
 @dev_app.command()
 def stop() -> None:

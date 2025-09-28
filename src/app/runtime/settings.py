@@ -39,6 +39,8 @@ class EnvironmentVariables(BaseSettings):
         default="sqlite:///./database.db", validation_alias="DATABASE_URL"
     )
     redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
+    dev_redis_url: str | None = Field(default=None, validation_alias="DEV_REDIS_URL")
+
     base_url: str = Field(default="http://localhost:8000", validation_alias="BASE_URL")
 
     # Security

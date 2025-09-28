@@ -106,8 +106,10 @@ class RateLimitConfig(BaseModel):
     """Rate limiting configuration."""
 
     requests: int = 100  # requests per window
-    window: int = 3600  # 1 hour in seconds
+    window_ms: int = 60000  # 1 minute window
     enabled: bool = True
+    per_endpoint: bool = True
+    per_method: bool = True
 
 
 class SessionConfig(BaseModel):
@@ -187,6 +189,11 @@ class ApplicationConfig(BaseModel):
     session: SessionConfig = Field(default_factory=SessionConfig)
     oidc: OIDCConfig = Field(default_factory=OIDCConfig)
 
+    def __init__(self, **data):
+        super().__init__(**data)
+        #pass # TODO: DELETE
+        #print(self.redis_url)
+
     @classmethod
     def from_environment(
         cls,
@@ -209,22 +216,27 @@ class ApplicationConfig(BaseModel):
 
         # Create base config with environment-specific defaults
         config = ApplicationConfig()
-        if target_env == "production":
-            config.session.secure_cookies = True
-            config.cors.origins = []  # Must be explicitly configured in production
 
-        elif target_env == "development":
-            config.rate_limit.enabled = False  # Disable rate limiting in dev
+        # Read values from the top-level config.yaml if present
+        yaml_path = Path("config.yaml")
+        if yaml_path.exists():
+            try:
+                with yaml_path.open() as f:
+                    yaml_config = yaml.safe_load(f) or {}
+                    config = ApplicationConfig.model_validate(yaml_config.get("config", {}))
+            except (yaml.YAMLError, OSError) as e:
+                logger.warning(f"Could not load config.yaml: {e}")
 
-        elif target_env == "test":
-            config.rate_limit.enabled = False
-            config.session.max_age = 300  # 5 minutes for tests
+
+
+
+        #print(config.redis_url) #TODO: DELETE
 
         # Override main application settings with environment variables
+        config.redis_url = env_vars.redis_url
         config.environment = target_env
         config.log_level = env_vars.log_level
         config.database_url = env_vars.database_url
-        config.redis_url = env_vars.redis_url
         config.base_url = env_vars.base_url
         config.secret_key = env_vars.secret_key
 
@@ -246,6 +258,20 @@ class ApplicationConfig(BaseModel):
 
         # Apply environment variable overrides to specific fields in sub-config models
         config.oidc.global_redirect_uri = env_vars.oidc_redirect_uri
+
+
+                # Apply environment-specific overrides
+        if target_env == "production":
+            config.session.secure_cookies = True
+            config.cors.origins = []  # Must be explicitly configured in production
+        elif target_env == "development":
+            config.rate_limit.enabled = False  # Disable rate limiting in dev
+            config.redis_url = env_vars.dev_redis_url
+
+        elif target_env == "test":
+            config.rate_limit.enabled = False
+            config.redis_url = env_vars.dev_redis_url
+            config.session.max_age = 300  # 5 minutes for tests
 
         # Reset tracking so only explicitly set fields after this point are tracked
         config.__pydantic_fields_set__ = set()
@@ -408,6 +434,26 @@ def _recursive_dict_merge(base_dict: dict, override_dict: dict) -> dict:
     return result
 
 
+def _merge_configs(
+    base_config: ApplicationConfig, override_config: ApplicationConfig
+) -> ApplicationConfig:
+    """Recursively merge two ApplicationConfig instances.
+
+    This function merges the override_config into the base_config, with
+    values from override_config taking precedence. Nested configurations
+    are merged recursively.
+
+    Args:
+        base_config: The base ApplicationConfig instance.
+        override_config: The override ApplicationConfig instance.
+    Returns:
+        ApplicationConfig: The merged ApplicationConfig instance.
+    """
+    base_dict = base_config.model_dump()
+    override_dict = _recursive_model_dump_exclude_unset(override_config)
+    merged_dict = _recursive_dict_merge(base_dict, override_dict)
+    return ApplicationConfig.model_validate(merged_dict)
+
 @contextmanager
 def with_context(config_override: ApplicationConfig | None = None):
     """Context manager for temporarily overriding the application context.
@@ -448,14 +494,7 @@ def with_context(config_override: ApplicationConfig | None = None):
 
     if isinstance(config_override, ApplicationConfig):
         # Get only explicitly set fields recursively using our custom function
-        override_dict = _recursive_model_dump_exclude_unset(config_override)
-
-        # Merge with current config using recursive merge
-        base_dict = current_config.model_dump()
-        merged_dict = _recursive_dict_merge(base_dict, override_dict)
-
-        # Create new ApplicationConfig from merged dict
-        merged_config = ApplicationConfig.model_validate(merged_dict)
+        merged_config = _merge_configs(current_config, config_override)
     else:
         raise ValueError(
             f"config_override must be ApplicationConfig, or None, got {type(config_override)}"
@@ -466,6 +505,15 @@ def with_context(config_override: ApplicationConfig | None = None):
         yield
     finally:
         _app_context.reset(token)
+
+
+def set_config(config: ApplicationConfig) -> None:
+    """Set the current application configuration.
+    This replaces the entire current configuration with the provided one.
+    Args:
+        config: ApplicationConfig instance to set as current.
+    """
+    set_context(replace(get_context(), config=config))
 
 
 def get_config() -> ApplicationConfig:

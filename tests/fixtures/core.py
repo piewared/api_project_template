@@ -83,14 +83,14 @@ def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Genera
     def override_get_session():
         yield session
 
-    async def _no_limit(request: Request) -> None:
+    async def _no_limit(request: Request, response: Response) -> None:
         return None
 
     jwks_data = {"keys": [oct_jwk(_HS_KEY, _KID)]}
 
     # Store original values to restore later
     original_requests = main_config.rate_limit.requests
-    original_window = main_config.rate_limit.window
+    original_window = main_config.rate_limit.window_ms
     original_allowed_algorithms = list(main_config.allowed_algorithms)
     original_audiences = list(main_config.audiences)
     original_uid_claim = main_config.uid_claim
@@ -103,14 +103,12 @@ def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Genera
     import unittest.mock
 
     with unittest.mock.patch.object(jwt_service, "fetch_jwks", fake_fetch_jwks):
-        configure_rate_limiter(
-            use_external=False, local_factory=lambda *_a, **_k: _no_limit
-        )
+        configure_rate_limiter(limiter_factory=lambda *_a, **_k: _no_limit)   # use local no-op limiter
         app.dependency_overrides[get_session] = override_get_session
 
         main_config.environment = "test"
         main_config.rate_limit.requests = 1000
-        main_config.rate_limit.window = 60
+        main_config.rate_limit.window_ms = 60
         main_config.oidc.providers[_ISSUER] = oidc_provider_config
 
         main_config.jwt.allowed_algorithms = ["HS256"]
@@ -123,7 +121,7 @@ def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Genera
         finally:
             app.dependency_overrides.clear()
             main_config.rate_limit.requests = original_requests
-            main_config.rate_limit.window = original_window
+            main_config.rate_limit.window_ms = original_window
             main_config.oidc.providers.pop(_ISSUER)
             main_config.jwt.allowed_algorithms = original_allowed_algorithms
             main_config.jwt.audiences = original_audiences

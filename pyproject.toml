@@ -103,3 +103,4 @@ addopts = "-q --tb=short"
 python_files = "tests.py test_*.py *_tests.py"
 pythonpath = ["."]
 testpaths = ["tests"]
+asyncio_mode = "auto"

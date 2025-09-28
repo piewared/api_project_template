@@ -1,0 +1,7 @@
+config:
+  rate_limiter:
+    requests: 10
+    window_ms: 5000
+    enabled: true
+    per_endpoint: true
+    per_method: true

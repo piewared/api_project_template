@@ -155,18 +155,18 @@ def check_redis_status() -> bool:
 
 def check_temporal_status() -> bool:
     """Check if Temporal server is running and accessible."""
-    if not check_container_running("temporal-server"):
+    if not check_container_running("api-template-temporal"):
         print("❌ Temporal server container is not running")
         return False
 
     try:
-        # Get the container name for temporal server
+        # Get the container name for temporal server (exact match)
         result = subprocess.run(
             [
                 "docker",
                 "ps",
                 "--filter",
-                "name=temporal-server",
+                "name=^/api-template-temporal$",
                 "--filter",
                 "status=running",
                 "--format",
@@ -178,7 +178,7 @@ def check_temporal_status() -> bool:
         )
 
         container_names = result.stdout.strip().split("\n")
-        if not container_names or not container_names[0]:
+        if not container_names or not container_names[0] or container_names[0] == "":
             print("❌ Could not find Temporal server container")
             return False
 
@@ -191,8 +191,6 @@ def check_temporal_status() -> bool:
                 "exec",
                 container_name,
                 "tctl",
-                "--address",
-                "temporal-server:7233",
                 "cluster",
                 "health",
             ],
@@ -201,7 +199,7 @@ def check_temporal_status() -> bool:
             text=True,
         )
 
-        if result.returncode == 0:
+        if result.returncode == 0 and "SERVING" in result.stdout:
             print("✅ Temporal server is running and healthy")
             return True
         else:

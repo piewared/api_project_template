@@ -542,8 +542,8 @@ def status() -> None:
             console.print("  [yellow]└─ Connection: ⚠️  Not ready[/yellow]")
 
     # Check Temporal
-    temporal_server_running = check_container_running("temporal_temporal-server_1")
-    temporal_web_running = check_container_running("temporal_temporal-web_1")
+    temporal_server_running = check_container_running("api-template-temporal")
+    temporal_web_running = check_container_running("api-template-temporal-ui")
     temporal_status = (
         "[green]✅ Running[/green]"
         if temporal_server_running
@@ -561,7 +561,7 @@ def status() -> None:
 
         if temporal_web_running:
             console.print(
-                "  [green]└─ Web UI: ✅ Running (http://localhost:8088)[/green]"
+                "  [green]└─ Web UI: ✅ Running (http://localhost:8081)[/green]"
             )
         else:
             console.print("  [yellow]└─ Web UI: ⚠️  Not running[/yellow]")

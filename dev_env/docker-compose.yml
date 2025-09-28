@@ -17,19 +17,48 @@ services:
       service: redis
 
   temporal-postgresql:
-    extends:
-      file: temporal/docker-compose.yml
-      service: temporal-postgresql
+    container_name: api-template-temporal-postgresql
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_USER: temporal
+    networks:
+      - dev-network
+    expose:
+      - 5432
+    volumes:
+      - temporal_postgres_data:/var/lib/postgresql/data
 
   temporal-server:
-    extends:
-      file: temporal/docker-compose.yml
-      service: temporal-server
+    container_name: api-template-temporal
+    image: temporalio/auto-setup:1.28.1
+    depends_on:
+      - temporal-postgresql
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgresql
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CLI_ADDRESS=temporal-server:7233
+    networks:
+      - dev-network
+    ports:
+      - 7233:7233
 
   temporal-web:
-    extends:
-      file: temporal/docker-compose.yml
-      service: temporal-web
+    container_name: api-template-temporal-ui
+    image: temporalio/ui:2.34.0
+    depends_on:
+      - temporal-server
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    networks:
+      - dev-network
+    ports:
+      - 8081:8080
 
 volumes:
   keycloak_data:

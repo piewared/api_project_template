@@ -72,6 +72,7 @@ class RedisConfig(BaseModel):
 class OIDCProviderConfig(BaseModel):
     """OIDC provider configuration model."""
 
+    openid_configuration_endpoint: str | None = Field(default=None, description="URL to fetch OIDC provider configuration")
     authorization_endpoint: str = Field(description="OIDC authorization endpoint URL")
     token_endpoint: str = Field(description="OIDC token endpoint URL")
     userinfo_endpoint: str | None = Field(default=None, description="OIDC userinfo endpoint URL")

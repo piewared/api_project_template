@@ -170,7 +170,7 @@ def copy_config_files(
     config_files = {
         "pyproject.toml": process_pyproject_toml,
         "README.md": process_readme,
-        "config.yaml": lambda content, **kwargs: content,   # Copy as-is
+        "config.yaml": lambda content, **kwargs: content,  # Copy as-is
         ".env.example": lambda content, **kwargs: content,  # Copy as-is
         ".gitignore": lambda content, **kwargs: content,  # Copy as-is
     }
@@ -506,6 +506,142 @@ def create_virtual_environment():
         print("  pip install -e .")
 
 
+def copy_development_environment():
+    """Copy development environment configuration and setup Keycloak."""
+    project_root = Path(".").absolute()
+
+    # Get the template root directory
+    template_path_str = "{{cookiecutter._template}}"
+
+    # Find the template dev_env directory
+    dev_env_src = None
+    search_paths = []
+
+    # Strategy 1: Check if this is a local template (direct path)
+    if not template_path_str.startswith(("git@", "https://", "http://")):
+        local_template = Path(template_path_str).resolve()
+        if local_template.exists():
+            potential_dev_env = local_template / "dev_env"
+            if potential_dev_env.exists():
+                search_paths.append(potential_dev_env)
+
+    # Strategy 2: Look in parent directories (most common for cookiecutter)
+    current_working_dir = Path(".").absolute()
+    potential_locations = [
+        current_working_dir.parent / "dev_env",
+        current_working_dir.parent.parent / "dev_env",
+        current_working_dir / ".." / "dev_env",
+    ]
+
+    for potential_dev_env in potential_locations:
+        try:
+            resolved_path = potential_dev_env.resolve()
+            if resolved_path.exists() and resolved_path.is_dir():
+                search_paths.append(resolved_path)
+        except (OSError, RuntimeError):
+            continue
+
+    print("🔍 Looking for development environment configuration...")
+
+    # Validate each potential dev_env directory
+    for potential_dev_env in search_paths:
+        if not potential_dev_env.exists():
+            continue
+
+        # Check for required dev environment files
+        required_files = ["keycloak/docker-compose.yml", "setup_dev.sh"]
+        missing_files = [
+            f for f in required_files if not (potential_dev_env / f).exists()
+        ]
+
+        if not missing_files:
+            print(f"   ✅ Found development environment at: {potential_dev_env}")
+            dev_env_src = potential_dev_env
+            break
+
+    if dev_env_src is None:
+        print("⚠️  Development environment configuration not found")
+        print("   You'll need to set up Keycloak manually for OIDC testing")
+        return False
+
+    # Copy development environment to the project
+    dev_env_target = project_root / "dev_env"
+    if dev_env_target.exists():
+        shutil.rmtree(dev_env_target)
+
+    shutil.copytree(dev_env_src, dev_env_target)
+    print("✅ Copied development environment configuration")
+
+    # Also copy the setup_keycloak.py script to make it accessible
+    setup_keycloak_src = dev_env_src.parent / "src" / "dev" / "setup_keycloak.py"
+    if setup_keycloak_src.exists():
+        # Create src/dev directory in generated project if it doesn't exist
+        dev_dir = project_root / "src" / "dev"
+        dev_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(setup_keycloak_src, dev_dir / "setup_keycloak.py")
+        print("✅ Copied Keycloak setup script")
+
+    return True
+
+
+def setup_keycloak_development():
+    """Set up Keycloak for development if the environment configuration exists."""
+    project_root = Path(".").absolute()
+    dev_env_dir = project_root / "dev_env"
+
+    if not dev_env_dir.exists():
+        print("⚠️  Development environment not set up, skipping Keycloak configuration")
+        return
+
+    print("🔐 Setting up Keycloak development environment...")
+
+    try:
+        # Check if Docker is available
+        subprocess.run(["docker", "--version"], check=True, capture_output=True)
+
+        # Run the development environment setup
+        setup_script = dev_env_dir / "setup_dev.sh"
+        if setup_script.exists():
+            # Make the script executable
+            setup_script.chmod(0o755)
+
+            print("🚀 Starting Keycloak and configuring OIDC...")
+            result = subprocess.run(
+                [str(setup_script)],
+                cwd=str(dev_env_dir),
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minute timeout
+            )
+
+            if result.returncode == 0:
+                print("✅ Keycloak development environment ready!")
+                print("   Access Keycloak Admin: http://localhost:8080 (admin/admin)")
+            else:
+                print("⚠️  Keycloak setup completed with warnings:")
+                if result.stdout:
+                    print(result.stdout)
+                if result.stderr:
+                    print(result.stderr)
+
+        else:
+            print("⚠️  Development setup script not found")
+            print("   You can manually run: cd dev_env && ./setup_dev.sh")
+
+    except subprocess.TimeoutExpired:
+        print("⏰ Keycloak setup timed out (this can happen on slower systems)")
+        print("   The setup may still be running in the background")
+        print("   Check with: docker ps")
+
+    except subprocess.CalledProcessError as e:
+        print(f"⚠️  Keycloak setup failed: {e}")
+        print("   You can manually run: cd dev_env && ./setup_dev.sh")
+
+    except FileNotFoundError:
+        print("⚠️  Docker not found. Keycloak setup requires Docker")
+        print("   Install Docker and run: cd dev_env && ./setup_dev.sh")
+
+
 def print_next_steps():
     """Print helpful next steps for the user."""
     project_name = "{{cookiecutter.project_name}}"
@@ -524,6 +660,11 @@ def print_next_steps():
     print("   2. Copy .env.example to .env and configure your settings")
     print("   3. Run 'uv run init-db' to initialize the database")
     print("   4. Start development server: 'uvicorn main:app --reload'")
+
+    print("\n🔐 OIDC/Keycloak Development:")
+    print("   - Keycloak Admin: http://localhost:8080 (admin/admin)")
+    print("   - If Keycloak setup failed, run: cd dev_env && ./setup_dev.sh")
+    print("   - Test users: testuser1/password123, testuser2/password123")
 
     if use_redis:
         print("\n🔧 Redis configuration:")
@@ -576,6 +717,9 @@ def main():
 
         # Set up Python environment
         create_virtual_environment()
+
+        # Copy development environment configuration
+        copy_development_environment()
 
         # Print next steps
         print_next_steps()

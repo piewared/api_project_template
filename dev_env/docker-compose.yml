@@ -6,6 +6,26 @@ services:
       file: keycloak/docker-compose.yml
       service: keycloak
 
+  keycloak-setup:
+    image: python:3.11-slim
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      - KEYCLOAK_URL=http://keycloak:8080
+    volumes:
+      - ../src/dev:/app/src/dev
+      - ./keycloak/setup_script.py:/app/setup_script.py
+    working_dir: /app
+    command: >
+      sh -c "
+        pip install requests &&
+        python setup_script.py
+      "
+    networks:
+      - dev-network
+    restart: "no"
+
   postgres:
     extends:
       file: postgres/docker-compose.yml

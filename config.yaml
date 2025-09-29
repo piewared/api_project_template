@@ -63,6 +63,7 @@ config:
         redirect_uri: "${OIDC_MICROSOFT_REDIRECT_URI:-http://localhost:8000/auth/microsoft/callback}"
       keycloak:
         issuer: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/master}"
+        openid_configuration_endpoint: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/master}/.well-known/openid-configuration"
         client_id: "${OIDC_KEYCLOAK_CLIENT_ID}"
         client_secret: "${OIDC_KEYCLOAK_CLIENT_SECRET}"
         scopes:

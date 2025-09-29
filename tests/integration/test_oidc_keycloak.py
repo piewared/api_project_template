@@ -39,18 +39,15 @@ def keycloak_config():
 @pytest.fixture
 def integration_client(keycloak_config):
     """Test client configured for integration tests with local Keycloak."""
-    with patch("src.app.runtime.config.get_config") as mock_get_config:
-        config = ConfigData()
-        config.app.environment = "test"
-        config.oidc = OIDCConfig()
-        config.oidc.providers = {"default": keycloak_config}
+    config = ConfigData()
+    config.app.environment = "test"
+    config.oidc = OIDCConfig()
+    config.oidc.providers = {"default": keycloak_config}
 
-        mock_get_config.return_value = config
-
-        # Also patch the module-level configs that are imported at startup
-        with with_context(config_override=config):
-            with TestClient(app) as client:
-                yield client
+    # Also patch the module-level configs that are imported at startup
+    with with_context(config_override=config):
+        with TestClient(app) as client:
+            yield client
 
 
 def keycloak_available() -> bool:

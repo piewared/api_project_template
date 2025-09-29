@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Keycloak setup script for development environment."""
 
-import json
 import sys
 import time
 from urllib.parse import urljoin

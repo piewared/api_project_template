@@ -12,7 +12,6 @@ from src.app.core.services import oidc_client_service, session_service
 from src.app.entities.core.user import User
 from src.app.runtime.context import get_config
 
-
 router_bff = APIRouter(prefix="/web", tags=["auth-bff"])
 
 

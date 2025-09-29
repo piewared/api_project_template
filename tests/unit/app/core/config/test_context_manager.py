@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from src.app.runtime.config import (
+from src.app.runtime.config.config_data import ConfigData
+from src.app.runtime.context import (
     AppContext,
-    ApplicationConfig,
     get_config,
     get_context,
     set_context,
@@ -25,79 +25,79 @@ class TestContextManager:
         config = get_config()
 
         assert isinstance(context, AppContext)
-        assert isinstance(config, ApplicationConfig)
+        assert isinstance(config, ConfigData)
         assert context.config is config
 
     def test_with_context_override_single_level(self):
         """Should override config for the duration of the context manager."""
         original_config = get_config()
-        original_uid_claim = original_config.jwt.uid_claim
+        original_host = original_config.app.host
 
         # Create test config with different value
-        test_config = ApplicationConfig()
-        test_config.jwt.uid_claim = "custom_uid"
+        test_config = ConfigData()
+        test_config.app.host = "custom_host"
 
         with with_context(test_config):
             override_config = get_config()
-            assert override_config.jwt.uid_claim == "custom_uid"
+            assert override_config.app.host == "custom_host"
             assert override_config is not original_config
 
         # Should revert after context
         after_config = get_config()
-        assert after_config.jwt.uid_claim == original_uid_claim
+        assert after_config.app.host == original_host
         assert after_config is original_config
 
     def test_with_context_nested_overrides(self):
         """Should handle nested context overrides correctly."""
         original_config = get_config()
-        original_uid_claim = original_config.jwt.uid_claim
+        original_host = original_config.app.host
 
         # First level override
-        level1_config = ApplicationConfig()
-        level1_config.jwt.uid_claim = "level1_uid"
-        level1_config.environment = "production"
+        level1_config = ConfigData()
+        level1_config.app.host = "level1_host"
+        level1_config.app.port = 8001
 
         with with_context(level1_config):
             level1_context = get_config()
-            assert level1_context.jwt.uid_claim == "level1_uid"
-            assert level1_context.environment == "production"
+            assert level1_context.app.host == "level1_host"
+            assert level1_context.app.port == 8001
 
             # Second level override
-            level2_config = ApplicationConfig()
-            level2_config.jwt.uid_claim = "level2_uid"
-            level2_config.environment = "test"
-            level2_config.log_level = "DEBUG"
+            level2_config = ConfigData()
+            level2_config.app.host = "level2_host"
+            level2_config.app.port = 8002
+            level2_config.logging.level = "DEBUG"
 
             with with_context(level2_config):
                 level2_context = get_config()
-                assert level2_context.jwt.uid_claim == "level2_uid"
-                assert level2_context.environment == "test"
-                assert level2_context.log_level == "DEBUG"
+                assert level2_context.app.host == "level2_host"
+                assert level2_context.app.port == 8002
+                assert level2_context.logging.level == "DEBUG"
 
                 # Third level override
-                level3_config = ApplicationConfig()
-                level3_config.jwt.uid_claim = "level3_uid"
-                level3_config.database_url = "sqlite:///level3.db"
+                level3_config = ConfigData()
+                level3_config.app.host = "level3_host"
+                level3_config.database.url = "sqlite:///level3.db"
 
                 with with_context(level3_config):
                     level3_context = get_config()
-                    assert level3_context.jwt.uid_claim == "level3_uid"
-                    assert level3_context.database_url == "sqlite:///level3.db"
+                    assert level3_context.app.host == "level3_host"
+                    assert level3_context.database.url == "sqlite:///level3.db"
 
                 # Back to level 2
                 back_to_level2 = get_config()
-                assert back_to_level2.jwt.uid_claim == "level2_uid"
-                assert back_to_level2.environment == "test"
-                assert back_to_level2.log_level == "DEBUG"
+                assert back_to_level2.app.host == "level2_host"
+                assert back_to_level2.app.port == 8002
+                assert back_to_level2.logging.level == "DEBUG"
 
             # Back to level 1
             back_to_level1 = get_config()
-            assert back_to_level1.jwt.uid_claim == "level1_uid"
-            assert back_to_level1.environment == "production"
+            assert back_to_level1.app.host == "level1_host"
+            assert back_to_level1.app.port == 8001
 
         # Back to original
         final_config = get_config()
-        assert final_config.jwt.uid_claim == original_uid_claim
+        assert final_config.app.host == original_host
         assert final_config is original_config
 
     def test_with_context_no_override(self):
@@ -115,75 +115,75 @@ class TestContextManager:
 
         def inner_function() -> str:
             """Function that reads config in different context."""
-            return get_config().jwt.uid_claim
+            return get_config().app.host
 
-        def middle_function() -> tuple[str, str]:
+        def middle_function() -> tuple[str, int]:
             """Function that creates its own context and calls inner."""
-            middle_config = ApplicationConfig()
-            middle_config.jwt.uid_claim = "middle_uid"
+            middle_config = ConfigData()
+            middle_config.app.host = "middle_host"
 
             with with_context(middle_config):
-                return inner_function(), get_config().environment
+                return inner_function(), get_config().app.port
 
         # Set up outer context
-        outer_config = ApplicationConfig()
-        outer_config.jwt.uid_claim = "outer_uid"
-        outer_config.environment = "production"
+        outer_config = ConfigData()
+        outer_config.app.host = "outer_host"
+        outer_config.app.port = 8001
 
         with with_context(outer_config):
             # Call middle function which creates its own context
-            middle_uid, middle_env = middle_function()
+            middle_host, middle_port = middle_function()
 
-            # Middle function should see its own uid but inherit environment
+            # Middle function should see its own host but inherit port
             # (inheritance means child inherits parent's non-overridden values)
-            assert middle_uid == "middle_uid"
-            assert middle_env == "production"  # Inherited from outer context
+            assert middle_host == "middle_host"
+            assert middle_port == 8001  # Inherited from outer context
 
             # After middle function, should be back to outer context
-            assert get_config().jwt.uid_claim == "outer_uid"
-            assert get_config().environment == "production"
+            assert get_config().app.host == "outer_host"
+            assert get_config().app.port == 8001
 
     def test_exception_handling_in_context(self):
         """Should properly restore context even when exceptions occur."""
         original_config = get_config()
-        original_uid_claim = original_config.jwt.uid_claim
+        original_host = original_config.app.host
 
-        test_config = ApplicationConfig()
-        test_config.jwt.uid_claim = "exception_test_uid"
+        test_config = ConfigData()
+        test_config.app.host = "exception_test_host"
 
         try:
             with with_context(test_config):
-                assert get_config().jwt.uid_claim == "exception_test_uid"
+                assert get_config().app.host == "exception_test_host"
                 raise ValueError("Test exception")
         except ValueError:
             pass  # Expected
 
         # Should restore original context even after exception
         after_config = get_config()
-        assert after_config.jwt.uid_claim == original_uid_claim
+        assert after_config.app.host == original_host
         assert after_config is original_config
 
     def test_context_manager_with_different_config_properties(self):
         """Should handle overriding different configuration properties."""
         original_config = get_config()
 
-        test_config = ApplicationConfig()
-        test_config.environment = "test"
-        test_config.log_level = "DEBUG"
-        test_config.database_url = "sqlite:///test.db"
-        test_config.jwt.uid_claim = "test_uid"
-        test_config.jwt.clock_skew = 30
-        test_config.session.max_age = 1800
+        test_config = ConfigData()
+        test_config.app.host = "test_host"
+        test_config.app.port = 9000
+        test_config.logging.level = "DEBUG"
+        test_config.database.url = "sqlite:///test.db"
+        test_config.redis.url = "redis://test:6379"
+        test_config.temporal.address = "test-temporal:7233"
 
         with with_context(test_config):
             override_config = get_config()
 
-            assert override_config.environment == "test"
-            assert override_config.log_level == "DEBUG"
-            assert override_config.database_url == "sqlite:///test.db"
-            assert override_config.jwt.uid_claim == "test_uid"
-            assert override_config.jwt.clock_skew == 30
-            assert override_config.session.max_age == 1800
+            assert override_config.app.host == "test_host"
+            assert override_config.app.port == 9000
+            assert override_config.logging.level == "DEBUG"
+            assert override_config.database.url == "sqlite:///test.db"
+            assert override_config.redis.url == "redis://test:6379"
+            assert override_config.temporal.address == "test-temporal:7233"
 
         # All should revert
         after_config = get_config()
@@ -200,20 +200,20 @@ class TestAsyncContextManager:
 
         async def async_worker(worker_id: str) -> str:
             """Async worker that creates its own context."""
-            worker_config = ApplicationConfig()
-            worker_config.jwt.uid_claim = f"worker_{worker_id}_uid"
+            worker_config = ConfigData()
+            worker_config.app.host = f"worker_{worker_id}_host"
 
             with with_context(worker_config):
                 # Simulate some async work
                 await asyncio.sleep(0.01)
-                return get_config().jwt.uid_claim
+                return get_config().app.host
 
         # Run multiple async workers concurrently
         tasks = [async_worker(str(i)) for i in range(5)]
         results = await asyncio.gather(*tasks)
 
         # Each worker should see its own context
-        expected = [f"worker_{i}_uid" for i in range(5)]
+        expected = [f"worker_{i}_host" for i in range(5)]
         assert results == expected
 
         # Original context should be unchanged
@@ -226,34 +226,34 @@ class TestAsyncContextManager:
 
         async def level2_async() -> tuple[str, str]:
             """Second level async function with its own context."""
-            level2_config = ApplicationConfig()
-            level2_config.jwt.uid_claim = "level2_async_uid"
+            level2_config = ConfigData()
+            level2_config.app.host = "level2_async_host"
 
             with with_context(level2_config):
                 await asyncio.sleep(0.01)
-                return get_config().jwt.uid_claim, get_config().environment
+                return get_config().app.host, str(get_config().app.port)
 
         # Level 1 context
-        level1_config = ApplicationConfig()
-        level1_config.jwt.uid_claim = "level1_async_uid"
-        level1_config.environment = "production"
+        level1_config = ConfigData()
+        level1_config.app.host = "level1_async_host"
+        level1_config.app.port = 8001
 
         with with_context(level1_config):
             # Should see level 1 context
-            assert get_config().jwt.uid_claim == "level1_async_uid"
-            assert get_config().environment == "production"
+            assert get_config().app.host == "level1_async_host"
+            assert get_config().app.port == 8001
 
             # Call level 2 async function
-            uid, env = await level2_async()
+            host, port = await level2_async()
 
-            # Level 2 should see its own uid but inherit environment
+            # Level 2 should see its own host but inherit port
             # (inheritance means child inherits parent's non-overridden values)
-            assert uid == "level2_async_uid"
-            assert env == "production"  # Inherited from level 1 context
+            assert host == "level2_async_host"
+            assert port == "8001"  # Inherited from level 1 context
 
             # Back to level 1 after async call
-            assert get_config().jwt.uid_claim == "level1_async_uid"
-            assert get_config().environment == "production"
+            assert get_config().app.host == "level1_async_host"
+            assert get_config().app.port == 8001
 
         # Back to original
         assert get_config() is original_config
@@ -263,21 +263,12 @@ class TestAsyncContextManager:
         """Should maintain context isolation with concurrent async tasks."""
         results = {}
 
-        # Valid environments to cycle through
-        valid_envs = ["development", "production", "test"]
-
         async def async_task(task_id: int) -> None:
             """Async task that works in its own context."""
-            task_config = ApplicationConfig()
-            task_config.jwt.uid_claim = f"task_{task_id}_uid"
-            # Cycle through valid environments
-            env_index = task_id % len(valid_envs)
-            if env_index == 0:
-                task_config.environment = "development"
-            elif env_index == 1:
-                task_config.environment = "production"
-            else:
-                task_config.environment = "test"
+            task_config = ConfigData()
+            task_config.app.host = f"task_{task_id}_host"
+            # Cycle through different ports
+            task_config.app.port = 8000 + task_id
 
             with with_context(task_config):
                 # Simulate varying amounts of async work
@@ -285,8 +276,8 @@ class TestAsyncContextManager:
 
                 # Store results from this task's context
                 results[task_id] = {
-                    "uid": get_config().jwt.uid_claim,
-                    "env": get_config().environment,
+                    "host": get_config().app.host,
+                    "port": get_config().app.port,
                 }
 
         # Start multiple concurrent tasks
@@ -295,9 +286,9 @@ class TestAsyncContextManager:
 
         # Each task should have seen its own context
         for i in range(1, 6):
-            assert results[i]["uid"] == f"task_{i}_uid"
-            expected_env = valid_envs[i % len(valid_envs)]
-            assert results[i]["env"] == expected_env
+            assert results[i]["host"] == f"task_{i}_host"
+            expected_port = 8000 + i
+            assert results[i]["port"] == expected_port
 
 
 class TestThreadSafety:
@@ -308,21 +299,12 @@ class TestThreadSafety:
         original_config = get_config()
         results = {}
 
-        # Valid environments to cycle through
-        valid_envs = ["development", "production", "test"]
-
         def thread_worker(worker_id: int) -> None:
             """Worker function that runs in its own thread."""
-            worker_config = ApplicationConfig()
-            worker_config.jwt.uid_claim = f"thread_{worker_id}_uid"
-            # Cycle through valid environments
-            env_index = worker_id % len(valid_envs)
-            if env_index == 0:
-                worker_config.environment = "development"
-            elif env_index == 1:
-                worker_config.environment = "production"
-            else:
-                worker_config.environment = "test"
+            worker_config = ConfigData()
+            worker_config.app.host = f"thread_{worker_id}_host"
+            # Cycle through different ports
+            worker_config.app.port = 8000 + worker_id
 
             with with_context(worker_config):
                 # Simulate some work
@@ -332,8 +314,8 @@ class TestThreadSafety:
 
                 # Store results from this thread's context
                 results[worker_id] = {
-                    "uid": get_config().jwt.uid_claim,
-                    "env": get_config().environment,
+                    "host": get_config().app.host,
+                    "port": get_config().app.port,
                 }
 
         # Run workers in separate threads
@@ -346,8 +328,8 @@ class TestThreadSafety:
 
         # Each thread should have seen its own context
         for i in range(1, 6):
-            assert results[i]["uid"] == f"thread_{i}_uid"
-            assert results[i]["env"] == valid_envs[i % len(valid_envs)]
+            assert results[i]["host"] == f"thread_{i}_host"
+            assert results[i]["port"] == 8000 + i
 
         # Main thread context should be unchanged
         assert get_config() is original_config
@@ -361,40 +343,40 @@ class TestThreadSafety:
 
         def thread_function():
             """Function that runs in a separate thread."""
-            thread_config = ApplicationConfig()
-            thread_config.jwt.uid_claim = "thread_uid"
+            thread_config = ConfigData()
+            thread_config.app.host = "thread_host"
 
             with with_context(thread_config):
                 time.sleep(0.02)  # Simulate work
-                results.append(("thread", get_config().jwt.uid_claim))
+                results.append(("thread", get_config().app.host))
 
         # Start thread context
-        main_config = ApplicationConfig()
-        main_config.jwt.uid_claim = "main_uid"
+        main_config = ConfigData()
+        main_config.app.host = "main_host"
 
         with with_context(main_config):
             # Record main thread context
-            results.append(("main_before", get_config().jwt.uid_claim))
+            results.append(("main_before", get_config().app.host))
 
             # Start separate thread
             thread = threading.Thread(target=thread_function)
             thread.start()
 
             # Record main thread context while thread is running
-            results.append(("main_during", get_config().jwt.uid_claim))
+            results.append(("main_during", get_config().app.host))
 
             # Wait for thread to complete
             thread.join()
 
             # Record main thread context after thread completes
-            results.append(("main_after", get_config().jwt.uid_claim))
+            results.append(("main_after", get_config().app.host))
 
         # Verify results
         expected = [
-            ("main_before", "main_uid"),
-            ("main_during", "main_uid"),
-            ("thread", "thread_uid"),
-            ("main_after", "main_uid"),
+            ("main_before", "main_host"),
+            ("main_during", "main_host"),
+            ("thread", "thread_host"),
+            ("main_after", "main_host"),
         ]
 
         # Sort by context name for consistent comparison
@@ -412,14 +394,14 @@ class TestContextManagerEdgeCases:
 
         configs = []
         for i in range(100):
-            config = ApplicationConfig()
-            config.jwt.uid_claim = f"rapid_{i}"
+            config = ConfigData()
+            config.app.host = f"rapid_{i}"
             configs.append(config)
 
         # Rapidly switch contexts
         for i, config in enumerate(configs):
             with with_context(config):
-                assert get_config().jwt.uid_claim == f"rapid_{i}"
+                assert get_config().app.host == f"rapid_{i}"
 
         # Should be back to original
         assert get_config() is original_config
@@ -432,10 +414,10 @@ class TestContextManagerEdgeCases:
         def create_nested_context(level: int) -> str:
             """Recursively create nested contexts."""
             if level == 0:
-                return get_config().jwt.uid_claim
+                return get_config().app.host
 
-            config = ApplicationConfig()
-            config.jwt.uid_claim = f"deep_{level}"
+            config = ConfigData()
+            config.app.host = f"deep_{level}"
 
             with with_context(config):
                 return create_nested_context(level - 1)
@@ -450,19 +432,19 @@ class TestContextManagerEdgeCases:
         """Should handle reentrant context manager calls."""
         original_config = get_config()
 
-        test_config = ApplicationConfig()
-        test_config.jwt.uid_claim = "reentrant_uid"
+        test_config = ConfigData()
+        test_config.app.host = "reentrant_host"
 
         with with_context(test_config):
-            assert get_config().jwt.uid_claim == "reentrant_uid"
+            assert get_config().app.host == "reentrant_host"
 
             # Reentrant call with same config
             with with_context(test_config):
-                assert get_config().jwt.uid_claim == "reentrant_uid"
+                assert get_config().app.host == "reentrant_host"
 
                 # Another level
                 with with_context(test_config):
-                    assert get_config().jwt.uid_claim == "reentrant_uid"
+                    assert get_config().app.host == "reentrant_host"
 
         # Should be back to original
         assert get_config() is original_config
@@ -471,34 +453,34 @@ class TestContextManagerEdgeCases:
         """Should properly inherit non-overridden properties from parent context."""
 
         # Parent context sets multiple properties
-        parent_config = ApplicationConfig()
-        parent_config.jwt.uid_claim = "parent_uid"
-        parent_config.environment = "production"
-        parent_config.log_level = "DEBUG"
-        parent_config.database_url = "sqlite:///parent.db"
+        parent_config = ConfigData()
+        parent_config.app.host = "parent_host"
+        parent_config.app.port = 8001
+        parent_config.logging.level = "DEBUG"
+        parent_config.database.url = "sqlite:///parent.db"
 
         with with_context(parent_config):
             # Child context only overrides some properties
-            child_config = ApplicationConfig()
-            child_config.jwt.uid_claim = "child_uid"  # Override
-            # Don't set environment, log_level, database_url - should inherit
+            child_config = ConfigData()
+            child_config.app.host = "child_host"  # Override
+            # Don't set port, logging.level, database.url - should inherit
 
             with with_context(child_config):
                 child_context = get_config()
 
                 # Should see overridden property
-                assert child_context.jwt.uid_claim == "child_uid"
+                assert child_context.app.host == "child_host"
 
                 # Should inherit parent's non-overridden properties
                 # Note: This tests proper inheritance behavior where child contexts
                 # inherit non-overridden values from their parent context
                 assert (
-                    child_context.environment == "production"
+                    child_context.app.port == 8001
                 )  # Inherited from parent
-                assert child_context.log_level == "DEBUG"  # Inherited from parent
+                assert child_context.logging.level == "DEBUG"  # Inherited from parent
 
             # Back to parent context
             parent_context = get_config()
-            assert parent_context.jwt.uid_claim == "parent_uid"
-            assert parent_context.environment == "production"
-            assert parent_context.log_level == "DEBUG"
+            assert parent_context.app.host == "parent_host"
+            assert parent_context.app.port == 8001
+            assert parent_context.logging.level == "DEBUG"

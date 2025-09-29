@@ -32,7 +32,7 @@ from src.app.core.services.oidc_client_service import TokenResponse
 from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User
 from src.app.entities.core.user_identity import UserIdentity
-from src.app.runtime.config import ApplicationConfig, OIDCProviderConfig, with_context
+from src.app.runtime.config.config import ApplicationConfig, OIDCProviderConfig, with_context
 from tests.utils import encode_token, oct_jwk
 
 

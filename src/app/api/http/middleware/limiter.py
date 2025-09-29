@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import HTTPException, Request, Response
 from loguru import logger
 
-from src.app.runtime.config import get_config
+from src.app.runtime.context import get_config
 
 main_config = get_config()
 
@@ -192,24 +192,24 @@ def get_rate_limiter(
 ) -> RateLimiterType:
     """Get a rate limiter instance for the given configuration."""
     config = get_config()
-    final_requests = requests if requests is not None else config.rate_limit.requests
+    final_requests = requests if requests is not None else config.rate_limiter.requests
     final_window_ms = (
-        window_ms if window_ms is not None else config.rate_limit.window_ms
+        window_ms if window_ms is not None else config.rate_limiter.window_ms
     )
 
     # Use cached instance based on complete configuration including factory version
     return _create_rate_limiter(
         final_requests,
         final_window_ms,
-        config.rate_limit.per_endpoint,
-        config.rate_limit.per_method,
+        config.rate_limiter.per_endpoint,
+        config.rate_limiter.per_method,
         _factory_counter,  # Include factory version in cache key
     )
 
 
 def rate_limit(
-    requests: int = main_config.rate_limit.requests,
-    window_ms: int = main_config.rate_limit.window_ms,
+    requests: int = main_config.rate_limiter.requests,
+    window_ms: int = main_config.rate_limiter.window_ms,
 ) -> RateLimiterType:
     """Return a dependency enforcing request quotas."""
 

@@ -12,7 +12,8 @@ from authlib.jose import JoseError, JsonWebKey, jwt
 from cachetools import TTLCache
 from fastapi import HTTPException
 
-from src.app.runtime.config import OIDCProviderConfig, get_config
+from src.app.runtime.config.config_data import OIDCProviderConfig
+from src.app.runtime.context import get_config
 
 _JWKS_CACHE: TTLCache[str, dict[str, Any]] = TTLCache(maxsize=10, ttl=3600)
 

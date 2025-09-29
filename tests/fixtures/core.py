@@ -15,8 +15,9 @@ from src.app.api.http.app import app
 from src.app.api.http.deps import get_session
 from src.app.api.http.middleware.limiter import configure_rate_limiter
 from src.app.core.services import jwt_service
-from src.app.runtime.config import OIDCProviderConfig, get_config
-from src.app.runtime.settings import EnvironmentVariables
+from src.app.runtime.config.config_data import OIDCProviderConfig
+from src.app.runtime.config.settings import EnvironmentVariables
+from src.app.runtime.context import get_config
 from tests.utils import oct_jwk
 
 main_config = get_config()
@@ -36,18 +37,20 @@ def clear_jwks_cache() -> Generator[None]:
     yield
     jwt_service._JWKS_CACHE.clear()
 
+
 @pytest.fixture
 def oidc_provider_config() -> OIDCProviderConfig:
     return OIDCProviderConfig(
-            client_id="test-client-id",
-            client_secret="test-client-secret",
-            authorization_endpoint=f"{_ISSUER}/authorize",
-            token_endpoint=f"{_ISSUER}/token",
-            userinfo_endpoint=f"{_ISSUER}/userinfo",
-            jwks_uri=f"{_ISSUER}/.well-known/jwks.json",
-            scopes=["openid", "profile", "email"],
-            redirect_uri="http://localhost/callback",
-        )
+        issuer=_ISSUER,
+        client_id="test-client-id",
+        client_secret="test-client-secret",
+        authorization_endpoint=f"{_ISSUER}/authorize",
+        token_endpoint=f"{_ISSUER}/token",
+        userinfo_endpoint=f"{_ISSUER}/userinfo",
+        jwks_uri=f"{_ISSUER}/.well-known/jwks.json",
+        scopes=["openid", "profile", "email"],
+        redirect_uri="http://localhost/callback",
+    )
 
 
 @pytest.fixture
@@ -77,7 +80,9 @@ def response_factory() -> Callable[[], Any]:
 
 
 @pytest.fixture
-def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Generator[TestClient]:
+def client(
+    session: Session, oidc_provider_config: OIDCProviderConfig
+) -> Generator[TestClient]:
     """Yield a TestClient wired to the shared SQLModel session and test-friendly config."""
 
     def override_get_session():
@@ -89,12 +94,12 @@ def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Genera
     jwks_data = {"keys": [oct_jwk(_HS_KEY, _KID)]}
 
     # Store original values to restore later
-    original_requests = main_config.rate_limit.requests
-    original_window = main_config.rate_limit.window_ms
-    original_allowed_algorithms = list(main_config.allowed_algorithms)
-    original_audiences = list(main_config.audiences)
-    original_uid_claim = main_config.uid_claim
-    original_environment = main_config.environment
+    original_requests = main_config.rate_limiter.requests
+    original_window = main_config.rate_limiter.window_ms
+    original_allowed_algorithms = list(main_config.jwt.allowed_algorithms)
+    original_audiences = list(main_config.jwt.audiences)
+    original_uid_claim = main_config.jwt.claims.user_id
+    original_environment = main_config.app.environment
 
     async def fake_fetch_jwks(issuer: str):
         return jwks_data
@@ -103,30 +108,32 @@ def client(session: Session, oidc_provider_config: OIDCProviderConfig) -> Genera
     import unittest.mock
 
     with unittest.mock.patch.object(jwt_service, "fetch_jwks", fake_fetch_jwks):
-        configure_rate_limiter(limiter_factory=lambda *_a, **_k: _no_limit)   # use local no-op limiter
+        configure_rate_limiter(
+            limiter_factory=lambda *_a, **_k: _no_limit
+        )  # use local no-op limiter
         app.dependency_overrides[get_session] = override_get_session
 
-        main_config.environment = "test"
-        main_config.rate_limit.requests = 1000
-        main_config.rate_limit.window_ms = 60
+        main_config.app.environment = "test"
+        main_config.rate_limiter.requests = 1000
+        main_config.rate_limiter.window_ms = 60
         main_config.oidc.providers[_ISSUER] = oidc_provider_config
 
         main_config.jwt.allowed_algorithms = ["HS256"]
         main_config.jwt.audiences = [_AUDIENCE]
-        main_config.jwt.uid_claim = "uid"
+        main_config.jwt.claims.user_id = "uid"
 
         try:
             with TestClient(app) as test_client:
                 yield test_client
         finally:
             app.dependency_overrides.clear()
-            main_config.rate_limit.requests = original_requests
-            main_config.rate_limit.window_ms = original_window
+            main_config.rate_limiter.requests = original_requests
+            main_config.rate_limiter.window_ms = original_window
             main_config.oidc.providers.pop(_ISSUER)
             main_config.jwt.allowed_algorithms = original_allowed_algorithms
             main_config.jwt.audiences = original_audiences
-            main_config.jwt.uid_claim = original_uid_claim
-            main_config.environment = original_environment
+            main_config.jwt.claims.user_id = original_uid_claim
+            main_config.app.environment = original_environment
 
 
 @pytest.fixture(scope="session")

@@ -10,9 +10,8 @@ from pydantic import BaseModel
 from src.app.api.http.deps import get_optional_session_user
 from src.app.core.services import oidc_client_service, session_service
 from src.app.entities.core.user import User
-from src.app.runtime.config import ApplicationConfig, get_config
+from src.app.runtime.context import get_config
 
-main_config: ApplicationConfig = get_config()
 
 router_bff = APIRouter(prefix="/web", tags=["auth-bff"])
 
@@ -40,7 +39,7 @@ async def initiate_login(request: Request, provider: str = "default", redirect_u
     Stores PKCE verifier and state in session for security.
     """
     print(provider)
-    if provider not in get_config().oidc_providers:
+    if provider not in get_config().oidc.providers:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
     print('hi2')
 
@@ -58,7 +57,7 @@ async def initiate_login(request: Request, provider: str = "default", redirect_u
     print('hi3')
 
     # Build authorization URL
-    provider_config = get_config().oidc_providers[provider]
+    provider_config = get_config().oidc.providers[provider]
     auth_params = {
         "client_id": provider_config.client_id,
         "response_type": "code",
@@ -78,7 +77,7 @@ async def initiate_login(request: Request, provider: str = "default", redirect_u
         key="auth_session_id",
         value=session_id,
         httponly=True,
-        secure=get_config().environment == "production",
+        secure=get_config().app.environment == "production",
         samesite="lax",
         max_age=600,  # 10 minutes for auth flow
     )
@@ -154,9 +153,9 @@ async def handle_callback(
             key="user_session_id",
             value=user_session_id,
             httponly=True,
-            secure=get_config().environment == "production",
+            secure=get_config().app.environment == "production",
             samesite="lax",
-            max_age=get_config().session_max_age,
+            max_age=get_config().app.session_max_age,
         )
 
         # Clear auth session cookie
@@ -190,11 +189,11 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
         # Optionally trigger provider logout
         if (
             user_session
-            and get_config().oidc_providers[user_session.provider].end_session_endpoint
+            and get_config().oidc.providers[user_session.provider].end_session_endpoint
         ):
-            provider_config = get_config().oidc_providers[user_session.provider]
+            provider_config = get_config().oidc.providers[user_session.provider]
             logout_params = {
-                "post_logout_redirect_uri": get_config().base_url,
+                "post_logout_redirect_uri": get_config().app.base_url,
                 "client_id": provider_config.client_id,
             }
             logout_url = (
@@ -245,9 +244,9 @@ async def refresh_session(request: Request, response: Response) -> dict[str, str
             key="user_session_id",
             value=new_session_id,
             httponly=True,
-            secure=get_config().environment == "production",
+            secure=get_config().app.environment == "production",
             samesite="lax",
-            max_age=get_config().session_max_age,
+            max_age=get_config().app.session_max_age,
         )
 
         return {"message": "Session refreshed"}

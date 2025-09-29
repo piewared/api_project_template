@@ -12,7 +12,11 @@ from src.app.core.services.oidc_client_service import TokenResponse
 from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User, UserRepository
 from src.app.entities.core.user_identity import UserIdentity, UserIdentityRepository
-from src.app.runtime.config import ApplicationConfig, OIDCConfig, OIDCProviderConfig
+from src.app.runtime.config.config_data import (
+    ConfigData,
+    OIDCConfig,
+    OIDCProviderConfig,
+)
 
 
 # Base Data Fixtures
@@ -117,15 +121,15 @@ def test_user_session(test_user: User) -> UserSession:
 
 # Configuration Fixtures
 @pytest.fixture
-def auth_test_config(base_oidc_provider: OIDCProviderConfig) -> ApplicationConfig:
+def auth_test_config(base_oidc_provider: OIDCProviderConfig) -> ConfigData:
     """Application configuration for authentication testing."""
-    config = ApplicationConfig()
-    config.environment = "test"
+    config = ConfigData()
+    config.app.environment = "test"
     config.oidc = OIDCConfig()
     config.oidc.providers = {"default": base_oidc_provider}
     config.jwt.allowed_algorithms = ["HS256"]
     config.jwt.audiences = ["test-client-id"]
-    config.jwt.uid_claim = "app_uid"
+    config.jwt.claims.user_id = "app_uid"
     return config
 
 
@@ -209,7 +213,7 @@ def mock_session_service(
 @pytest.fixture
 def auth_test_client(client, auth_test_config):
     """Test client configured with authentication setup."""
-    from src.app.runtime.config import with_context
+    from src.app.runtime.context import with_context
 
     with with_context(config_override=auth_test_config):
         yield client

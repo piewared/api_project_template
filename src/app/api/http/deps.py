@@ -12,7 +12,7 @@ from src.app.core.services.session_service import get_user_session
 from src.app.entities.core.user import User, UserRepository
 from src.app.entities.core.user_identity.entity import UserIdentity
 from src.app.entities.core.user_identity.repository import UserIdentityRepository
-from src.app.runtime.config import get_config
+from src.app.runtime.context import get_config
 from src.app.runtime.db import session
 
 
@@ -49,7 +49,7 @@ async def get_current_user(
 ) -> User:
     """Authenticate the request using a Bearer token, with JIT user provisioning."""
 
-    if get_config().environment == "development":
+    if get_config().app.environment == "development":
         request.state.claims = getattr(
             request.state, "claims", {"iss": "local-dev", "sub": "dev-user"}
         )
@@ -179,7 +179,7 @@ async def _authenticate_with_session(
         HTTPException: If required=True and authentication fails
     """
     # Development mode bypass
-    if get_config().environment == "development":
+    if get_config().app.environment == "development":
         request.state.claims = getattr(
             request.state, "claims", {"iss": "local-dev", "sub": "dev-user"}
         )

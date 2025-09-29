@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from src.app.core.services import jwt_service, oidc_client_service
 from src.app.entities.core.user import User, UserRepository
 from src.app.entities.core.user_identity import UserIdentity, UserIdentityRepository
-from src.app.runtime.config import get_config
+from src.app.runtime.context import get_config
 from src.app.runtime.db import session
 
 main_config = get_config()
@@ -237,7 +237,7 @@ def create_user_session(
         access_token_expires_at=expires_at,
         created_at=now,
         last_accessed_at=now,
-        expires_at=now + main_config.session_max_age,
+        expires_at=now + main_config.app.session_max_age,
     )
 
     _user_sessions[session_id] = user_session
@@ -333,7 +333,7 @@ def generate_csrf_token(session_id: str) -> str:
     """
     # Create HMAC-based CSRF token
     secret_key = (
-        main_config.secret_key.encode() if main_config.secret_key else b"dev-secret"
+        main_config.app.session_jwt_secret.encode() if main_config.app.session_jwt_secret else b"dev-secret"
     )
     message = f"{session_id}:{int(time.time() // 3600)}"  # Hour-based
 

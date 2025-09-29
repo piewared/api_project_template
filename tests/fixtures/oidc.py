@@ -12,7 +12,7 @@ from fastapi import Request, Response
 from src.app.core.services.oidc_client_service import TokenResponse
 from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User
-from src.app.runtime.config import OIDCProviderConfig
+from src.app.runtime.config.config_data import OIDCProviderConfig
 
 
 @pytest.fixture
@@ -144,8 +144,9 @@ def mock_id_token() -> str:
 @pytest.fixture
 def mock_httpx_response():
     """Mock httpx response for testing HTTP calls."""
-    import httpx
     from unittest.mock import Mock
+
+    import httpx
 
     class MockResponse:
         def __init__(self, json_data: dict, status_code: int = 200):
@@ -204,9 +205,9 @@ def mock_response():
 @pytest.fixture
 def oidc_test_config():
     """Test configuration with OIDC provider setup."""
-    from src.app.runtime.config import ApplicationConfig, OIDCConfig
+    from src.app.runtime.config.config_data import ConfigData, OIDCConfig
 
-    config = ApplicationConfig()
+    config = ConfigData()
     config.oidc = OIDCConfig()
     config.oidc.providers = {
         "default": OIDCProviderConfig(

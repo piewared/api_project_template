@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.app.runtime.config import get_config
-from src.app.runtime.settings import EnvironmentVariables
+from src.app.runtime.config.config import get_config
+from src.app.runtime.config.settings import EnvironmentVariables
 
 config = get_config()
 

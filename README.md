@@ -8,7 +8,7 @@ This template provides a complete foundation for building scalable FastAPI appli
 
 - **🔐 Built-in OIDC Authentication** - Complete auth flow with session management
 - **🏗️ Clean Architecture** - Organized entity/service layer with clear separation of concerns
-- **⚡ Development Environment** - Integrated Keycloak and PostgreSQL via Docker
+- **⚡ Complete Development Environment** - Integrated Keycloak, PostgreSQL, Redis, and Temporal via Docker
 - **🔄 Template Updates** - Automatic updates using Cruft
 - **🗄️ Flexible Database Support** - PostgreSQL for production, SQLite for development/testing
 - **🧪 Comprehensive Testing** - Unit, integration, and fixture-based testing
@@ -25,9 +25,12 @@ This template provides a complete foundation for building scalable FastAPI appli
 - **CORS and security headers** configured for production
 
 ### Development Experience  
-- **Integrated development environment** with Docker Compose
-- **Keycloak** for local OIDC testing and user management
+- **Complete development stack** with Docker Compose (Keycloak, PostgreSQL, Redis, Temporal)
+- **Automatic service configuration** - Zero manual setup required
+- **Keycloak integration** with pre-configured test realm and users
 - **PostgreSQL** database with migration support
+- **Redis** for caching and rate limiting
+- **Temporal** for workflow orchestration and background tasks
 - **Hot reload** development server with uvicorn
 - **Rich CLI** with entity management and dev environment commands
 - **Structured logging** with request tracing
@@ -91,20 +94,33 @@ cp .env.example .env
 # Edit .env with your configuration
 nano .env
 
-# Start development environment (Keycloak + PostgreSQL)
-uv run your-project-dev start-dev-env
+# Start development environment (Keycloak, PostgreSQL, Redis, Temporal)
+uv run cli dev start-env
 
 # Initialize database
 uv run init-db
 
 # Start development server
-uv run your-project-dev start-server
+uv run cli dev start-server
 ```
 
 Your API will be available at:
 - **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs (development only)
+- **API Docs**: http://localhost:8000/docs (interactive documentation)
 - **Keycloak Admin**: http://localhost:8080 (admin/admin)
+- **Temporal UI**: http://localhost:8081 (workflow management)
+
+### 3. Test Authentication
+
+```bash
+# Visit the login endpoint
+curl http://localhost:8000/auth/web/login
+
+# Or test with browser:
+# 1. Go to http://localhost:8000/auth/web/login
+# 2. Login with: testuser1 / password123
+# 3. You'll be redirected back to your app
+```
 
 ## 🏗️ Architecture Overview
 
@@ -516,33 +532,225 @@ async def update_product_stock(
         raise HTTPException(status_code=400, detail=str(e))
 ```
 
-## 🔧 Development Commands
+## � Built-in Development Environment
 
-The template includes a rich CLI for development tasks:
+The template includes a fully integrated development environment with Docker Compose, providing all necessary services for local development and testing.
+
+### Services Included
+
+- **🔐 Keycloak** - OIDC authentication server with pre-configured test realm
+- **🗄️ PostgreSQL** - Production-grade database with development data
+- **⚡ Redis** - Caching and rate limiting backend
+- **⏰ Temporal** - Workflow orchestration engine with UI
+- **🔧 Development Tools** - Database initialization, health checks, and monitoring
+
+### Quick Start
 
 ```bash
+# Start all development services
+uv run cli dev start-env
+
+# Check service status
+uv run cli dev status
+
+# View service logs
+uv run cli dev logs
+
+# Start your API server
+uv run cli dev start-server
+```
+
+### Service Details
+
+#### Keycloak (Authentication) - Port 8080
+- **Admin Console**: http://localhost:8080
+- **Credentials**: admin/admin
+- **Test Realm**: `test-realm` (auto-configured)
+- **Test Users**: `testuser1` and `testuser2` (password: `password123`)
+- **Client ID**: `test-client`
+- **Client Secret**: `test-client-secret`
+
+The Keycloak setup runs automatically when services start, creating:
+- OIDC provider configuration
+- Test client for your application
+- Test users for development
+- All necessary endpoints for authentication flows
+
+#### PostgreSQL (Database) - Port 5432
+- **Connection**: `postgresql://devuser:devpass@localhost:5432/app_db`
+- **Admin User**: `devuser` / `devpass`
+- **Database**: `app_db`
+- **Persistent Data**: Stored in Docker volume
+
+#### Redis (Cache/Sessions) - Port 6379
+- **Connection**: `redis://localhost:6379`
+- **Used For**: Rate limiting, session storage, caching
+- **Persistent Data**: Stored in Docker volume
+
+#### Temporal (Workflows) - Ports 7233, 8081
+- **Server**: http://localhost:7233
+- **Web UI**: http://localhost:8081
+- **Used For**: Background tasks, workflow orchestration
+- **Namespace**: `default`
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+
+### CLI Commands Reference
+
+#### Development Environment Commands
+
+```bash
+# Start all services (Keycloak, PostgreSQL, Redis, Temporal)
+uv run cli dev start-env
+
+# Start services with options
+uv run cli dev start-env --force        # Force restart even if running
+uv run cli dev start-env --no-wait      # Don't wait for services to be ready
+
+# Check status of all services
+uv run cli dev status
+
+# Stop all development services
+uv run cli dev stop
+
+# View logs from all services
+uv run cli dev logs
+```
+
+#### Development Server Commands
+
+```bash
+# Start FastAPI development server
+uv run cli dev start-server
+
+# Start server with custom options
+uv run cli dev start-server --host 0.0.0.0 --port 8080
+uv run cli dev start-server --no-reload          # Disable auto-reload
+uv run cli dev start-server --log-level debug    # Set log level
+```
+
+#### Entity Management Commands
+
+```bash
+# Create a new entity with fields
+uv run cli entity add Product --fields "name:str,price:float,category:str"
+
+# List all entities in the project
+uv run cli entity ls
+
+# Remove an entity
+uv run cli entity rm Product
+uv run cli entity rm Product --force    # Skip confirmation
+```
+
+### Development Workflow
+
+1. **Start Development Environment**:
+   ```bash
+   uv run cli dev start-env
+   ```
+
+2. **Initialize Database**:
+   ```bash
+   uv run init-db
+   ```
+
+3. **Create Your Entities**:
+   ```bash
+   uv run cli entity add Product --fields "name:str,price:float"
+   ```
+
+4. **Start Development Server**:
+   ```bash
+   uv run cli dev start-server
+   ```
+
+5. **Test Authentication**:
+   - Visit http://localhost:8000/auth/web/login
+   - Use test credentials: `testuser1` / `password123`
+
+6. **Access Services**:
+   - **API Documentation**: http://localhost:8000/docs
+   - **Keycloak Admin**: http://localhost:8080
+   - **Temporal UI**: http://localhost:8081
+
+### Troubleshooting
+
+#### Service Won't Start
+```bash
+# Check Docker is running
+docker --version
+
+# Check service status
+uv run cli dev status
+
+# Force restart services
+uv run cli dev start-env --force
+
+# Check logs for errors
+uv run cli dev logs
+```
+
+#### Database Connection Issues
+```bash
+# Verify PostgreSQL is running
+uv run cli dev status
+
+# Reinitialize database
+uv run init-db
+
+# Check database logs
+docker logs dev_env_postgres_1
+```
+
+#### Keycloak Authentication Issues
+```bash
+# Verify Keycloak is configured
+curl http://localhost:8080/realms/test-realm/.well-known/openid-configuration
+
+# Check Keycloak logs
+docker logs dev_env_keycloak_1
+
+# Reconfigure Keycloak (if needed)
+python src/dev/setup_keycloak.py
+```
+
+## 🔧 Development Commands
+
+The template includes a rich CLI for development tasks. Use `--help` with any command for detailed options.
+
+```bash
+# Get help for all commands
+uv run cli --help
+uv run cli dev --help
+uv run cli entity --help
+
 # Entity management
-uv run your-project-dev entity add Product    # Add new entity
-uv run your-project-dev entity ls             # List entities  
-uv run your-project-dev entity rm Product     # Remove entity
+uv run cli entity add Product    # Add new entity
+uv run cli entity ls             # List entities  
+uv run cli entity rm Product     # Remove entity
 
 # Development environment
-uv run your-project-dev dev start-dev-env     # Start Keycloak + PostgreSQL
-uv run your-project-dev dev start-server      # Start API server
-uv run your-project-dev dev --help            # Show all dev commands
+uv run cli dev start-env          # Start all services
+uv run cli dev start-server       # Start API server
+uv run cli dev status            # Check service status
+uv run cli dev stop              # Stop all services
+uv run cli dev logs              # View service logs
 
 # Database operations
-uv run init-db                                 # Initialize database
+uv run init-db                   # Initialize database
 
 # Testing
-pytest                                         # Run test suite
-pytest -v tests/unit/                         # Run unit tests only
-pytest --cov                                  # Run with coverage
+pytest                           # Run test suite
+pytest -v tests/unit/           # Run unit tests only
+pytest --cov                    # Run with coverage
 
 # Code quality  
-ruff check .                                   # Lint code
-ruff format .                                  # Format code
-mypy .                                        # Type checking
+ruff check .                     # Lint code
+ruff format .                    # Format code
+mypy .                          # Type checking
 ```
 
 ## 🔐 Authentication Integration
@@ -679,34 +887,12 @@ pytest -v -s               # Show print statements
 
 Key configuration files:
 
-- `.env` - Environment variables (database, auth, etc.)
+- `.env` - Environment variables for sensitive information
+- `config.yaml` - Runtime configurations for the entire project
 - `pyproject.toml` - Python project configuration
 - `dev_env/docker-compose.yml` - Development services
 - `dev_env/keycloak-data/` - Keycloak configuration
 
-### Essential Environment Variables
-
-```bash
-# Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/dbname
-# or for development:  
-DATABASE_URL=sqlite:///./database.db
-
-# Authentication
-OIDC_CLIENT_ID=your-client-id
-OIDC_CLIENT_SECRET=your-client-secret  
-OIDC_DISCOVERY_URL=http://localhost:8080/realms/master/.well-known/openid_configuration
-
-# Session Security
-SESSION_SECRET_KEY=your-secret-key-here
-SESSION_COOKIE_DOMAIN=localhost
-
-# Redis (optional, for rate limiting)
-REDIS_URL=redis://localhost:6379
-
-# Environment
-ENVIRONMENT=development  # development|production|test
-```
 
 ## 🤝 Contributing
 

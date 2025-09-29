@@ -122,28 +122,24 @@ curl http://localhost:8000/auth/web/login
 # 3. You'll be redirected back to your app
 ```
 
-## 🏗️ Architecture Overview
 
-```
-your-project/
-├── your_package/
-│   ├── app/                    # Application layer
-│   │   ├── api/http/          # HTTP API (routes, middleware, schemas)  
-│   │   ├── core/services/     # Core infrastructure services
-│   │   ├── entities/          # Entity definitions
-│   │   │   ├── core/         # Infrastructure entities (User, Auth)
-│   │   │   └── service/      # Domain entities (your business models)
-│   │   ├── service/          # Business service layer  
-│   │   └── runtime/          # Infrastructure (DB, settings, init)
-│   └── dev/                   # Development CLI tools
-├── tests/                     # Comprehensive test suite
-├── dev_env/                   # Development environment (Docker)
-└── main.py                   # Application entry point
-```
+## 💡 Building Your Service
 
-## 💡 Adding Business Logic
+Projects generated from this template are production-ready and fully deployable—except you haven't written your business logic yet! 
+To implement your service, you'll define entities, business logic, and API routes specific to your domain. To accelerate your development,
+the generated project includes a complete development environment with self-hosted instances of PostgreSQL, Temporal.io, Redis, and Keycloak 
+that mirror production conditions. This means you can build, test, and iterate on production-ready services from day one, with zero infrastructure setup.
 
-### 1. Define Domain Entity
+**What you get out of the box:**
+- 🔐 **Authentication ready** - OIDC flow with session management  
+- 🗄️ **Database ready** - PostgreSQL with migrations and connection pooling
+- ⚡ **Caching ready** - Redis for sessions, rate limiting, and application cache
+- 🔄 **Workflows ready** - Temporal for background tasks and complex business processes
+- 🛠️ **Development tools** - Rich CLI, hot reload, structured logging, and monitoring
+
+
+
+### 1. Define Domain Entities
 
 Create a complete entity following the template's pattern. Add your domain entities in `your_package/app/entities/service/product/`:
 
@@ -296,7 +292,7 @@ from .table import ProductTable
 __all__ = ["Product", "ProductRepository", "ProductTable"]
 ```
 
-### 2. Implement Business Service
+### 2. Implement Business Logic
 
 Add business logic in `your_package/app/service/__init__.py`:
 

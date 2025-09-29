@@ -5,9 +5,16 @@ config:
     enabled: true
     per_endpoint: true
     per_method: true
+
+  database:
+    url: "${DATABASE_URL:-postgresql+asyncpg://user:password@postgres:5432/app_db}"
+    pool_size: 20
+    max_overflow: 10
+    pool_timeout: 30
+    pool_recycle: 1800
   temporal:
     enabled: true
-    address: "${TEMPORAL_ADDRESS:-temporal:7233}"
+    url: "${TEMPORAL_ADDRESS:-temporal:7233}"
     namespace: "default"
     task_queue: "default"
     worker:
@@ -23,7 +30,7 @@ config:
       worker_build_id: "api-worker-1"
   redis:
     enabled: true
-    url: "${REDIS_URL:-redis://redis:6379}"
+    url: "${REDIS_URL:-redis://localhost:6379}"
   oidc:
     providers:
       google:
@@ -106,12 +113,6 @@ config:
     file: "${LOG_FILE:-logs/app.log}"
     max_size_mb: 10
     backup_count: 5
-  database:
-    url: "${DATABASE_URL:-postgresql+asyncpg://user:password@postgres:5432/app_db}"
-    pool_size: 20
-    max_overflow: 10
-    pool_timeout: 30
-    pool_recycle: 1800
   app:
     environment: "${APP_ENVIRONMENT:-development}" # Options: "development", "testing", "production"
     host: "${APP_HOST:-localhost}"

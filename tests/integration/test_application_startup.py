@@ -2,8 +2,7 @@
 
 import pytest
 
-from src.app.runtime.config.config import get_config
-from src.app.runtime.config.settings import EnvironmentVariables
+from src.app.runtime.context import get_config
 
 config = get_config()
 
@@ -18,13 +17,13 @@ class TestApplicationStartup:
         import src.app.api.http.app as application
 
         # Ensure no JWKS checks by clearing issuer map
-        original_issuer_map = config.oidc_providers
-        original_environment = config.environment
-        original_redis_url = config.redis_url
+        original_issuer_map = config.oidc.providers
+        original_environment = config.app.environment
+        original_redis_url = config.redis.url
 
         try:
-            config.oidc_providers.clear()
-            config.environment = "development"
+            config.oidc.providers.clear()
+            config.app.environment = "development"
 
             # Prepare fake Redis and limiter classes
             class DummyRedis:
@@ -49,7 +48,7 @@ class TestApplicationStartup:
                 type("_m", (), {"from_url": staticmethod(fake_from_url)}),
             )
 
-            config.redis_url = "redis://localhost:6379/0"
+            config.redis.url = "redis://localhost:6379/0"
 
             # Call startup
             await application.startup()
@@ -58,9 +57,9 @@ class TestApplicationStartup:
 
         finally:
             # Restore original settings
-            config.oidc_providers.update(original_issuer_map)
-            config.environment = original_environment
-            config.redis_url = original_redis_url
+            config.oidc.providers.update(original_issuer_map)
+            config.app.environment = original_environment
+            config.redis.url = original_redis_url
 
     @pytest.mark.asyncio
     async def test_startup_fails_when_dependencies_missing_in_production(
@@ -70,13 +69,13 @@ class TestApplicationStartup:
         import src.app.api.http.app as application
 
         # Store original values
-        original_environment = config.environment
-        original_redis_url = config.redis_url
+        original_environment = config.app.environment
+        original_redis_url = config.redis.url
 
         try:
             # Provide valid issuer map so config validation doesn't fail
-            config.oidc_providers["https://issuer.example.com"] = oidc_provider_config
-            config.environment = "production"
+            config.oidc.providers["https://issuer.example.com"] = oidc_provider_config
+            config.app.environment = "production"
 
             # Mock JWKS fetching to succeed
             async def fake_fetch_jwks(issuer: str):
@@ -90,13 +89,13 @@ class TestApplicationStartup:
             monkeypatch.setattr(application, "FastAPILimiter", None)
             monkeypatch.setattr(application, "redis_async", None)
 
-            config.redis_url = "redis://localhost:6379/0"
+            config.redis.url = "redis://localhost:6379/0"
 
             with pytest.raises(RuntimeError, match=".*dependencies.*"):
                 await application.startup()
 
         finally:
             # Restore original settings
-            config.oidc_providers.pop("https://issuer.example.com", None)
-            config.environment = original_environment
-            config.redis_url = original_redis_url
+            config.oidc.providers.pop("https://issuer.example.com", None)
+            config.app.environment = original_environment
+            config.redis.url = original_redis_url

@@ -6,7 +6,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.app.api.http.app import app
-from src.app.runtime.config.config import ApplicationConfig, with_context
+from src.app.runtime.config.config_data import ConfigData
+from src.app.runtime.context import with_context
 
 
 @pytest.fixture
@@ -60,8 +61,8 @@ class TestOIDCRelyingParty:
     def test_production_mode_requires_valid_tokens(self, client):
         """Test that production mode requires valid Bearer tokens."""
 
-        mock_config = ApplicationConfig()
-        mock_config.environment = "production"
+        mock_config = ConfigData()
+        mock_config.app.environment = "production"
         with with_context(config_override=mock_config):
             # Without Authorization header
             response = client.get("/auth/jit/me")
@@ -126,8 +127,8 @@ class TestOIDCRelyingParty:
 
     def test_bearer_token_extraction_in_production(self, client):
         """Test Bearer token extraction logic."""
-        mock_config = ApplicationConfig()
-        mock_config.environment = "production"
+        mock_config = ConfigData()
+        mock_config.app.environment = "production"
         with with_context(config_override=mock_config):
             # Test missing Authorization header
             response = client.get("/auth/jit/me")

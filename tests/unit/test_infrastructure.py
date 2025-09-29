@@ -13,8 +13,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from src.app.runtime.config.config import get_config
-from src.app.runtime.config.settings import EnvironmentVariables
+from src.app.runtime.context import get_config
 
 
 class TestApplicationStartup:
@@ -45,7 +44,7 @@ class TestApplicationStartup:
         config = get_config()
 
         # Basic configuration should be loaded
-        assert config.environment in ["development", "test", "production"]
+        assert config.app.environment in ["development", "test", "production"]
         assert isinstance(config.jwt.allowed_algorithms, list)
         assert len(config.jwt.allowed_algorithms) > 0
 
@@ -61,19 +60,7 @@ class TestInfrastructureIntegration:
         assert get_session is not None
         assert callable(get_session)
 
-    def test_configuration_environment_integration(self):
-        """Test that configuration properly integrates with environment."""
-        test_env = {
-            "ENVIRONMENT": "development",
-            "LOG_LEVEL": "DEBUG",
-        }
 
-        with patch.dict(os.environ, test_env, clear=True):
-            # Create new config instance to pick up env vars
-            env_vars = EnvironmentVariables()
-
-            assert env_vars.environment == "development"
-            assert env_vars.log_level == "DEBUG"
 
     def test_error_handling_integration(self, client: TestClient):
         """Test that error handling works across the system."""

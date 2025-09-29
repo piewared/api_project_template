@@ -137,7 +137,7 @@ async def verify_jwt(
 
 def extract_uid(claims: dict[str, Any]) -> str:
     main_config = get_config()
-    uid_claim = main_config.jwt.uid_claim
+    uid_claim = main_config.jwt.claims.user_id
     if uid_claim and uid_claim in claims:
         return claims[uid_claim]
     return f"{claims.get('iss')}|{claims.get('sub')}"

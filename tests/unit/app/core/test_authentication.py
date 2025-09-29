@@ -32,7 +32,8 @@ from src.app.core.services.oidc_client_service import TokenResponse
 from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User
 from src.app.entities.core.user_identity import UserIdentity
-from src.app.runtime.config.config import ApplicationConfig, OIDCProviderConfig, with_context
+from src.app.runtime.config.config_data import ConfigData, OIDCProviderConfig
+from src.app.runtime.context import with_context
 from tests.utils import encode_token, oct_jwk
 
 
@@ -1380,6 +1381,7 @@ class TestJWTService:
     def oidc_provider_config(self):
         """Return OIDC provider configuration for testing."""
         return OIDCProviderConfig(
+            client_secret="test-client-secret",
             client_id="test-client-id",
             authorization_endpoint="https://test.issuer/auth",
             token_endpoint="https://test.issuer/token",
@@ -1400,8 +1402,8 @@ class TestJWTService:
         claims = {"iss": "issuer", "sub": "subject", "custom_uid": "user-123"}
 
         # Create test config with custom uid claim
-        test_config = ApplicationConfig()
-        test_config.jwt.uid_claim = "custom_uid"
+        test_config = ConfigData()
+        test_config.jwt.claims.user_id = "custom_uid"
 
         with with_context(test_config):
             result = jwt_service.extract_uid(claims)
@@ -1412,8 +1414,8 @@ class TestJWTService:
         claims = {"iss": "https://issuer.example", "sub": "user-456"}
 
         # Create test config with missing uid claim
-        test_config = ApplicationConfig()
-        test_config.jwt.uid_claim = "missing_claim"
+        test_config = ConfigData()
+        test_config.jwt.claims.user_id = "missing_claim"
 
         with with_context(config_override=test_config):
             result = jwt_service.extract_uid(claims)
@@ -1521,11 +1523,12 @@ class TestJWTService:
     async def test_fetch_jwks_missing_uri(self):
         """Should reject OIDC provider without JWKS URI."""
         provider_without_jwks = OIDCProviderConfig(
+            client_secret="test-secret",
             client_id="test-client",
             authorization_endpoint="https://provider.test/auth",
             token_endpoint="https://provider.test/token",
             issuer="https://provider.test",
-            jwks_uri=None,  # Missing JWKS URI
+            jwks_uri="",  # Missing JWKS URI
             redirect_uri="http://localhost:8000/callback",
         )
 
@@ -1540,7 +1543,7 @@ class TestJWTService:
         self, valid_jwks, oidc_provider_config
     ):
         """Should handle JWT tokens without kid (key ID) claim."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
         test_config.jwt.audiences = ["api://test"]
@@ -1569,7 +1572,7 @@ class TestJWTService:
     @pytest.mark.asyncio
     async def test_verify_jwt_unknown_kid(self, valid_jwks, oidc_provider_config):
         """Should handle JWT tokens with unknown kid (key ID)."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
         test_config.jwt.audiences = ["api://test"]
@@ -1594,7 +1597,7 @@ class TestJWTService:
     @pytest.mark.asyncio
     async def test_verify_jwt_malformed_jwks(self, oidc_provider_config):
         """Should handle malformed JWKS data."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
 
@@ -1631,7 +1634,7 @@ class TestJWTService:
     async def test_verify_valid_jwt(self, valid_jwks, oidc_provider_config):
         """Should verify valid JWT successfully."""
         # Create test config with test provider
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
         test_config.jwt.audiences = ["api://test"]
@@ -1661,7 +1664,7 @@ class TestJWTService:
     async def test_verify_jwt_wrong_audience(self, valid_jwks, oidc_provider_config):
         """Should reject JWT with wrong audience."""
         # Create test config with test provider
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
         test_config.jwt.audiences = ["api://test"]
@@ -1688,7 +1691,7 @@ class TestJWTService:
     @pytest.mark.asyncio
     async def test_verify_jwt_expired_token(self, valid_jwks, oidc_provider_config):
         """Should reject expired JWT tokens."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
         test_config.jwt.audiences = ["api://test"]
@@ -1720,7 +1723,7 @@ class TestJWTService:
     @pytest.mark.asyncio
     async def test_verify_jwt_not_yet_valid(self, valid_jwks, oidc_provider_config):
         """Should reject JWT tokens with future nbf (not before) claim."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
         test_config.jwt.audiences = ["api://test"]
@@ -1754,7 +1757,7 @@ class TestJWTService:
         self, valid_jwks, oidc_provider_config
     ):
         """Should accept JWT tokens within clock skew tolerance."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
         test_config.jwt.audiences = ["api://test"]
@@ -1784,7 +1787,7 @@ class TestJWTService:
     @pytest.mark.asyncio
     async def test_verify_jwt_invalid_format(self, oidc_provider_config):
         """Should reject JWT tokens with invalid format."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
 
@@ -1814,7 +1817,7 @@ class TestJWTService:
     @pytest.mark.asyncio
     async def test_verify_jwt_corrupted_base64(self, oidc_provider_config):
         """Should reject JWT tokens with corrupted base64 encoding."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
 
@@ -1835,7 +1838,7 @@ class TestJWTService:
     @pytest.mark.asyncio
     async def test_verify_jwt_malformed_json(self, oidc_provider_config):
         """Should reject JWT tokens with malformed JSON in header/payload."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["HS256"]
 
@@ -1863,7 +1866,7 @@ class TestJWTService:
         self, valid_jwks, oidc_provider_config
     ):
         """Should reject JWT tokens with disallowed algorithms."""
-        test_config = ApplicationConfig()
+        test_config = ConfigData()
         test_config.oidc.providers = {"test": oidc_provider_config}
         test_config.jwt.allowed_algorithms = ["RS256"]  # Only allow RS256, not HS256
         test_config.jwt.audiences = ["api://test"]

@@ -11,19 +11,17 @@ from src.app.api.http.middleware.limiter import (
     DefaultLocalRateLimiter,
     get_rate_limiter,
 )
-from src.app.runtime.config.config import ApplicationConfig, get_config, set_config
-from src.app.runtime.config.settings import EnvironmentVariables
+from src.app.runtime.config.config_data import ConfigData
+from src.app.runtime.context import get_config, set_config
 
 
 class TestRateLimiting:
     """Test rate limiting functionality."""
 
     @pytest.fixture
-    def test_config(self) -> ApplicationConfig:
+    def test_config(self) -> ConfigData:
         """Fixture to provide a configuration context."""
-        env_var = EnvironmentVariables()
-        env_var.environment = "test"
-        test_config = ApplicationConfig().from_environment(env_var)
+        test_config = ConfigData()
         set_config(test_config)
         return test_config
 
@@ -33,7 +31,7 @@ class TestRateLimiting:
             pytest.param(
                 "redis",
                 marks=pytest.mark.skipif(
-                    not get_config().redis_url,
+                    not get_config().redis.dev_url,
                     reason="Redis URL not configured for testing",
                 ),
             ),
@@ -76,7 +74,7 @@ class TestRateLimiting:
             # Initialize Redis connection for FastAPILimiter using async API
             import redis.asyncio as redis_async
 
-            redis_url = get_config().redis_url
+            redis_url = get_config().redis.dev_url
             client = redis_async.from_url(
                 redis_url, encoding="utf-8", decode_responses=True
             )

@@ -17,14 +17,29 @@ class AppContext:
 
 
 # Global configuration instance
-_default_config = load_templated_yaml(Path("config.yaml"))
-_default_context = AppContext(config=_default_config)
+_default_config = None
+_default_context = None
+
+
+def _get_default_config():
+    """Lazily load the default configuration."""
+    global _default_config, _default_context
+    if _default_config is None:
+        _default_config = load_templated_yaml(Path("config.yaml"))
+        _default_context = AppContext(config=_default_config)
+    return _default_config
+
+
+def _get_default_context() -> AppContext:
+    """Lazily get the default context."""
+    global _default_context
+    if _default_context is None:
+        _get_default_config()  # This will set both _default_config and _default_context
+    return _default_context  # type: ignore
 
 
 # Context variable for application context
-_app_context: ContextVar[AppContext] = ContextVar(
-    "app_context", default=_default_context
-)
+_app_context: ContextVar[AppContext] = ContextVar("app_context")
 
 
 def get_context() -> AppContext:
@@ -33,7 +48,11 @@ def get_context() -> AppContext:
     Returns:
         AppContext: The current application context containing configuration.
     """
-    return _app_context.get()
+    try:
+        return _app_context.get()
+    except LookupError:
+        # No context set, return default
+        return _get_default_context()
 
 
 def set_context(context: AppContext) -> Token[AppContext]:
@@ -70,9 +89,8 @@ def _recursive_model_dump_exclude_unset(model: BaseModel) -> dict:
             # Recursively check nested Pydantic models
             nested_result = _recursive_model_dump_exclude_unset(field_value)
             if nested_result:
-                # If nested model has explicitly set fields, we need to merge properly
-                # Include the full nested model but let the recursive merge handle it
-                result[field_name] = field_value.model_dump()
+                # If nested model has explicitly set fields, include only those fields
+                result[field_name] = nested_result
             elif field_name in explicitly_set_fields:
                 # If this nested model field was explicitly set at this level, include it
                 result[field_name] = field_value.model_dump()

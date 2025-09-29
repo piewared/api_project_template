@@ -8,12 +8,12 @@ import requests
 from fastapi.testclient import TestClient
 
 from src.app.api.http.app import app
-from src.app.runtime.config.config import (
-    ApplicationConfig,
+from src.app.runtime.config.config_data import (
+    ConfigData,
     OIDCConfig,
     OIDCProviderConfig,
-    with_context,
 )
+from src.app.runtime.context import with_context
 
 
 @pytest.fixture
@@ -40,8 +40,8 @@ def keycloak_config():
 def integration_client(keycloak_config):
     """Test client configured for integration tests with local Keycloak."""
     with patch("src.app.runtime.config.get_config") as mock_get_config:
-        config = ApplicationConfig()
-        config.environment = "test"
+        config = ConfigData()
+        config.app.environment = "test"
         config.oidc = OIDCConfig()
         config.oidc.providers = {"default": keycloak_config}
 

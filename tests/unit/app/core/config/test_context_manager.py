@@ -173,7 +173,7 @@ class TestContextManager:
         test_config.logging.level = "DEBUG"
         test_config.database.url = "sqlite:///test.db"
         test_config.redis.url = "redis://test:6379"
-        test_config.temporal.address = "test-temporal:7233"
+        test_config.temporal.url = "test-temporal:7233"
 
         with with_context(test_config):
             override_config = get_config()
@@ -183,7 +183,7 @@ class TestContextManager:
             assert override_config.logging.level == "DEBUG"
             assert override_config.database.url == "sqlite:///test.db"
             assert override_config.redis.url == "redis://test:6379"
-            assert override_config.temporal.address == "test-temporal:7233"
+            assert override_config.temporal.url == "test-temporal:7233"
 
         # All should revert
         after_config = get_config()

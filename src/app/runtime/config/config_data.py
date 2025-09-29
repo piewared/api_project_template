@@ -55,7 +55,7 @@ class TemporalConfig(BaseModel):
     """Temporal configuration model."""
 
     enabled: bool = Field(default=True, description="Enable temporal service")
-    address: str = Field(default="temporal:7233", description="Temporal server address")
+    url: str = Field(default="temporal:7233", description="Temporal server url")
     namespace: str = Field(default="default", description="Temporal namespace")
     task_queue: str = Field(default="default", description="Temporal task queue name")
     worker: TemporalWorkerConfig = Field(default_factory=TemporalWorkerConfig, description="Worker configuration")
@@ -65,7 +65,8 @@ class RedisConfig(BaseModel):
     """Redis configuration model."""
 
     enabled: bool = Field(default=True, description="Enable Redis service")
-    url: str = Field(default="redis://redis:6379", description="Redis connection URL")
+    url: str = Field(default="", description="Redis connection URL")
+    dev_url: str = Field(default="redis://localhost:6379/0", description="Redis connection URL for development")
 
 
 class OIDCProviderConfig(BaseModel):

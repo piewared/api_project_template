@@ -16,7 +16,6 @@ from src.app.api.http.deps import get_session
 from src.app.api.http.middleware.limiter import configure_rate_limiter
 from src.app.core.services import jwt_service
 from src.app.runtime.config.config_data import OIDCProviderConfig
-from src.app.runtime.config.settings import EnvironmentVariables
 from src.app.runtime.context import get_config
 from tests.utils import oct_jwk
 

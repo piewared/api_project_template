@@ -6,9 +6,9 @@ environment, including starting services, managing containers, and entities.
 """
 
 import subprocess
-import requests
 from pathlib import Path
 
+import requests
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -135,7 +135,7 @@ def start_dev_server(
         raise
 
 
-@dev_app.command(name="start-dev-env")
+@dev_app.command(name="start-env")
 def setup_dev(
     force: bool = typer.Option(
         False, "--force", help="Force restart even if services are running"

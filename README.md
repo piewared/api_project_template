@@ -125,7 +125,7 @@ curl http://localhost:8000/auth/web/login
 
 ## 💡 Building Your Service
 
-Projects generated from this template are production-ready and fully deployable—except you haven't written your business logic yet! 
+Projects generated from this template are production-ready and fully deployable—except you haven't written any services yet!
 To implement your service, you'll define entities, business logic, and API routes specific to your domain. To accelerate your development,
 the generated project includes a complete development environment with self-hosted instances of PostgreSQL, Temporal.io, Redis, and Keycloak 
 that mirror production conditions. This means you can build, test, and iterate on production-ready services from day one, with zero infrastructure setup.

@@ -1,18 +1,181 @@
 """Entity management CLI commands."""
 
+import re
+from pathlib import Path
+
 import typer
+from jinja2 import Environment, FileSystemLoader
 from rich.panel import Panel
+from rich.prompt import Prompt
 from rich.table import Table
 
-from .utils import console
+from .utils import console, get_project_root
 
 # Create the entity command group
 entity_app = typer.Typer(help="🎭 Entity management commands")
 
 
+def get_template_env() -> Environment:
+    """Get Jinja2 environment for template rendering."""
+    template_dir = Path(__file__).parent / "templates"
+    return Environment(loader=FileSystemLoader(template_dir))
+
+
+def render_template_to_file(
+    template_name: str, output_path: Path, context: dict
+) -> None:
+    """Render a Jinja2 template to a file."""
+    env = get_template_env()
+    template = env.get_template(template_name)
+    content = template.render(**context)
+    output_path.write_text(content)
+
+
+def sanitize_entity_name(name: str) -> str:
+    """Sanitize entity name to conform to Python naming conventions."""
+    # Convert to PascalCase for class names
+    # Remove special characters and split on non-alphanumeric
+    words = re.findall(r"[a-zA-Z0-9]+", name)
+    return "".join(word.capitalize() for word in words)
+
+
+def sanitize_field_name(name: str) -> str:
+    """Sanitize field name to conform to Python snake_case conventions."""
+    # Convert to snake_case for field names
+    words = re.findall(r"[a-zA-Z0-9]+", name)
+    return "_".join(word.lower() for word in words)
+
+
+def prompt_for_fields() -> list[dict[str, str]]:
+    """Prompt user for entity fields."""
+    fields = []
+    console.print(
+        "\n[blue]Define entity fields (press Enter without a name to finish):[/blue]"
+    )
+
+    while True:
+        field_name = Prompt.ask("[cyan]Field name", default="")
+        if not field_name.strip():
+            break
+
+        field_name = sanitize_field_name(field_name)
+
+        field_type = Prompt.ask(
+            f"[cyan]Type for '{field_name}'",
+            choices=["str", "int", "float", "bool", "datetime"],
+            default="str",
+        )
+
+        optional = (
+            Prompt.ask(
+                f"[cyan]Is '{field_name}' optional?", choices=["y", "n"], default="n"
+            )
+            == "y"
+        )
+
+        description = Prompt.ask(
+            f"[cyan]Description for '{field_name}'",
+            default=f"{field_name.replace('_', ' ').title()}",
+        )
+
+        fields.append(
+            {
+                "name": field_name,
+                "type": field_type,
+                "optional": optional,
+                "description": description,
+            }
+        )
+
+        console.print(f"[green]✓[/green] Added field: {field_name}: {field_type}")
+
+    return fields
+
+
+def create_entity_files(
+    entity_name: str, fields: list[dict[str, str]], package_path: Path
+) -> None:
+    """Create all entity files using Jinja2 templates."""
+    context = {"entity_name": entity_name, "fields": fields}
+
+    # Create all files from templates
+    render_template_to_file("entity.py.j2", package_path / "entity.py", context)
+    render_template_to_file("table.py.j2", package_path / "table.py", context)
+    render_template_to_file("repository.py.j2", package_path / "repository.py", context)
+    render_template_to_file("__init__.py.j2", package_path / "__init__.py", context)
+
+
+def create_crud_router(entity_name: str, fields: list[dict[str, str]]) -> None:
+    """Create a CRUD router for the entity using templates."""
+    router_dir = (
+        get_project_root() / "src" / "app" / "api" / "http" / "routers" / "service"
+    )
+    router_dir.mkdir(exist_ok=True)
+
+    # Create router file from template
+    router_file = router_dir / f"{entity_name.lower()}.py"
+    context = {"entity_name": entity_name, "fields": fields}
+    render_template_to_file("router.py.j2", router_file, context)
+
+    # Update routers __init__.py if it exists
+    routers_init = router_dir / "__init__.py"
+    if not routers_init.exists():
+        routers_init.write_text('"""Service routers package."""\n')
+
+
+def register_router_with_app(entity_name: str) -> None:
+    """Add import and registration for the new router in app.py."""
+    app_file = get_project_root() / "src" / "app" / "api" / "http" / "app.py"
+
+    # Read current content
+    content = app_file.read_text()
+
+    # Add import
+    import_line = f"from src.app.api.http.routers.service.{entity_name.lower()} import router as {entity_name.lower()}_router"
+
+    # Find the last router import to add after it
+    lines = content.split("\n")
+    import_insert_idx = -1
+
+    for i, line in enumerate(lines):
+        if "from src.app.api.http.routers" in line and "import router" in line:
+            import_insert_idx = i + 1
+
+    if import_insert_idx > 0:
+        lines.insert(import_insert_idx, import_line)
+    else:
+        # Find other imports and add after them
+        for i, line in enumerate(lines):
+            if line.startswith("from src.app") and "import" in line:
+                import_insert_idx = i + 1
+        if import_insert_idx > 0:
+            lines.insert(import_insert_idx, import_line)
+
+    # Add router registration
+    registration_line = f'app.include_router({entity_name.lower()}_router, prefix="/api/v1/{entity_name.lower()}s", tags=["{entity_name.lower()}s"])'
+
+    # Find where to add the registration
+    for i, line in enumerate(lines):
+        if "app.include_router" in line and "your_router" in line:
+            lines.insert(i, registration_line)
+            break
+    else:
+        # Find the last router registration
+        register_insert_idx = -1
+        for i, line in enumerate(lines):
+            if "app.include_router" in line and "your_router" not in line:
+                register_insert_idx = i + 1
+
+        if register_insert_idx > 0:
+            lines.insert(register_insert_idx, registration_line)
+
+    # Write back
+    app_file.write_text("\n".join(lines))
+
+
 @entity_app.command()
 def add(
-    entity_name: str = typer.Argument(..., help="Name of the entity to add"),
+    entity_name: str = typer.Argument(None, help="Name of the entity to add"),
 ) -> None:
     """
     ➕ Add a new entity to the project.
@@ -33,6 +196,13 @@ def add(
     - API router with OpenAPI documentation
     - Comprehensive test coverage
     """
+    # Prompt for entity name if not provided
+    if not entity_name:
+        entity_name = Prompt.ask("[cyan]Entity name")
+
+    # Sanitize the entity name
+    entity_name = sanitize_entity_name(entity_name)
+
     console.print(
         Panel.fit(
             f"[bold green]Adding Entity: {entity_name}[/bold green]",
@@ -40,23 +210,78 @@ def add(
         )
     )
 
-    # TODO: Implement entity generation logic
-    # This would typically involve:
-    # 1. Validate entity name
-    # 2. Create directory structure
-    # 3. Generate model files
-    # 4. Generate repository files
-    # 5. Generate service files
-    # 6. Generate API router
-    # 7. Generate test files
-    # 8. Update main application to register routes
+    # Check if entity already exists
+    project_root = get_project_root()
+    service_entities_dir = project_root / "src" / "app" / "entities" / "service"
+    entity_package_path = service_entities_dir / entity_name.lower()
 
-    console.print(f"[blue]Creating entity structure for: {entity_name}[/blue]")
-    console.print("[yellow]⚠️  Entity generation not yet implemented[/yellow]")
-    console.print(
-        "[dim]This feature will generate complete entity scaffolding including "
-        "models, repositories, services, and API routes.[/dim]"
-    )
+    if entity_package_path.exists():
+        console.print(
+            f"[red]❌ Entity '{entity_name}' already exists at {entity_package_path}[/red]"
+        )
+        raise typer.Exit(1)
+
+    # Prompt for entity fields
+    fields = prompt_for_fields()
+
+    if not fields:
+        console.print(
+            "[yellow]⚠️ No fields defined. Creating entity with base fields only.[/yellow]"
+        )
+
+    console.print(f"\n[blue]Creating entity structure for: {entity_name}[/blue]")
+
+    try:
+        # Create entity package directory
+        entity_package_path.mkdir(parents=True, exist_ok=True)
+
+        # Create entity files
+        console.print("[blue]📄 Creating entity files...[/blue]")
+        create_entity_files(entity_name, fields, entity_package_path)
+
+        # Create CRUD router
+        console.print("[blue]🔌 Creating API router...[/blue]")
+        create_crud_router(entity_name, fields)
+
+        # Register router with FastAPI app
+        console.print("[blue]📝 Registering router with FastAPI app...[/blue]")
+        register_router_with_app(entity_name)
+
+        console.print(
+            f"\n[green]✅ Entity '{entity_name}' created successfully![/green]"
+        )
+        console.print("\n[blue]📄 Files created:[/blue]")
+        console.print(f"  - {entity_package_path}/entity.py")
+        console.print(f"  - {entity_package_path}/table.py")
+        console.print(f"  - {entity_package_path}/repository.py")
+        console.print(f"  - {entity_package_path}/__init__.py")
+        console.print(f"  - src/app/api/http/routers/service/{entity_name.lower()}.py")
+
+        console.print("\n[blue]🚀 API endpoints available at:[/blue]")
+        console.print(f"  - POST   /api/v1/{entity_name.lower()}s/")
+        console.print(f"  - GET    /api/v1/{entity_name.lower()}s/")
+        console.print(f"  - GET    /api/v1/{entity_name.lower()}s/{{id}}")
+        console.print(f"  - PUT    /api/v1/{entity_name.lower()}s/{{id}}")
+        console.print(f"  - DELETE /api/v1/{entity_name.lower()}s/{{id}}")
+
+        if fields:
+            console.print("\n[blue]📋 Entity fields:[/blue]")
+            for field in fields:
+                optional_text = " (optional)" if field["optional"] else ""
+                console.print(f"  - {field['name']}: {field['type']}{optional_text}")
+
+        console.print(
+            "\n[dim]💡 Remember to restart your development server to load the new router![/dim]"
+        )
+
+    except Exception as e:
+        console.print(f"[red]❌ Error creating entity: {e}[/red]")
+        # Clean up on error
+        if entity_package_path.exists():
+            import shutil
+
+            shutil.rmtree(entity_package_path)
+        raise typer.Exit(1) from e
 
 
 @entity_app.command()
@@ -118,29 +343,83 @@ def ls() -> None:
         Panel.fit("[bold cyan]Project Entities[/bold cyan]", border_style="cyan")
     )
 
-    # TODO: Implement entity listing logic
-    # This would typically involve:
-    # 1. Scan project structure
-    # 2. Find entity definitions
-    # 3. Parse entity metadata
-    # 4. Check for associated files
-    # 5. Display in formatted table
+    project_root = get_project_root()
+    service_entities_dir = project_root / "src" / "app" / "entities" / "service"
 
-    # Create a sample table for demonstration
+    if not service_entities_dir.exists():
+        console.print(
+            f"[red]❌ Service entities directory not found: {service_entities_dir}[/red]"
+        )
+        return
+
+    entities = []
+    for item in service_entities_dir.iterdir():
+        if (
+            item.is_dir()
+            and not item.name.startswith("_")
+            and item.name != "__pycache__"
+        ):
+            entity_name = item.name.title()  # Convert to title case
+
+            # Check for files
+            has_entity = "✅" if (item / "entity.py").exists() else "❌"
+            has_table = "✅" if (item / "table.py").exists() else "❌"
+            has_repository = "✅" if (item / "repository.py").exists() else "❌"
+
+            # Check for router
+            router_file = (
+                project_root
+                / "src"
+                / "app"
+                / "api"
+                / "http"
+                / "routers"
+                / "service"
+                / f"{item.name}.py"
+            )
+            has_router = "✅" if router_file.exists() else "❌"
+
+            # Check for tests (placeholder for now)
+            has_tests = "❓"  # TODO: Implement test detection
+
+            entities.append(
+                (
+                    entity_name,
+                    has_entity,
+                    has_table,
+                    has_repository,
+                    has_router,
+                    has_tests,
+                )
+            )
+
+    if not entities:
+        console.print("[yellow]📭 No service entities found[/yellow]")
+        console.print(
+            "[dim]Create entities using: [cyan]cli entity add <name>[/cyan][/dim]"
+        )
+        return
+
+    # Create table
     table = Table(show_header=True, header_style="bold blue")
     table.add_column("Entity", style="cyan", no_wrap=True)
-    table.add_column("Model", style="green")
-    table.add_column("Repository", style="yellow")
-    table.add_column("Service", style="magenta")
-    table.add_column("Router", style="blue")
-    table.add_column("Tests", style="red")
+    table.add_column("Entity", style="green", justify="center")
+    table.add_column("Table", style="yellow", justify="center")
+    table.add_column("Repository", style="magenta", justify="center")
+    table.add_column("Router", style="blue", justify="center")
+    table.add_column("Tests", style="red", justify="center")
 
-    # TODO: Replace with actual entity scanning
-    console.print("[yellow]⚠️  Entity scanning not yet implemented[/yellow]")
-    console.print(
-        "[dim]This feature will scan the project and list all discovered entities.[/dim]"
-    )
+    for (
+        entity_name,
+        has_entity,
+        has_table,
+        has_repository,
+        has_router,
+        has_tests,
+    ) in sorted(entities):
+        table.add_row(
+            entity_name, has_entity, has_table, has_repository, has_router, has_tests
+        )
 
-    # Show empty table for now
     console.print(table)
-    console.print("[dim]No entities found or entity scanning not implemented.[/dim]")
+    console.print(f"\n[dim]Total: {len(entities)} entities found[/dim]")

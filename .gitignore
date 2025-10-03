@@ -54,3 +54,7 @@ node_modules/
 # Cookiecutter template directory
 {{cookiecutter.project_slug}}/
 
+# Generated entity files
+src/app/entities/service/
+src/app/api/http/routers/service/
+

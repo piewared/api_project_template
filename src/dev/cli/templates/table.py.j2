@@ -1,0 +1,16 @@
+"""{{entity_name}} database table model."""
+
+from src.app.entities.core._base import EntityTable
+
+
+class {{entity_name}}Table(EntityTable, table=True):
+    """Database persistence model for {{entity_name.lower()}}s.
+
+    This represents how the {{entity_name}} entity is stored in the database.
+    It's separate from the domain entity to maintain clean architecture
+    while keeping related code together.
+    """
+
+{% for field in fields %}
+    {{field.name}}: {{field.type}}{% if field.optional %} | None = None{% endif %}
+{% endfor %}

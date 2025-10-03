@@ -19,7 +19,7 @@ from src.app.api.http.routers.auth_bff import router_bff
 from src.app.core.services import jwt_service
 from src.app.runtime.context import get_config
 
-#main_config = get_config()
+# main_config = get_config()
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -42,8 +42,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=()")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=()"
+        )
         # HSTS only in prod
         if get_config().app.environment == "production":
             response.headers.setdefault(
@@ -76,8 +80,12 @@ app.add_middleware(SecurityHeadersMiddleware)
 __all__ = ["app", "startup", "shutdown"]
 
 # --- CORS configuration ---
-if get_config().app.environment == "production" and ("*" in get_config().app.cors.origins):
-    raise RuntimeError("CORS misconfigured: cannot use '*' with allow_credentials=True in production")
+if get_config().app.environment == "production" and (
+    "*" in get_config().app.cors.origins
+):
+    raise RuntimeError(
+        "CORS misconfigured: cannot use '*' with allow_credentials=True in production"
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -125,8 +133,10 @@ app.include_router(router_bff, prefix="/auth")
 # Example:
 # app.include_router(your_router, prefix="/api/v1", tags=["your_feature"])
 
+
 def _activate_local_rate_limiter() -> None:
     from src.app.api.http.middleware.limiter import DefaultLocalRateLimiter
+
     logger.warning("Falling back to in-memory rate limiter")
     configure_rate_limiter(limiter_factory=DefaultLocalRateLimiter)
 
@@ -151,7 +161,9 @@ async def _initialize_rate_limiter() -> None:
         )
         await FastAPILimiter.init(client)
         app.state.redis = client
-        logger.info("FastAPI limiter initialized with Redis: %s", get_config().redis.url)
+        logger.info(
+            "FastAPI limiter initialized with Redis: %s", get_config().redis.url
+        )
         configure_rate_limiter()  # use default redis-based limiter
         app.state.local_rate_limiter = None
         return
@@ -172,12 +184,16 @@ async def startup() -> None:
 
     # Verify JWKS endpoints so auth failures surface early
     if config.oidc.providers:
-        #issuers = list(main_config.oidc_providers.keys())
+        # issuers = list(main_config.oidc_providers.keys())
         issuers = list(config.oidc.providers.values())
         results = await asyncio.gather(
             *(jwt_service.fetch_jwks(iss) for iss in issuers), return_exceptions=True
         )
-        errors = [(iss, str(err)) for iss, err in zip(issuers, results, strict=True) if isinstance(err, Exception)]
+        errors = [
+            (iss, str(err))
+            for iss, err in zip(issuers, results, strict=True)
+            if isinstance(err, Exception)
+        ]
         for iss, err in errors:
             logger.exception("Failed to fetch JWKS for issuer %s: %s", iss, err)
         if errors and config.app.environment == "production":
@@ -192,6 +208,7 @@ async def shutdown() -> None:
 
 
 # --- Route handlers ---
+
 
 @app.get("/health")
 async def health() -> dict[str, str]:

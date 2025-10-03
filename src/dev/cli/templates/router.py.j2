@@ -3,8 +3,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
+from src.app.api.http.deps import get_session
 from src.app.entities.service.{{entity_name.lower()}} import {{entity_name}}, {{entity_name}}Repository
-from src.app.runtime.database import get_session
+
 
 router = APIRouter()
 

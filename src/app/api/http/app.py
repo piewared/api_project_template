@@ -16,6 +16,7 @@ from src.app.api.http.middleware.limiter import (
 )
 from src.app.api.http.routers.auth import router_jit
 from src.app.api.http.routers.auth_bff import router_bff
+from src.app.api.http.routers.service.book import router as book_router
 from src.app.core.services import jwt_service
 from src.app.runtime.context import get_config
 
@@ -131,6 +132,7 @@ app.include_router(router_bff, prefix="/auth")
 
 # Add your application-specific routers here
 # Example:
+app.include_router(book_router, prefix="/api/v1/books", tags=["books"])
 # app.include_router(your_router, prefix="/api/v1", tags=["your_feature"])
 
 

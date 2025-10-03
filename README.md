@@ -137,398 +137,137 @@ that mirror production conditions. This means you can build, test, and iterate o
 - 🔄 **Workflows ready** - Temporal for background tasks and complex business processes
 - 🛠️ **Development tools** - Rich CLI, hot reload, structured logging, and monitoring
 
+### 1. Create Entities Using the CLI
 
+The fastest way to create domain entities is using the built-in CLI tool. It automatically generates all necessary files with proper structure:
 
-### 1. Define Domain Entities
+```bash
+# Create a new entity with interactive field definition
+uv run cli entity add Product
 
-Create a complete entity following the template's pattern. Add your domain entities in `your_package/app/entities/service/product/`:
+# The CLI will prompt you for each field:
+# Field name (): name
+# Type for 'name' [str/int/float/bool/datetime] (str): str
+# Is 'name' optional? [y/n] (n): n
+# Description for 'name' (Name): Product name
+# Field name (): price
+# Type for 'price' [str/int/float/bool/datetime] (str): float
+# Is 'price' optional? [y/n] (n): n
+# Description for 'price' (Price): Product price
+# Field name (): (press Enter to finish)
+```
 
-**`your_package/app/entities/service/product/entity.py`:**
+**What gets generated automatically:**
+- ✅ **Domain Entity** (`src/app/entities/service/product/entity.py`) - Business logic and validation
+- ✅ **Database Table** (`src/app/entities/service/product/table.py`) - SQLModel table definition  
+- ✅ **Repository** (`src/app/entities/service/product/repository.py`) - Data access layer with CRUD operations
+- ✅ **Package Init** (`src/app/entities/service/product/__init__.py`) - Proper exports
+- ✅ **API Router** (`src/app/api/http/routers/service/product.py`) - Complete CRUD endpoints
+- ✅ **FastAPI Registration** - Automatically registered with the main FastAPI app
+
+**Example generated entity structure:**
 ```python
-"""Product domain entity."""
-
-from typing import Optional
-from datetime import datetime
-from decimal import Decimal
-
-from pydantic import Field
-
-from your_package.app.entities.core._base import Entity
-
-
+# Generated entity.py
 class Product(Entity):
-    """Product entity representing a sellable item.
-
-    This is the domain model that contains business logic and validation.
-    It inherits from Entity to get auto-generated UUID identifiers.
-    """
-
+    """Product entity representing a product in the system."""
+    
     name: str = Field(description="Product name")
-    price: Decimal = Field(description="Product price", ge=0)
-    description: Optional[str] = Field(default=None, description="Product description")
-    category: str = Field(description="Product category")
-    stock_quantity: int = Field(default=0, ge=0, description="Available stock")
-    is_active: bool = Field(default=True, description="Whether product is active")
+    price: float = Field(description="Product price")
+    
+    def __eq__(self, other: Any) -> bool:
+        """Compare products by business attributes."""
+        # Auto-generated comparison logic
+    
+    def __hash__(self) -> int:
+        """Hash based on business attributes."""
+        # Auto-generated hashing logic
+```
+
+**Generated API endpoints (automatically available):**
+- `POST /api/v1/products/` - Create product
+- `GET /api/v1/products/` - List all products  
+- `GET /api/v1/products/{id}` - Get product by ID
+- `PUT /api/v1/products/{id}` - Update product
+- `DELETE /api/v1/products/{id}` - Delete product
+
+### 2. Manage Entities
+
+```bash
+# List all entities in your project
+uv run cli entity ls
+
+# Remove an entity (with confirmation)
+uv run cli entity rm Product
+
+# Remove an entity without confirmation
+uv run cli entity rm Product --force
+```
+
+### 3. Customize Generated Code
+
+After generating entities with the CLI, you can customize the generated code for your specific business requirements:
+
+**Add business logic to your entity:**
+```python
+# Edit src/app/entities/service/product/entity.py
+class Product(Entity):
+    name: str = Field(description="Product name")
+    price: float = Field(description="Product price")
+    stock_quantity: int = Field(default=0, description="Available stock")
     
     def is_in_stock(self) -> bool:
-        """Check if product is in stock."""
-        return self.stock_quantity > 0 and self.is_active
+        """Custom business logic - check if product is in stock."""
+        return self.stock_quantity > 0
     
     def can_fulfill_order(self, quantity: int) -> bool:
-        """Check if we can fulfill an order for the given quantity."""
-        return self.is_active and self.stock_quantity >= quantity
+        """Custom business logic - check if we can fulfill an order."""
+        return self.stock_quantity >= quantity
 ```
 
-**`your_package/app/entities/service/product/table.py`:**
+**Add custom repository methods:**
 ```python
-"""Product database table model."""
-
-from typing import Optional
-from decimal import Decimal
-from sqlmodel import Field
-
-from your_package.app.entities.core._base import EntityTable
-
-
-class ProductTable(EntityTable, table=True):
-    """Database persistence model for products.
-
-    This represents how the Product entity is stored in the database.
-    It's separate from the domain entity to maintain clean architecture.
-    """
-
-    name: str
-    price: Decimal = Field(decimal_places=2)
-    description: Optional[str] = None
-    category: str
-    stock_quantity: int = Field(default=0)
-    is_active: bool = Field(default=True)
-    
-    # Additional database-specific fields
-    sku: Optional[str] = Field(default=None, index=True, description="Stock keeping unit")
-    barcode: Optional[str] = Field(default=None, index=True)
-```
-
-**`your_package/app/entities/service/product/repository.py`:**
-```python
-"""Product repository for data access."""
-
-from typing import List, Optional
-from sqlmodel import Session, select
-
-from .entity import Product
-from .table import ProductTable
-
-
+# Edit src/app/entities/service/product/repository.py
 class ProductRepository:
-    """Data access layer for Product entities.
-
-    This handles all database operations for Products while keeping
-    the data access logic colocated with the Product entity.
-    """
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def get(self, product_id: str) -> Optional[Product]:
-        """Get a product by ID."""
-        row = self._session.get(ProductTable, product_id)
-        if row is None:
-            return None
-        return Product.model_validate(row, from_attributes=True)
-
-    def save(self, product: Product) -> Product:
-        """Save a product to the database."""
-        # Convert domain entity to table row
-        product_data = product.model_dump(exclude={'id', 'created_at', 'updated_at'})
-        
-        if product.id:
-            # Update existing
-            row = self._session.get(ProductTable, product.id)
-            if row:
-                for key, value in product_data.items():
-                    setattr(row, key, value)
-            else:
-                raise ValueError(f"Product {product.id} not found")
-        else:
-            # Create new
-            row = ProductTable(**product_data)
-            self._session.add(row)
-        
-        self._session.commit()
-        self._session.refresh(row)
-        return Product.model_validate(row, from_attributes=True)
-
-    def list_active_products(self) -> List[Product]:
-        """Get all active products."""
-        statement = select(ProductTable).where(ProductTable.is_active == True)
-        rows = self._session.exec(statement).all()
-        return [Product.model_validate(row, from_attributes=True) for row in rows]
-
-    def find_by_category(self, category: str) -> List[Product]:
-        """Find products by category."""
+    # ... generated CRUD methods ...
+    
+    def find_by_category(self, category: str) -> list[Product]:
+        """Custom query - find products by category."""
         statement = select(ProductTable).where(ProductTable.category == category)
         rows = self._session.exec(statement).all()
         return [Product.model_validate(row, from_attributes=True) for row in rows]
-
-    def delete(self, product_id: str) -> bool:
-        """Delete a product by ID."""
-        row = self._session.get(ProductTable, product_id)
-        if row:
-            self._session.delete(row)
-            self._session.commit()
-            return True
-        return False
+    
+    def find_low_stock(self, threshold: int = 10) -> list[Product]:
+        """Custom query - find products with low stock."""
+        statement = select(ProductTable).where(ProductTable.stock_quantity < threshold)
+        rows = self._session.exec(statement).all()
+        return [Product.model_validate(row, from_attributes=True) for row in rows]
 ```
 
-**`your_package/app/entities/service/product/__init__.py`:**
+**Add custom API endpoints:**
 ```python
-"""Product entity package."""
+# Edit src/app/api/http/routers/service/product.py
+# Add custom endpoints to the generated router
 
-from .entity import Product
-from .repository import ProductRepository
-from .table import ProductTable
-
-__all__ = ["Product", "ProductRepository", "ProductTable"]
-```
-
-### 2. Implement Business Logic
-
-Add business logic in `your_package/app/service/__init__.py`:
-
-```python
-from typing import List, Optional
-from decimal import Decimal
-
-from ..entities.service.product import Product, ProductRepository
-
-
-class ProductService:
-    """Business service for product operations."""
-    
-    def __init__(self, product_repo: ProductRepository):
-        self.product_repo = product_repo
-    
-    async def create_product(
-        self, 
-        name: str, 
-        price: Decimal, 
-        category: str,
-        description: Optional[str] = None,
-        stock_quantity: int = 0
-    ) -> Product:
-        """Create a new product with business validation."""
-        # Business rules validation
-        if price <= 0:
-            raise ValueError("Price must be positive")
-        if len(name.strip()) < 2:
-            raise ValueError("Product name must be at least 2 characters")
-        if len(category.strip()) == 0:
-            raise ValueError("Category is required")
-            
-        # Create domain entity
-        product = Product(
-            name=name.strip(),
-            price=price,
-            category=category.strip(),
-            description=description.strip() if description else None,
-            stock_quantity=stock_quantity
-        )
-        
-        # Save via repository
-        return self.product_repo.save(product)
-    
-    async def get_product(self, product_id: str) -> Optional[Product]:
-        """Get a product by ID."""
-        return self.product_repo.get(product_id)
-    
-    async def update_stock(self, product_id: str, new_quantity: int) -> Product:
-        """Update product stock with business rules."""
-        if new_quantity < 0:
-            raise ValueError("Stock quantity cannot be negative")
-            
-        product = self.product_repo.get(product_id)
-        if not product:
-            raise ValueError(f"Product {product_id} not found")
-        
-        # Apply business logic
-        product.stock_quantity = new_quantity
-        
-        return self.product_repo.save(product)
-    
-    async def get_products_by_category(self, category: str) -> List[Product]:
-        """Get all products in a category."""
-        return self.product_repo.find_by_category(category)
-    
-    async def get_available_products(self) -> List[Product]:
-        """Get all products that are active and in stock."""
-        products = self.product_repo.list_active_products()
-        return [p for p in products if p.is_in_stock()]
-
-
-class OrderService:
-    """Business service for order operations."""
-    
-    def __init__(self, product_service: ProductService):
-        self.product_service = product_service
-    
-    async def validate_order_items(self, product_ids: List[str], quantities: List[int]) -> List[Product]:
-        """Validate that all products exist and are available."""
-        if len(product_ids) != len(quantities):
-            raise ValueError("Product IDs and quantities must have same length")
-            
-        products = []
-        for product_id, quantity in zip(product_ids, quantities):
-            product = await self.product_service.get_product(product_id)
-            if not product:
-                raise ValueError(f"Product {product_id} not found")
-            
-            if not product.can_fulfill_order(quantity):
-                raise ValueError(f"Insufficient stock for product {product.name}")
-            
-            products.append(product)
-        
-        return products
-    
-    async def calculate_total(self, products: List[Product], quantities: List[int]) -> Decimal:
-        """Calculate order total with business rules."""
-        total = Decimal('0.00')
-        
-        for product, quantity in zip(products, quantities):
-            line_total = product.price * quantity
-            total += line_total
-        
-        # Apply business rules (minimum order, etc.)
-        if total < Decimal('0.01'):
-            raise ValueError("Order total too low")
-            
-        return total
-```
-
-### 3. Create API Router
-
-Add HTTP endpoints in `your_package/app/api/routers/business.py`:
-
-```python
-from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional
-from decimal import Decimal
-
-from your_package.app.entities.service.product import Product, ProductRepository
-from your_package.app.service import ProductService, OrderService
-from your_package.app.api.http.deps import get_current_user
-
-router = APIRouter(prefix="/api/v1", tags=["business"])
-
-# Dependency injection with repository pattern
-def get_product_service() -> ProductService:
-    """Get configured ProductService with repository."""
-    product_repo = ProductRepository()
-    return ProductService(product_repo)
-
-def get_order_service() -> OrderService: 
-    """Get configured OrderService with dependencies."""
-    product_service = get_product_service()
-    return OrderService(product_service)
-
-@router.post("/products", response_model=dict, status_code=status.HTTP_201_CREATED)
-async def create_product(
-    name: str,
-    price: Decimal,
+@router.get("/category/{category}", response_model=list[Product])
+def get_products_by_category(
     category: str,
-    description: Optional[str] = None,
-    stock_quantity: int = 0,
-    product_service: ProductService = Depends(get_product_service),
-    current_user = Depends(get_current_user)
-):
-    """Create a new product."""
-    try:
-        product = await product_service.create_product(
-            name=name,
-            price=price, 
-            category=category,
-            description=description,
-            stock_quantity=stock_quantity
-        )
-        return {"id": product.id, "message": "Product created successfully"}
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    session: Session = Depends(get_session),
+) -> list[Product]:
+    """Get products by category."""
+    repository = ProductRepository(session)
+    return repository.find_by_category(category)
 
-@router.get("/products/{product_id}", response_model=dict)
-async def get_product(
-    product_id: str,
-    product_service: ProductService = Depends(get_product_service),
-    current_user = Depends(get_current_user)
-):
-    """Get product by ID."""
-    product = await product_service.get_product(product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    return {
-        "id": product.id,
-        "name": product.name,
-        "price": str(product.price),
-        "category": product.category,
-        "description": product.description,
-        "stock_quantity": product.stock_quantity,
-        "is_active": product.is_active,
-        "created_at": product.created_at.isoformat(),
-        "updated_at": product.updated_at.isoformat()
-    }
-
-@router.get("/products", response_model=List[dict])
-async def list_products(
-    category: Optional[str] = None,
-    available_only: bool = False,
-    product_service: ProductService = Depends(get_product_service),
-    current_user = Depends(get_current_user)
-):
-    """List products with filtering."""
-    try:
-        if category:
-            products = await product_service.get_products_by_category(category)
-        elif available_only:
-            products = await product_service.get_available_products()
-        else:
-            # Would need a list_all method in service
-            products = []
-        
-        return [
-            {
-                "id": p.id,
-                "name": p.name,
-                "price": str(p.price),
-                "category": p.category,
-                "stock_quantity": p.stock_quantity,
-                "is_active": p.is_active
-            }
-            for p in products
-        ]
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.put("/products/{product_id}/stock", response_model=dict)
-async def update_product_stock(
-    product_id: str,
-    new_quantity: int,
-    product_service: ProductService = Depends(get_product_service),
-    current_user = Depends(get_current_user)
-):
-    """Update product stock quantity."""
-    try:
-        product = await product_service.update_stock(product_id, new_quantity)
-        return {
-            "id": product.id,
-            "name": product.name,
-            "new_stock": product.stock_quantity,
-            "message": "Stock updated successfully"
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+@router.get("/low-stock", response_model=list[Product])  
+def get_low_stock_products(
+    threshold: int = 10,
+    session: Session = Depends(get_session),
+) -> list[Product]:
+    """Get products with low stock."""
+    repository = ProductRepository(session)
+    return repository.find_low_stock(threshold)
 ```
 
-## � Built-in Development Environment
+## 🏗️ Built-in Development Environment
 
 The template includes a fully integrated development environment with Docker Compose, providing all necessary services for local development and testing.
 
@@ -536,7 +275,7 @@ The template includes a fully integrated development environment with Docker Com
 
 - **🔐 Keycloak** - OIDC authentication server with pre-configured test realm
 - **🗄️ PostgreSQL** - Production-grade database with development data
-- **⚡ Redis** - Caching and rate limiting backend
+- **⚡ Redis** - Caching and rate limiting backend  
 - **⏰ Temporal** - Workflow orchestration engine with UI
 - **🔧 Development Tools** - Database initialization, health checks, and monitoring
 
@@ -593,9 +332,26 @@ The Keycloak setup runs automatically when services start, creating:
 
 Copy `.env.example` to `.env` and configure:
 
-### CLI Commands Reference
+```bash
+# Database Configuration
+DB_URL=postgresql://devuser:devpass@localhost:5432/app_db
 
-#### Development Environment Commands
+# Authentication (Keycloak)
+OIDC_ISSUER_URL=http://localhost:8080/realms/test-realm
+OIDC_CLIENT_ID=test-client
+OIDC_CLIENT_SECRET=test-client-secret
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# Temporal
+TEMPORAL_HOST=localhost:7233
+TEMPORAL_NAMESPACE=default
+```
+
+## 🚀 CLI Commands Reference
+
+### Development Environment Commands
 
 ```bash
 # Start all services (Keycloak, PostgreSQL, Redis, Temporal)
@@ -615,7 +371,7 @@ uv run cli dev stop
 uv run cli dev logs
 ```
 
-#### Development Server Commands
+### Development Server Commands
 
 ```bash
 # Start FastAPI development server
@@ -627,276 +383,174 @@ uv run cli dev start-server --no-reload          # Disable auto-reload
 uv run cli dev start-server --log-level debug    # Set log level
 ```
 
-#### Entity Management Commands
+### Entity Management Commands
 
 ```bash
-# Create a new entity with fields
-uv run cli entity add Product --fields "name:str,price:float,category:str"
+# Create a new entity (interactive field definition)
+uv run cli entity add Product
+
+# Remove an entity and all its files
+uv run cli entity rm Product
 
 # List all entities in the project
 uv run cli entity ls
-
-# Remove an entity
-uv run cli entity rm Product
-uv run cli entity rm Product --force    # Skip confirmation
 ```
 
-### Development Workflow
+The entity commands will:
+- Generate all necessary files (table, repository, router, __init__.py)
+- Register routes automatically with your FastAPI app
+- Follow the project's patterns and conventions
+- Handle field types, relationships, and validation
 
-1. **Start Development Environment**:
-   ```bash
-   uv run cli dev start-env
-   ```
+## 🧪 Testing
 
-2. **Initialize Database**:
-   ```bash
-   uv run init-db
-   ```
+The template includes comprehensive testing setup:
 
-3. **Create Your Entities**:
-   ```bash
-   uv run cli entity add Product --fields "name:str,price:float"
-   ```
+```bash
+# Run all tests
+uv run pytest
 
-4. **Start Development Server**:
-   ```bash
-   uv run cli dev start-server
-   ```
+# Run with coverage
+uv run pytest --cov=your_package
 
-5. **Test Authentication**:
-   - Visit http://localhost:8000/auth/web/login
-   - Use test credentials: `testuser1` / `password123`
+# Run specific test types
+uv run pytest tests/unit/           # Unit tests only
+uv run pytest tests/integration/    # Integration tests only
+uv run pytest tests/e2e/           # End-to-end tests only
+```
 
-6. **Access Services**:
-   - **API Documentation**: http://localhost:8000/docs
+### Test Structure
+- **Unit Tests**: Fast, isolated tests for business logic
+- **Integration Tests**: Test database operations and external service integration
+- **E2E Tests**: Full application workflow tests with authentication
+- **Fixtures**: Shared test data and setup in `tests/fixtures/`
+
+## 🛠️ Development Workflow
+
+### Local Development
+1. **Start Environment**: `uv run cli dev start-env`
+2. **Verify Services**: `uv run cli dev status`
+3. **Start Server**: `uv run cli dev start-server`
+4. **Access Services**:
+   - **API**: http://localhost:8000
+   - **API Docs**: http://localhost:8000/docs
    - **Keycloak Admin**: http://localhost:8080
    - **Temporal UI**: http://localhost:8081
 
-### Troubleshooting
+### Adding New Features
+1. **Create Entity**: `uv run cli entity add EntityName`
+2. **Implement Business Logic**: Add methods to repository
+3. **Write Tests**: Create unit and integration tests
+4. **Update Documentation**: Document new endpoints
 
-#### Service Won't Start
+### Debugging
 ```bash
-# Check Docker is running
-docker --version
-
-# Check service status
-uv run cli dev status
-
-# Force restart services
-uv run cli dev start-env --force
-
-# Check logs for errors
+# Check service logs
 uv run cli dev logs
+
+# Database inspection
+uv run cli dev logs postgres
+
+# Keycloak issues
+uv run cli dev logs keycloak
+```
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+#### Port Conflicts
+```bash
+# Check what's using ports
+sudo netstat -tlnp | grep :8080
+sudo netstat -tlnp | grep :5432
+
+# Stop conflicting services
+sudo systemctl stop postgresql  # If system PostgreSQL is running
 ```
 
 #### Database Connection Issues
 ```bash
-# Verify PostgreSQL is running
-uv run cli dev status
-
-# Reinitialize database
-uv run init-db
-
-# Check database logs
-docker logs dev_env_postgres_1
+# Reset database
+uv run cli dev stop
+docker volume rm dev_env_postgres_data  # Warning: destroys data
+uv run cli dev start-env
 ```
 
 #### Keycloak Authentication Issues
 ```bash
 # Verify Keycloak is configured
-curl http://localhost:8080/realms/test-realm/.well-known/openid-configuration
+curl http://localhost:8080/realms/test-realm/.well-known/openid_configuration
 
 # Check Keycloak logs
-docker logs dev_env_keycloak_1
+uv run cli dev logs keycloak
 
 # Reconfigure Keycloak (if needed)
 python src/dev/setup_keycloak.py
 ```
 
-## 🔧 Development Commands
-
-The template includes a rich CLI for development tasks. Use `--help` with any command for detailed options.
-
+#### Clean Start
 ```bash
-# Get help for all commands
-uv run cli --help
-uv run cli dev --help
-uv run cli entity --help
-
-# Entity management
-uv run cli entity add Product    # Add new entity
-uv run cli entity ls             # List entities  
-uv run cli entity rm Product     # Remove entity
-
-# Development environment
-uv run cli dev start-env          # Start all services
-uv run cli dev start-server       # Start API server
-uv run cli dev status            # Check service status
-uv run cli dev stop              # Stop all services
-uv run cli dev logs              # View service logs
-
-# Database operations
-uv run init-db                   # Initialize database
-
-# Testing
-pytest                           # Run test suite
-pytest -v tests/unit/           # Run unit tests only
-pytest --cov                    # Run with coverage
-
-# Code quality  
-ruff check .                     # Lint code
-ruff format .                    # Format code
-mypy .                          # Type checking
+# Complete environment reset
+uv run cli dev stop
+docker-compose -f dev_env/docker-compose.yml down -v  # Removes volumes
+uv run cli dev start-env
 ```
 
-## 🔐 Authentication Integration
+### Getting Help
 
-The template provides a complete authentication system with a Backend-for-Frontend (BFF) pattern.
+- **Service Status**: `uv run cli dev status`
+- **Logs**: `uv run cli dev logs [service_name]`
+- **Health Checks**: All services include health check endpoints
+- **Documentation**: Check service-specific READMEs in `dev_env/`
 
-### Using the Auth BFF Endpoint
+## 📁 Project Structure
 
-Your frontend applications can authenticate users through the `/auth/web/` endpoints:
-
-```javascript
-// 1. Redirect user to start OIDC login flow
-window.location.href = '/auth/web/login';
-
-// 2. After successful login, user is redirected back to your app
-// Check authentication status
-const response = await fetch('/auth/web/me', {
-  credentials: 'include'  // Important: include session cookies
-});
-
-if (response.ok) {
-  const user = await response.json();
-  console.log('Authenticated user:', user);
-  // User object contains: id, email, name, roles, etc.
-} else {
-  console.log('User not authenticated');
-}
-
-// 3. Make authenticated API calls
-const apiResponse = await fetch('/api/v1/products', {
-  credentials: 'include'  // Session cookie automatically included
-});
-
-// 4. Logout
-await fetch('/auth/web/logout', { 
-  method: 'POST',
-  credentials: 'include' 
-});
+```
+your_project/
+├── src/
+│   └── your_package/
+│       ├── app/
+│       │   ├── entities/          # Domain entities
+│       │   │   ├── core/          # Base classes
+│       │   │   └── [entity]/      # Entity packages
+│       │   ├── api/               # FastAPI routers
+│       │   ├── core/              # Core functionality
+│       │   │   ├── auth.py        # Authentication
+│       │   │   ├── database.py    # Database setup
+│       │   │   └── config.py      # Configuration
+│       │   ├── runtime/           # Application runtime
+│       │   └── service/           # Business services
+│       └── dev/                   # Development tools
+├── tests/                         # Test suites
+├── dev_env/                       # Development environment
+├── docs/                          # Documentation
+└── scripts/                       # Utility scripts
 ```
 
-### Available Auth Endpoints
+### Data Persistence
 
-- `GET /auth/web/login` - Initiate OIDC authentication flow
-- `GET /auth/web/callback` - Handle OIDC callback (automatic redirect)  
-- `GET /auth/web/me` - Get current user information
-- `POST /auth/web/logout` - End user session
-- `POST /auth/web/refresh` - Refresh authentication tokens
-
-### Frontend Integration Examples
-
-**React/Next.js:**
-```typescript
-// hooks/useAuth.ts
-export function useAuth() {
-  const [user, setUser] = useState(null);
-  
-  useEffect(() => {
-    fetch('/auth/web/me', { credentials: 'include' })
-      .then(res => res.ok ? res.json() : null)
-      .then(setUser);
-  }, []);
-  
-  const login = () => window.location.href = '/auth/web/login';
-  const logout = () => fetch('/auth/web/logout', { method: 'POST', credentials: 'include' });
-  
-  return { user, login, logout };
-}
-```
-
-**Vue.js:**
-```javascript  
-// composables/useAuth.js
-export function useAuth() {
-  const user = ref(null);
-  
-  const checkAuth = async () => {
-    try {
-      const response = await $fetch('/auth/web/me', { credentials: 'include' });
-      user.value = response;
-    } catch {
-      user.value = null;
-    }
-  };
-  
-  const login = () => window.location.href = '/auth/web/login';
-  const logout = async () => {
-    await $fetch('/auth/web/logout', { method: 'POST', credentials: 'include' });
-    user.value = null;
-  };
-  
-  return { user: readonly(user), checkAuth, login, logout };
-}
-```
-
-## 🔄 Template Updates
-
-Keep your project up-to-date with template improvements using Cruft:
-
-```bash
-# Check for template updates
-cruft check
-
-# Apply template updates  
-cruft update
-
-# View differences before updating
-cruft diff
-```
-
-## 🧪 Testing
-
-The template includes comprehensive testing infrastructure:
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=your_package --cov-report=html
-
-# Run specific test categories
-pytest tests/unit/           # Unit tests
-pytest tests/integration/    # Integration tests  
-pytest tests/e2e/           # End-to-end tests
-
-# Run tests matching pattern
-pytest -k "test_auth"       # Only auth-related tests
-
-# Verbose output
-pytest -v -s               # Show print statements
-```
-
-## 📝 Configuration
-
-Key configuration files:
-
-- `.env` - Environment variables for sensitive information
-- `config.yaml` - Runtime configurations for the entire project
-- `pyproject.toml` - Python project configuration
-- `dev_env/docker-compose.yml` - Development services
+Development data is persisted in Docker volumes:
+- `dev_env/postgres-data/` - PostgreSQL data
+- `dev_env/redis-data/` - Redis data  
+- `dev_env/temporal-data/` - Temporal data
 - `dev_env/keycloak-data/` - Keycloak configuration
 
+## 🎯 Architecture & Design
 
-## 🤝 Contributing
+This template follows **Domain-Driven Design** principles with **Clean Architecture**:
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`  
-3. Make your changes with tests
-4. Run the full test suite: `pytest`
-5. Submit a pull request
+- **Entities**: Core business objects with SQLModel
+- **Repositories**: Data access layer with type safety
+- **Services**: Business logic and workflows
+- **API Layer**: FastAPI routers and dependency injection
+- **Infrastructure**: Database, auth, external services
+
+### Key Patterns
+- **Repository Pattern**: Standardized data access
+- **Dependency Injection**: Clean separation of concerns
+- **Event-Driven**: Temporal workflows for complex processes
+- **Type Safety**: Full mypy compatibility with Pydantic/SQLModel
 
 ## 📄 License
 

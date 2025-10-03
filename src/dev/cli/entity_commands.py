@@ -287,6 +287,7 @@ def add(
 @entity_app.command()
 def rm(
     entity_name: str = typer.Argument(..., help="Name of the entity to remove"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
 ) -> None:
     """
     🗑️  Remove an entity from the project.
@@ -300,6 +301,9 @@ def rm(
 
     This operation will ask for confirmation before removing files.
     """
+    # Sanitize entity name
+    entity_name = sanitize_entity_name(entity_name)
+
     console.print(
         Panel.fit(
             f"[bold red]Removing Entity: {entity_name}[/bold red]",
@@ -307,24 +311,148 @@ def rm(
         )
     )
 
-    # TODO: Implement entity removal logic
-    # This would typically involve:
-    # 1. Validate entity exists
-    # 2. Check for dependencies
-    # 3. Confirm with user
-    # 4. Remove model files
-    # 5. Remove repository files
-    # 6. Remove service files
-    # 7. Remove API router
-    # 8. Remove test files
-    # 9. Update main application
-    # 10. Generate migration to drop tables
+    try:
+        project_root = get_project_root()
 
-    console.print(f"[blue]Removing entity: {entity_name}[/blue]")
-    console.print("[yellow]⚠️  Entity removal not yet implemented[/yellow]")
-    console.print(
-        "[dim]This feature will safely remove all files associated with an entity.[/dim]"
-    )
+        # Check if entity exists
+        entity_package_path = (
+            project_root / "src" / "app" / "entities" / "service" / entity_name.lower()
+        )
+        router_file = (
+            project_root
+            / "src"
+            / "app"
+            / "api"
+            / "http"
+            / "routers"
+            / "service"
+            / f"{entity_name.lower()}.py"
+        )
+
+        if not entity_package_path.exists():
+            console.print(f"[red]❌ Entity '{entity_name}' does not exist[/red]")
+            raise typer.Exit(1)
+
+        # List files that will be removed
+        files_to_remove = []
+
+        # Entity package files
+        if entity_package_path.exists():
+            files_to_remove.extend(
+                [
+                    str(entity_package_path / "entity.py"),
+                    str(entity_package_path / "table.py"),
+                    str(entity_package_path / "repository.py"),
+                    str(entity_package_path / "__init__.py"),
+                    str(entity_package_path),  # Directory itself
+                ]
+            )
+
+        # Router file
+        if router_file.exists():
+            files_to_remove.append(str(router_file))
+
+        # Show what will be removed
+        console.print("\n[yellow]📂 Files and directories to be removed:[/yellow]")
+        for file_path in files_to_remove:
+            if Path(file_path).is_dir():
+                console.print(f"  📁 {file_path}/")
+            else:
+                console.print(f"  📄 {file_path}")
+
+        # Confirmation prompt (unless --force is used)
+        if not force:
+            console.print("\n[red bold]⚠️  This action cannot be undone![/red bold]")
+            confirm = typer.confirm("Are you sure you want to remove this entity?")
+            if not confirm:
+                console.print("[blue]Operation cancelled.[/blue]")
+                return
+
+        # Remove entity package directory
+        console.print("\n[blue]🗑️  Removing entity files...[/blue]")
+        if entity_package_path.exists():
+            import shutil
+
+            shutil.rmtree(entity_package_path)
+            console.print(f"  ✅ Removed entity package: {entity_package_path}")
+
+        # Remove router file
+        if router_file.exists():
+            router_file.unlink()
+            console.print(f"  ✅ Removed router file: {router_file}")
+
+        # Remove router registration from app.py
+        console.print("[blue]📝 Updating FastAPI app registration...[/blue]")
+        unregister_router_from_app(entity_name)
+
+        # Success message
+        console.print(
+            f"\n[green]✅ Entity '{entity_name}' removed successfully![/green]"
+        )
+        console.print("\n[blue]🚀 Removed resources:[/blue]")
+        console.print(
+            f"  - Entity package: src/app/entities/service/{entity_name.lower()}/"
+        )
+        console.print(
+            f"  - API router: src/app/api/http/routers/service/{entity_name.lower()}.py"
+        )
+        console.print("  - FastAPI app registration")
+
+        console.print(
+            "\n[dim]💡 Remember to restart your development server to unload the removed router![/dim]"
+        )
+
+    except Exception as e:
+        console.print(f"[red]❌ Error removing entity: {e}[/red]")
+        raise typer.Exit(1) from e
+
+
+def unregister_router_from_app(entity_name: str) -> None:
+    """Remove router import and registration from app.py."""
+    project_root = get_project_root()
+    app_file = project_root / "src" / "app" / "api" / "http" / "app.py"
+
+    if not app_file.exists():
+        console.print(
+            "[yellow]⚠️  app.py not found, skipping router unregistration[/yellow]"
+        )
+        return
+
+    content = app_file.read_text()
+    lines = content.split("\n")
+    new_lines = []
+
+    import_pattern = f"from src.app.api.http.routers.service.{entity_name.lower()} import router as {entity_name.lower()}_router"
+    include_pattern = f'app.include_router({entity_name.lower()}_router, prefix="/api/v1/{entity_name.lower()}s", tags=["{entity_name.lower()}s"])'
+
+    import_found = False
+    include_found = False
+
+    for line in lines:
+        # Skip the import line for this entity's router
+        if import_pattern in line:
+            console.print(f"  ✅ Removed import: {line.strip()}")
+            import_found = True
+            continue
+
+        # Skip the include_router line for this entity
+        if include_pattern in line:
+            console.print(f"  ✅ Removed registration: {line.strip()}")
+            include_found = True
+            continue
+
+        new_lines.append(line)
+
+    if not import_found:
+        console.print("[yellow]⚠️  Import pattern not found in app.py[/yellow]")
+    if not include_found:
+        console.print("[yellow]⚠️  Include pattern not found in app.py[/yellow]")
+
+    # Only write back if changes were made
+    if import_found or include_found:
+        app_file.write_text("\n".join(new_lines))
+    else:
+        console.print("[yellow]⚠️  No changes made to app.py[/yellow]")
 
 
 @entity_app.command()

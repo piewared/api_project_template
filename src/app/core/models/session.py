@@ -130,6 +130,9 @@ class UserSession(BaseModel):
 class TokenClaims(BaseModel):
     """Structured representation of JWT token claims."""
 
+    # custom uid claim for user identification
+    uid: str | None = Field(default=None, description="UID claim for user identification")
+
     # Token metadata
     raw_token: str = Field(default="", description="Original JWT token")
     token_type: str = Field(default="id_token", description="Token type")

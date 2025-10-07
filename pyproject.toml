@@ -104,3 +104,6 @@ python_files = "tests.py test_*.py *_tests.py"
 pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "manual: marks tests as requiring manual intervention (deselect with '-m \"not manual\"')",
+]

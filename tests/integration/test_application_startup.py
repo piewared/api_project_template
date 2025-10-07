@@ -29,7 +29,8 @@ class TestApplicationStartup:
         class DummyRedis:
             pass
 
-        async def fake_from_url(url, encoding=None, decode_responses=None):
+        def fake_from_url(url, encoding=None, decode_responses=None):
+            # Return the Redis client directly (not a coroutine)
             return DummyRedis()
 
         # Track if init was called

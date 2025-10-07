@@ -242,7 +242,12 @@ async def close_rate_limiter() -> None:
             try:
                 # Import FastAPILimiter for cleanup
                 from fastapi_limiter import FastAPILimiter
-                if hasattr(FastAPILimiter, 'close'):
+                if hasattr(FastAPILimiter, 'aclose'):
+                    # Use the new aclose() method (fastapi-limiter >= 5.0.1)
+                    await FastAPILimiter.aclose()  # type: ignore[attr-defined]
+                    logger.info("Closed FastAPILimiter Redis connections")
+                elif hasattr(FastAPILimiter, 'close'):
+                    # Fallback to deprecated close() method
                     await FastAPILimiter.close()
                     logger.info("Closed FastAPILimiter Redis connections")
             except ImportError:

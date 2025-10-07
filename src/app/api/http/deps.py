@@ -64,9 +64,9 @@ async def get_current_user(
 
     token = auth_header.split(" ", 1)[1]
     claims = await jwt_service.verify_jwt(token)
-    uid = jwt_service.extract_uid(claims)
-    issuer = claims.get("iss")
-    subject = claims.get("sub")
+    uid = claims.uid
+    issuer = claims.issuer
+    subject = claims.subject
 
     if not issuer or not subject:
         raise HTTPException(
@@ -86,9 +86,9 @@ async def get_current_user(
     # JIT provisioning: create user and identity if they don't exist
     if identity is None:
         # Extract user information from JWT claims
-        email = claims.get("email")
-        first_name = claims.get("given_name", claims.get("first_name", ""))
-        last_name = claims.get("family_name", claims.get("last_name", ""))
+        email = claims.email
+        first_name = claims.given_name
+        last_name = claims.family_name
 
         # Fallback to extracting name from email or subject if no name claims
         if not first_name and not last_name:
@@ -128,8 +128,8 @@ async def get_current_user(
             )
 
     request.state.claims = claims
-    request.state.scopes = jwt_service.extract_scopes(claims)
-    request.state.roles = jwt_service.extract_roles(claims)
+    request.state.scopes = claims.scopes
+    request.state.roles = claims.roles
     request.state.uid = uid
     return user
 
@@ -260,9 +260,9 @@ async def get_authenticated_user(
         try:
             token = auth_header.split(" ", 1)[1]
             claims = await jwt_service.verify_jwt(token)
-            uid = jwt_service.extract_uid(claims)
-            issuer = claims.get("iss")
-            subject = claims.get("sub")
+            uid = claims.uid
+            issuer = claims.issuer
+            subject = claims.subject
 
             if not issuer or not subject:
                 raise HTTPException(
@@ -284,9 +284,9 @@ async def get_authenticated_user(
 
             if identity is None:
                 # Extract user information from JWT claims
-                email = claims.get("email")
-                first_name = claims.get("given_name", claims.get("first_name", ""))
-                last_name = claims.get("family_name", claims.get("last_name", ""))
+                email = claims.email
+                first_name = claims.given_name
+                last_name = claims.family_name
 
                 # Fallback to extracting name from email or subject if no name claims
                 if not first_name and not last_name:
@@ -332,8 +332,8 @@ async def get_authenticated_user(
 
             # Store JWT info in request state
             request.state.claims = claims
-            request.state.scopes = jwt_service.extract_scopes(claims)
-            request.state.roles = jwt_service.extract_roles(claims)
+            request.state.scopes = claims.scopes
+            request.state.roles = claims.roles
             request.state.uid = uid
             request.state.auth_method = "jwt"
 

@@ -294,6 +294,8 @@ def create_token_claims(
 
     logger.debug(f"Creating TokenClaims from claims: {remaining_claims}")
 
+    uid = extract_uid(remaining_claims)
+
     # Extract standard JWT claims (pop them as we parse)
     expires_at = remaining_claims.pop("exp", now + 3600)  # Default: 1 hour from now
     issued_at = remaining_claims.pop("iat", now)  # Default: now
@@ -344,6 +346,7 @@ def create_token_claims(
 
     return TokenClaims(
         raw_token=token,
+        uid=uid,
         email_verified=email_verified,
         all_claims=claims.copy(),
         issuer=token_issuer,

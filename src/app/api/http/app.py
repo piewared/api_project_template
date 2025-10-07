@@ -15,7 +15,7 @@ from src.app.api.http.middleware.limiter import (
     configure_rate_limiter,
 )
 from src.app.api.http.routers.auth import router_jit
-from src.app.api.http.routers.auth_bff import router_bff
+from src.app.api.http.routers.auth_bff_enhanced import router_bff
 from src.app.core.services import jwt_service
 from src.app.runtime.context import get_config
 

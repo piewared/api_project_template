@@ -12,7 +12,7 @@ from src.app.api.http.middleware.limiter import (
     get_rate_limiter,
 )
 from src.app.runtime.config.config_data import ConfigData
-from src.app.runtime.context import get_config, set_config
+from src.app.runtime.context import get_config, set_config, with_context
 
 
 class TestRateLimiting:
@@ -22,7 +22,7 @@ class TestRateLimiting:
     def test_config(self) -> ConfigData:
         """Fixture to provide a configuration context."""
         test_config = ConfigData()
-        set_config(test_config)
+        #set_config(test_config)
         return test_config
 
     @pytest.fixture(
@@ -37,29 +37,30 @@ class TestRateLimiting:
             ),
         ]
     )
-    def rate_limiter_type(self, test_config, request):
+    async def rate_limiter_type(self, test_config, request):
         """Parametrized fixture that provides both local and redis rate limiters."""
-        limiter_type = request.param
+        with with_context(test_config):
+            limiter_type = request.param
 
-        if limiter_type == "local":
-            # Configure local rate limiter
-            def local_factory(
-                times: int, milliseconds: int, per_endpoint: bool, per_method: bool
-            ):
-                return DefaultLocalRateLimiter(
-                    times, milliseconds, per_endpoint, per_method
-                )
+            if limiter_type == "local":
+                # Configure local rate limiter
+                def local_factory(
+                    times: int, milliseconds: int, per_endpoint: bool, per_method: bool
+                ):
+                    return DefaultLocalRateLimiter(
+                        times, milliseconds, per_endpoint, per_method
+                    )
 
-            configure_rate_limiter(local_factory)
-            return "local"
+                configure_rate_limiter(local_factory)
+                return "local"
 
-        elif limiter_type == "redis":
-            # Configure Redis rate limiter - initialization will be done in test setup
-            configure_rate_limiter()  # Use default redis configuration
-            return "redis"
+            elif limiter_type == "redis":
+                # Configure Redis rate limiter - initialization will be done in test setup
+                configure_rate_limiter()  # Use default redis configuration
+                return "redis"
 
     @pytest.fixture
-    def get_limiter(self, rate_limiter_type):
+    async def get_limiter(self, rate_limiter_type):
         """Factory fixture that creates rate limiters based on the configured type."""
 
         def _get_limiter(requests: int = 5, window_ms: int = 60000):

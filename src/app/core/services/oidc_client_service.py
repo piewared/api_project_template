@@ -1,13 +1,16 @@
 """OIDC client service for handling authorization code flow with PKCE."""
 
-import base64
-import hashlib
-import secrets
-from typing import Any
-
 import httpx
+from loguru import logger
 from pydantic import BaseModel
 
+from src.app.core.security import (
+    generate_pkce_pair as security_generate_pkce_pair,
+)
+from src.app.core.security import (
+    generate_state as security_generate_state,
+)
+from src.app.core.services.jwt_service import TokenClaims, create_token_claims
 from src.app.runtime.context import get_config
 
 
@@ -34,23 +37,12 @@ def generate_pkce_pair() -> tuple[str, str]:
     Returns:
         Tuple of (code_verifier, code_challenge)
     """
-    # Generate random code verifier (43-128 characters)
-    code_verifier = (
-        base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
-    )
-
-    # Create SHA256 challenge
-    challenge_bytes = hashlib.sha256(code_verifier.encode("utf-8")).digest()
-    code_challenge = (
-        base64.urlsafe_b64encode(challenge_bytes).decode("utf-8").rstrip("=")
-    )
-
-    return code_verifier, code_challenge
+    return security_generate_pkce_pair()
 
 
 def generate_state() -> str:
     """Generate random state parameter for CSRF protection."""
-    return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+    return security_generate_state()
 
 
 async def exchange_code_for_tokens(
@@ -96,9 +88,7 @@ async def exchange_code_for_tokens(
         return TokenResponse(**token_data)
 
 
-async def get_user_claims(
-    access_token: str, id_token: str | None, provider: str
-) -> dict[str, Any]:
+async def get_user_claims(access_token: str, id_token: str | None, provider: str) -> TokenClaims:
     """Get user claims from ID token or userinfo endpoint.
 
     Args:
@@ -109,7 +99,6 @@ async def get_user_claims(
     Returns:
         User claims dictionary
     """
-    provider_config = get_config().oidc.providers[provider]
 
     # If we have an ID token, decode it for user claims
     if id_token:
@@ -117,9 +106,9 @@ async def get_user_claims(
 
         try:
             # Validate ID token and extract claims
-            claims = await jwt_service.verify_jwt(id_token)
-            return claims
-        except Exception:
+            return await jwt_service.verify_jwt(id_token)
+        except Exception as e:
+            logger.debug(f"ID token validation failed: {e}")
             # Fall back to userinfo endpoint if ID token validation fails
             pass
 
@@ -134,6 +123,7 @@ async def get_user_claims(
     #     "picture": "https://example.com/avatar.jpg"
     # }
 
+    provider_config = get_config().oidc.providers[provider]
     if provider_config.userinfo_endpoint:
         headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -142,7 +132,8 @@ async def get_user_claims(
                 provider_config.userinfo_endpoint, headers=headers
             )
             response.raise_for_status()
-            return response.json()
+            claims = response.json()
+            return create_token_claims(token=access_token, claims=claims, token_type="access_token", issuer=provider_config.issuer)
 
     # Best practice is to raise an exception, as this is an unexpected error state.
     raise ValueError(

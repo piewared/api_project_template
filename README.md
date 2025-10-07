@@ -333,21 +333,133 @@ The Keycloak setup runs automatically when services start, creating:
 Copy `.env.example` to `.env` and configure:
 
 ```bash
+# Environment
+ENVIRONMENT=development
+
 # Database Configuration
-DB_URL=postgresql://devuser:devpass@localhost:5432/app_db
+DATABASE_URL=sqlite:///./database.db
+# For PostgreSQL: DATABASE_URL=postgresql://user:password@localhost:5432/your_db
 
-# Authentication (Keycloak)
-OIDC_ISSUER_URL=http://localhost:8080/realms/test-realm
-OIDC_CLIENT_ID=test-client
-OIDC_CLIENT_SECRET=test-client-secret
+# Infrastructure URLs
+REDIS_URL=redis://localhost:6379/0
+TEMPORAL_URL=localhost:7233
+BASE_URL=http://localhost:8000
 
-# Redis
-REDIS_URL=redis://localhost:6379
+# OIDC Configuration
+OIDC_REDIRECT_URI=http://localhost:8000/auth/web/callback
 
-# Temporal
-TEMPORAL_HOST=localhost:7233
-TEMPORAL_NAMESPACE=default
+# Provider-specific credentials (example for Keycloak)
+OIDC_KEYCLOAK_CLIENT_ID=your-keycloak-client-id
+OIDC_KEYCLOAK_CLIENT_SECRET=your-keycloak-client-secret
+
+# JWT Configuration
+JWT_AUDIENCE=api://default
+SESSION_JWT_SECRET=your-session-jwt-secret-CHANGE_ME!
+SESSION_MAX_AGE=3600
 ```
+
+### Configuration File (config.yaml)
+
+The application uses a YAML configuration file (`config.yaml`) for structured configuration management. This file defines all application settings with environment variable substitution support.
+
+#### Configuration Structure
+
+```yaml
+config:
+  # Rate limiting settings
+  rate_limiter:
+    requests: 10                    # Max requests per window
+    window_ms: 5000                # Time window in milliseconds
+    enabled: true                  # Enable/disable rate limiting
+    per_endpoint: true            # Apply per endpoint
+    per_method: true              # Apply per HTTP method
+
+  # Database configuration
+  database:
+    url: "${DATABASE_URL:-postgresql+asyncpg://user:password@postgres:5432/app_db}"
+    pool_size: 20                 # Connection pool size
+    max_overflow: 10              # Pool overflow limit
+    pool_timeout: 30              # Connection timeout
+    pool_recycle: 1800            # Connection recycle time
+
+  # Temporal workflow engine
+  temporal:
+    enabled: true
+    url: "${TEMPORAL_ADDRESS:-temporal:7233}"
+    namespace: "default"
+    task_queue: "default"
+    worker:
+      enabled: true
+      activities_per_second: 10
+      max_concurrent_activities: 100
+
+  # Redis cache/session store
+  redis:
+    enabled: true
+    url: "${REDIS_URL:-redis://localhost:6379}"
+
+  # OIDC Authentication providers
+  oidc:
+    providers:
+      google:
+        client_id: "${OIDC_GOOGLE_CLIENT_ID}"
+        client_secret: "${OIDC_GOOGLE_CLIENT_SECRET}"
+        # ... Google-specific endpoints
+      microsoft:
+        client_id: "${OIDC_MICROSOFT_CLIENT_ID}"
+        client_secret: "${OIDC_MICROSOFT_CLIENT_SECRET}"
+        # ... Microsoft-specific endpoints
+      keycloak:
+        client_id: "${OIDC_KEYCLOAK_CLIENT_ID}"
+        client_secret: "${OIDC_KEYCLOAK_CLIENT_SECRET}"
+        issuer: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/master}"
+        # ... Keycloak-specific endpoints
+    default_provider: "keycloak"
+    global_redirect_uri: "${OIDC_REDIRECT_URI:-http://localhost:8000/auth/callback}"
+
+  # JWT token validation
+  jwt:
+    allowed_algorithms: ["RS256", "RS512", "ES256", "ES384"]
+    audiences: ["${JWT_AUDIENCE:-api://default}"]
+    claims:
+      user_id: "${JWT_CLAIM_USER_ID:-sub}"
+      email: "${JWT_CLAIM_EMAIL:-email}"
+      roles: "${JWT_CLAIM_ROLES:-roles}"
+
+  # Application settings
+  app:
+    environment: "${APP_ENVIRONMENT:-development}"
+    host: "${APP_HOST:-localhost}"
+    port: "${APP_PORT:-8000}"
+    session_max_age: ${SESSION_MAX_AGE:-3600}
+    session_jwt_secret: "${SESSION_JWT_SECRET}"
+```
+
+#### Environment Variable Substitution
+
+The config.yaml file supports environment variable substitution using the `${VAR_NAME:-default_value}` syntax:
+
+- **`${DATABASE_URL}`** - Uses the DATABASE_URL environment variable
+- **`${DATABASE_URL:-default}`** - Uses DATABASE_URL or falls back to "default" if not set
+- **Nested substitution** - Environment variables can be used throughout the configuration
+
+#### Key Configuration Sections
+
+**Rate Limiter**: Controls API request throttling per endpoint/method
+**Database**: PostgreSQL connection settings with pooling configuration  
+**Temporal**: Workflow engine settings for background tasks
+**Redis**: Cache and session storage configuration
+**OIDC**: Multi-provider authentication setup (Google, Microsoft, Keycloak)
+**JWT**: Token validation rules and claim mappings
+**Logging**: Structured logging with file rotation
+**CORS**: Cross-origin request settings for web frontends
+
+#### Modifying Configuration
+
+1. **Environment-specific values**: Set environment variables in `.env` file
+2. **Structural changes**: Edit `config.yaml` directly for new settings
+3. **Provider setup**: Add new OIDC providers in the `oidc.providers` section
+4. **Development vs Production**: Use environment variables to override defaults
 
 ## 🚀 CLI Commands Reference
 

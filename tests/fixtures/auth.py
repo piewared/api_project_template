@@ -1,13 +1,20 @@
 """Consolidated authentication fixtures for all auth-related testing."""
 
 import time
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 from sqlmodel import Session
 
+from app.core.services.jwt_service import (
+    generate_access_token,
+    generate_id_token,
+    generate_refresh_token,
+)
 from src.app.core.services.oidc_client_service import TokenResponse
 from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User, UserRepository
@@ -43,17 +50,35 @@ def test_user() -> User:
     return User(
         id="12345678-1234-5678-9abc-123456789012",
         email="test@example.com",
+        phone='123-456-7890',
+        address='123 Main St, Anytown, USA',
         first_name="Test",
         last_name="User",
     )
 
 
 @pytest.fixture
-def test_user_claims(test_user: User) -> dict[str, Any]:
+def test_user_identity(
+    test_user: User, base_oidc_provider: OIDCProviderConfig
+) -> UserIdentity:
+    """Standard user identity mapping."""
+
+    test_user_subject = "user-12345"
+
+    return UserIdentity(
+        issuer=base_oidc_provider.issuer,
+        subject=test_user_subject,
+        uid_claim=f"{base_oidc_provider.issuer}|{test_user_subject}",
+        user_id=test_user.id,
+    )
+
+
+@pytest.fixture
+def test_user_claims_dict(test_user: User, test_user_identity: UserIdentity) -> dict[str, Any]:
     """Standard user claims from OIDC provider."""
     return {
-        "iss": "https://mock-provider.test",
-        "sub": "user-12345",
+        "iss": test_user_identity.issuer,
+        "sub": test_user_identity.subject,
         "aud": "test-client-id",
         "exp": int(time.time()) + 3600,
         "iat": int(time.time()),
@@ -66,45 +91,83 @@ def test_user_claims(test_user: User) -> dict[str, Any]:
     }
 
 
+
 @pytest.fixture
-def test_user_identity(test_user: User) -> UserIdentity:
-    """Standard user identity mapping."""
-    return UserIdentity(
-        issuer="https://mock-provider.test",
-        subject="user-12345",
-        uid_claim="https://mock-provider.test|user-12345",
-        user_id=test_user.id,
+def test_identity_token_jwt(
+    secret_for_jwt_generation: str,
+    kid_for_jwt: str,
+    session_nonce: str,
+    test_user_identity: UserIdentity,
+    test_user: User,
+) -> str:
+    """Standard identity token JWT for user identity."""
+    return generate_id_token(
+        nonce=session_nonce,
+        issuer=test_user_identity.issuer,
+        user_id=test_user_identity.subject,
+        email=test_user.email,
+        given_name=test_user.first_name,
+        family_name=test_user.last_name,
+        secret=secret_for_jwt_generation,
+        kid=kid_for_jwt,
     )
 
 
 @pytest.fixture
-def test_token_response() -> TokenResponse:
+def test_token_response(
+    secret_for_jwt_generation: str,
+    kid_for_jwt: str,
+    test_user: User,
+    test_identity_token_jwt: str,
+) -> TokenResponse:
     """Standard OIDC token response."""
     return TokenResponse(
-        access_token="mock-access-token",
+        access_token=generate_access_token(
+            test_user.id, secret=secret_for_jwt_generation, kid=kid_for_jwt
+        ),
         token_type="Bearer",
         expires_in=3600,
-        refresh_token="mock-refresh-token",
-        id_token="mock-id-token",
+        refresh_token=generate_refresh_token(
+            test_user.id, secret=secret_for_jwt_generation, kid=kid_for_jwt
+        ),
+        id_token=test_identity_token_jwt,
     )
 
 
 @pytest.fixture
-def test_auth_session() -> AuthSession:
+def test_client_fingerprint() -> str:
+    """Standard client fingerprint for test requests.
+
+    This simulates what extract_client_fingerprint() would return
+    for TestClient requests in the test environment.
+    """
+    # TestClient doesn't have real headers or IP, so we simulate
+    # what would be hashed in a test environment
+    from src.app.core.security import hash_client_fingerprint
+
+    # TestClient typically has these characteristics
+    user_agent = "testclient"  # Default TestClient user-agent
+    client_ip = "testclient"  # TestClient uses "testclient" as host
+
+    return hash_client_fingerprint(user_agent, client_ip)
+
+
+@pytest.fixture
+def test_auth_session(test_client_fingerprint: str, session_nonce: str) -> AuthSession:
     """Standard auth session for OIDC flow."""
-    return AuthSession(
-        id="auth-session-123",
+    return AuthSession.create(
+        session_id="auth-session-123",
         pkce_verifier="test-pkce-verifier",
         state="test-state-parameter",
         provider="default",
-        redirect_uri="/dashboard",
-        created_at=int(time.time()),
-        expires_at=int(time.time()) + 600,
+        nonce=session_nonce,
+        return_to="/dashboard",
+        client_fingerprint_hash=test_client_fingerprint,
     )
 
 
 @pytest.fixture
-def test_user_session(test_user: User) -> UserSession:
+def test_user_session(test_user: User, test_client_fingerprint: str) -> UserSession:
     """Standard user session."""
     return UserSession(
         id="user-session-456",
@@ -116,6 +179,7 @@ def test_user_session(test_user: User) -> UserSession:
         created_at=int(time.time()),
         last_accessed_at=int(time.time()),
         expires_at=int(time.time()) + 86400,
+        client_fingerprint=test_client_fingerprint,
     )
 
 
@@ -211,7 +275,7 @@ def mock_session_service(
 
 # HTTP Client Fixtures
 @pytest.fixture
-def auth_test_client(client, auth_test_config):
+def auth_test_client(client: TestClient, auth_test_config) -> Generator[TestClient]:
     """Test client configured with authentication setup."""
     from src.app.runtime.context import with_context
 

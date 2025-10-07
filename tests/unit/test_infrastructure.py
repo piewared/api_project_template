@@ -62,8 +62,8 @@ class TestInfrastructureIntegration:
 
 
 
-    def test_error_handling_integration(self, client: TestClient):
+    def test_error_handling_integration(self, auth_test_client: TestClient):
         """Test that error handling works across the system."""
         # Try to access non-existent endpoint
-        response = client.get("/nonexistent-endpoint")
+        response = auth_test_client.get("/nonexistent-endpoint")
         assert response.status_code == 404

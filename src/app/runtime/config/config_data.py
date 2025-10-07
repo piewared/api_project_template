@@ -99,6 +99,10 @@ class OIDCConfig(BaseModel):
         default="http://localhost:8000/auth/callback",
         description="Global fallback redirect URI for all providers"
     )
+    allowed_redirect_hosts: list[str] = Field(
+        default_factory=list,
+        description="Allowed hosts for absolute redirect URLs (empty = relative only)"
+    )
 
 
 class JWTClaimsConfig(BaseModel):
@@ -177,6 +181,43 @@ class AppConfig(BaseModel):
         scheme = "https" if self.environment == "production" else "http"
         return f"{scheme}://{self.host}:{self.port}"
 
+
+class SecurityConfig(BaseModel):
+    """Security configuration for authentication and sessions."""
+
+    # Cookie settings
+    secure_cookies: bool = Field(
+        default=True, description="Force secure cookies in production"
+    )
+    cookie_samesite: Literal["lax", "strict", "none"] = Field(
+        default="lax", description="SameSite cookie attribute"
+    )
+
+    # CSRF protection
+    csrf_header_name: str = Field(
+        default="X-CSRF-Token", description="Header name for CSRF tokens"
+    )
+    csrf_token_max_age_hours: int = Field(
+        default=24, description="Maximum age for CSRF tokens in hours"
+    )
+
+    # Client fingerprinting
+    enable_client_fingerprinting: bool = Field(
+        default=True, description="Enable client context binding for sessions"
+    )
+    strict_fingerprinting: bool = Field(
+        default=True, description="Require exact fingerprint match"
+    )
+
+    # Session security
+    auth_session_ttl_seconds: int = Field(
+        default=600, description="Auth session TTL (10 minutes)"
+    )
+    single_use_auth_sessions: bool = Field(
+        default=True, description="Invalidate auth sessions after successful callback"
+    )
+
+
 class ConfigData(BaseModel):
     """Root configuration model that matches the config.yaml structure."""
 
@@ -190,5 +231,6 @@ class ConfigData(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
     database: DatabaseConfig = Field(default_factory=DatabaseConfig, description="Database configuration")
     app: AppConfig = Field(default_factory=AppConfig, description="Application configuration")
+    security: SecurityConfig = Field(default_factory=SecurityConfig, description="Security configuration")
 
 

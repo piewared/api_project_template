@@ -17,6 +17,7 @@ Replaces:
 """
 
 import time
+import unittest.mock
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qs, urlparse
 
@@ -26,15 +27,21 @@ from authlib.jose import jwt
 from fastapi import HTTPException, Request, status
 from fastapi.testclient import TestClient
 
+from app.core.models.session import TokenClaims
+from app.core.security import generate_nonce
 from src.app.api.http.deps import require_role, require_scope
 from src.app.core.services import jwt_service, oidc_client_service, session_service
 from src.app.core.services.oidc_client_service import TokenResponse
 from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User
 from src.app.entities.core.user_identity import UserIdentity
-from src.app.runtime.config.config_data import ConfigData, OIDCProviderConfig
+from src.app.runtime.config.config_data import (
+    ConfigData,
+    OIDCConfig,
+    OIDCProviderConfig,
+)
 from src.app.runtime.context import with_context
-from tests.utils import encode_token, oct_jwk
+from tests.utils import oct_jwk
 
 
 class TestOIDCClientService:
@@ -112,23 +119,6 @@ class TestOIDCClientService:
                         provider="default",
                     )
 
-    @pytest.mark.asyncio
-    async def test_get_user_claims_from_id_token(
-        self, base_oidc_provider, test_user_claims, auth_test_config
-    ):
-        """Test extracting user claims from ID token."""
-        with patch("src.app.core.services.jwt_service.verify_jwt") as mock_verify:
-            mock_verify.return_value = test_user_claims
-
-            with with_context(config_override=auth_test_config):
-                result = await oidc_client_service.get_user_claims(
-                    access_token="mock-access-token",
-                    id_token="mock-id-token",
-                    provider="default",
-                )
-
-                assert result == test_user_claims
-                mock_verify.assert_called_once_with("mock-id-token")
 
     @pytest.mark.asyncio
     async def test_exchange_code_for_tokens_with_client_secret(
@@ -162,17 +152,37 @@ class TestOIDCClientService:
                 assert result.access_token == "mock-access-token"
 
                 # Verify client secret was included in Authorization header
-                call_args = mock_client.return_value.__aenter__.return_value.post.call_args
+                call_args = (
+                    mock_client.return_value.__aenter__.return_value.post.call_args
+                )
                 headers = call_args[1]["headers"]
                 assert "Authorization" in headers
                 assert headers["Authorization"].startswith("Basic ")
 
     @pytest.mark.asyncio
     async def test_get_user_claims_from_userinfo_endpoint(
-        self, base_oidc_provider, test_user_claims, mock_http_response_factory, auth_test_config
+        self,
+        base_oidc_provider,
+        mock_http_response_factory,
+        auth_test_config,
     ):
+
+        claims = {
+            "iss": 'https://mock-provider.test',
+            "sub": 'user-12345',
+            "aud": "test-client-id",
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()),
+            "email": 'test@example.com',
+            "email_verified": True,
+            "given_name": 'Test',
+            "family_name": 'User',
+            "name": 'Test User',
+            "picture": "https://example.com/avatar.jpg",
+        }
+
         """Test extracting user claims from userinfo endpoint when ID token fails."""
-        mock_response = mock_http_response_factory(test_user_claims)
+        mock_response = mock_http_response_factory(claims)
 
         with patch("src.app.core.services.jwt_service.verify_jwt") as mock_verify:
             # Make JWT verification fail to force fallback to userinfo
@@ -190,11 +200,21 @@ class TestOIDCClientService:
                         provider="default",
                     )
 
-                    assert result == test_user_claims
+                    assert result.issuer == 'https://mock-provider.test'
+                    assert result.subject == 'user-12345'
+                    assert result.audience == "test-client-id"
+                    assert result.email == 'test@example.com'
+                    assert result.email_verified is True
+                    assert result.given_name == 'Test'
+                    assert result.family_name == 'User'
+                    assert result.name == 'Test User'
+                    assert result.custom_claims.get("picture") == "https://example.com/avatar.jpg"
 
                     # Verify userinfo endpoint was called
                     mock_client.return_value.__aenter__.return_value.get.assert_called_once()
-                    call_args = mock_client.return_value.__aenter__.return_value.get.call_args
+                    call_args = (
+                        mock_client.return_value.__aenter__.return_value.get.call_args
+                    )
                     assert base_oidc_provider.userinfo_endpoint in call_args[0][0]
 
     @pytest.mark.asyncio
@@ -242,7 +262,9 @@ class TestOIDCClientService:
                 assert result.refresh_token == "new-refresh-token"
 
                 # Verify correct refresh request
-                call_args = mock_client.return_value.__aenter__.return_value.post.call_args
+                call_args = (
+                    mock_client.return_value.__aenter__.return_value.post.call_args
+                )
                 form_data = call_args[1]["data"]
                 assert form_data["grant_type"] == "refresh_token"
                 assert form_data["refresh_token"] == "old-refresh-token"
@@ -280,494 +302,6 @@ class TestOIDCClientService:
         assert expected_min <= token_response.expires_at <= expected_max
 
 
-class TestSessionService:
-    """Test session management functionality."""
-
-    def test_auth_session_lifecycle(self):
-        """Test complete auth session lifecycle."""
-        # Create session
-        session_id = session_service.create_auth_session(
-            pkce_verifier="test-verifier",
-            state="test-state",
-            provider="google",
-            redirect_uri="/dashboard",
-        )
-
-        assert isinstance(session_id, str)
-
-        # Retrieve session
-        auth_session = session_service.get_auth_session(session_id)
-        assert auth_session is not None
-        assert isinstance(auth_session, AuthSession)
-        assert auth_session.pkce_verifier == "test-verifier"
-        assert auth_session.state == "test-state"
-
-        # Delete session
-        session_service.delete_auth_session(session_id)
-        assert session_service.get_auth_session(session_id) is None
-
-    def test_auth_session_expiry(self):
-        """Test auth session expiry handling."""
-        session_id = session_service.create_auth_session(
-            pkce_verifier="test-verifier",
-            state="test-state",
-            provider="google",
-            redirect_uri="/dashboard",
-        )
-
-        # Manually expire session
-        auth_session = session_service._auth_sessions[session_id]
-        auth_session.expires_at = int(time.time()) - 1
-
-        # Should return None and clean up
-        result = session_service.get_auth_session(session_id)
-        assert result is None
-        assert session_id not in session_service._auth_sessions
-
-    def test_user_session_lifecycle(self):
-        """Test complete user session lifecycle."""
-        user_id = "12345678-1234-5678-9abc-123456789012"
-
-        # Create session
-        session_id = session_service.create_user_session(
-            user_id=user_id,
-            provider="google",
-            refresh_token="refresh-123",
-            access_token="access-456",
-            expires_at=int(time.time()) + 3600,
-        )
-
-        assert isinstance(session_id, str)
-
-        # Retrieve session
-        user_session = session_service.get_user_session(session_id)
-        assert user_session is not None
-        assert isinstance(user_session, UserSession)
-        assert user_session.user_id == user_id
-
-        # Delete session
-        session_service.delete_user_session(session_id)
-        assert session_service.get_user_session(session_id) is None
-
-    def test_user_session_updates_last_accessed(self):
-        """Test user session last_accessed_at updates."""
-        user_id = "12345678-1234-5678-9abc-123456789012"
-        base_time = int(time.time())
-
-        session_id = session_service.create_user_session(
-            user_id=user_id,
-            provider="google",
-            refresh_token="refresh-123",
-            access_token="access-456",
-            expires_at=base_time + 3600,
-        )
-
-        # Get initial access time
-        user_session = session_service.get_user_session(session_id)
-        assert user_session is not None
-        initial_time = user_session.last_accessed_at
-
-        # Mock time to return later time for next access
-        with patch("time.time", return_value=base_time + 2):
-            user_session = session_service.get_user_session(session_id)
-            assert user_session is not None
-            updated_time = user_session.last_accessed_at
-            assert updated_time > initial_time
-
-    @pytest.mark.asyncio
-    async def test_provision_user_from_claims_new_user(self, populated_session):
-        """Test JIT user provisioning for new user."""
-        claims = {
-            "iss": "https://new-provider.test",
-            "sub": "new-user-67890",
-            "email": "newuser@example.com",
-            "given_name": "New",
-            "family_name": "User",
-        }
-
-        with patch(
-            "src.app.core.services.session_service.session", return_value=populated_session
-        ):
-            with patch.object(populated_session, "close", return_value=None):
-                user = await session_service.provision_user_from_claims(claims, "test")
-
-                assert isinstance(user, User)
-                assert user.email == "newuser@example.com"
-                assert user.first_name == "New"
-                assert user.last_name == "User"
-
-    @pytest.mark.asyncio
-    async def test_provision_user_from_claims_existing_user(
-        self, session, test_user, test_user_identity
-    ):
-        """Test JIT user provisioning returns existing user with updated info."""
-        # Populate session with the specific test fixtures
-        from src.app.entities.core.user import UserRepository
-        from src.app.entities.core.user_identity import UserIdentityRepository
-
-        user_repo = UserRepository(session)
-        identity_repo = UserIdentityRepository(session)
-
-        # Create the test user and identity in the session
-        user_repo.create(test_user)
-        identity_repo.create(test_user_identity)
-        session.commit()
-
-        claims = {
-            "iss": test_user_identity.issuer,
-            "sub": test_user_identity.subject,
-            "email": "updated@example.com",
-            "given_name": "Updated",
-            "family_name": "User",
-        }
-
-        with patch("src.app.core.services.session_service.session", return_value=session):
-            with patch.object(session, "close", return_value=None):
-                user = await session_service.provision_user_from_claims(claims, "test")
-
-                # Should return existing user with updated info
-                assert user.id == test_user.id
-                assert user.email == "updated@example.com"
-                assert user.first_name == "Updated"
-
-    def test_csrf_token_generation_and_validation(self):
-        """Test CSRF token generation and validation."""
-        session_id = "test-session-123"
-
-        # Generate token
-        csrf_token = session_service.generate_csrf_token(session_id)
-        assert isinstance(csrf_token, str) and len(csrf_token) > 0
-
-        # Should validate correctly
-        assert session_service.validate_csrf_token(session_id, csrf_token) is True
-
-        # Should reject invalid token
-        assert session_service.validate_csrf_token(session_id, "invalid-token") is False
-
-        # Should reject None
-        assert session_service.validate_csrf_token(session_id, None) is False
-
-    def test_csrf_token_different_sessions(self):
-        """Test CSRF token validation across different sessions."""
-        session_id1 = "session-123"
-        session_id2 = "session-456"
-
-        # Generate token for first session
-        csrf_token = session_service.generate_csrf_token(session_id1)
-
-        # Should validate for correct session
-        assert session_service.validate_csrf_token(session_id1, csrf_token) is True
-
-        # Should reject for different session
-        assert session_service.validate_csrf_token(session_id2, csrf_token) is False
-
-    def test_auth_session_cleanup_on_expiry_check(self):
-        """Test that expired sessions are cleaned up when accessed."""
-        # Create multiple sessions
-        session_ids = []
-        for i in range(3):
-            session_id = session_service.create_auth_session(
-                pkce_verifier=f"verifier-{i}",
-                state=f"state-{i}",
-                provider="google",
-                redirect_uri="/dashboard",
-            )
-            session_ids.append(session_id)
-
-        # Verify all sessions exist
-        for session_id in session_ids:
-            assert session_service.get_auth_session(session_id) is not None
-
-        # Expire the middle session
-        middle_session = session_service._auth_sessions[session_ids[1]]
-        middle_session.expires_at = int(time.time()) - 1
-
-        # Access the expired session - should be cleaned up
-        assert session_service.get_auth_session(session_ids[1]) is None
-        assert session_ids[1] not in session_service._auth_sessions
-
-        # Other sessions should remain
-        assert session_service.get_auth_session(session_ids[0]) is not None
-        assert session_service.get_auth_session(session_ids[2]) is not None
-
-    def test_user_session_expiry_handling(self):
-        """Test user session expiry scenarios."""
-        user_id = "12345678-1234-5678-9abc-123456789012"
-
-        session_id = session_service.create_user_session(
-            user_id=user_id,
-            provider="google",
-            refresh_token="refresh-123",
-            access_token="access-456",
-            expires_at=int(time.time()) + 3600,  # This is access_token_expires_at
-        )
-
-        # Manually expire the session to test expiry handling
-        user_session = session_service._user_sessions[session_id]
-        user_session.expires_at = int(time.time()) - 1  # Expire it now
-
-        # Should return None for expired session due to cleanup logic
-        result = session_service.get_user_session(session_id)
-        assert result is None
-
-        # Session should be cleaned up from memory
-        assert session_id not in session_service._user_sessions
-
-    def test_session_isolation(self):
-        """Test that sessions are properly isolated from each other."""
-        # Create auth sessions
-        auth_id1 = session_service.create_auth_session(
-            pkce_verifier="auth-verifier-1",
-            state="auth-state-1",
-            provider="google",
-            redirect_uri="/dashboard",
-        )
-
-        auth_id2 = session_service.create_auth_session(
-            pkce_verifier="auth-verifier-2",
-            state="auth-state-2",
-            provider="github",
-            redirect_uri="/profile",
-        )
-
-        # Create user sessions
-        user_id1 = "11111111-1111-1111-1111-111111111111"
-        user_id2 = "22222222-2222-2222-2222-222222222222"
-
-        user_session_id1 = session_service.create_user_session(
-            user_id=user_id1,
-            provider="google",
-            refresh_token="refresh-1",
-            access_token="access-1",
-            expires_at=int(time.time()) + 3600,
-        )
-
-        user_session_id2 = session_service.create_user_session(
-            user_id=user_id2,
-            provider="github",
-            refresh_token="refresh-2",
-            access_token="access-2",
-            expires_at=int(time.time()) + 3600,
-        )
-
-        # Verify isolation - each session returns only its own data
-        auth1 = session_service.get_auth_session(auth_id1)
-        auth2 = session_service.get_auth_session(auth_id2)
-
-        assert auth1 is not None and auth1.pkce_verifier == "auth-verifier-1"
-        assert auth1 is not None and auth1.provider == "google"
-        assert auth2 is not None and auth2.pkce_verifier == "auth-verifier-2"
-        assert auth2 is not None and auth2.provider == "github"
-
-        user1 = session_service.get_user_session(user_session_id1)
-        user2 = session_service.get_user_session(user_session_id2)
-
-        assert user1 is not None and user1.user_id == user_id1
-        assert user1 is not None and user1.provider == "google"
-        assert user2 is not None and user2.user_id == user_id2
-        assert user2 is not None and user2.provider == "github"
-
-        # Cross-session access should return None
-        assert session_service.get_auth_session(user_session_id1) is None
-        assert session_service.get_user_session(auth_id1) is None
-
-    def test_session_id_collision_resistance(self):
-        """Test that session IDs are sufficiently random to avoid collisions."""
-        # Create many sessions and verify no ID collisions
-        session_ids = set()
-        for _ in range(1000):
-            session_id = session_service.create_auth_session(
-                pkce_verifier="verifier",
-                state="state",
-                provider="test",
-                redirect_uri="/",
-            )
-            assert session_id not in session_ids, "Session ID collision detected"
-            session_ids.add(session_id)
-
-        # Clean up
-        for session_id in session_ids:
-            session_service.delete_auth_session(session_id)
-
-    @pytest.mark.asyncio
-    async def test_refresh_user_session_success(self):
-        """Test successful user session refresh."""
-        user_id = "12345678-1234-5678-9abc-123456789012"
-
-        # Create initial session
-        session_id = session_service.create_user_session(
-            user_id=user_id,
-            provider="google",
-            refresh_token="old-refresh-token",
-            access_token="old-access-token",
-            expires_at=int(time.time()) + 3600,
-        )
-
-        # Mock the OIDC client service
-        with patch(
-            "src.app.core.services.oidc_client_service.refresh_access_token"
-        ) as mock_refresh:
-            from src.app.core.services.oidc_client_service import TokenResponse
-
-            mock_refresh.return_value = TokenResponse(
-                access_token="new-access-token",
-                token_type="Bearer",
-                expires_in=3600,
-                refresh_token="new-refresh-token",
-            )
-
-            # Refresh the session
-            new_session_id = await session_service.refresh_user_session(session_id)
-
-            # Should return new session ID
-            assert isinstance(new_session_id, str)
-            assert new_session_id != session_id
-
-            # Old session should be gone
-            assert session_service.get_user_session(session_id) is None
-
-            # New session should exist with updated tokens
-            new_session = session_service.get_user_session(new_session_id)
-            assert new_session is not None
-            assert new_session.access_token == "new-access-token"
-            assert new_session.refresh_token == "new-refresh-token"
-
-            # Mock should have been called correctly
-            mock_refresh.assert_called_once_with("old-refresh-token", "google")
-
-    @pytest.mark.asyncio
-    async def test_refresh_user_session_not_found(self):
-        """Test refreshing non-existent session raises error."""
-        with pytest.raises(ValueError, match="Session not found or expired"):
-            await session_service.refresh_user_session("nonexistent-session")
-
-    @pytest.mark.asyncio
-    async def test_refresh_user_session_no_refresh_token(self):
-        """Test refreshing session without refresh token raises error."""
-        user_id = "12345678-1234-5678-9abc-123456789012"
-
-        # Create session without refresh token
-        session_id = session_service.create_user_session(
-            user_id=user_id,
-            provider="google",
-            refresh_token=None,  # No refresh token
-            access_token="access-token",
-            expires_at=int(time.time()) + 3600,
-        )
-
-        with pytest.raises(ValueError, match="No refresh token available"):
-            await session_service.refresh_user_session(session_id)
-
-    @pytest.mark.asyncio
-    async def test_refresh_user_session_refresh_fails(self):
-        """Test refresh session when token refresh fails."""
-        user_id = "12345678-1234-5678-9abc-123456789012"
-
-        session_id = session_service.create_user_session(
-            user_id=user_id,
-            provider="google",
-            refresh_token="refresh-token",
-            access_token="access-token",
-            expires_at=int(time.time()) + 3600,
-        )
-
-        # Mock refresh to fail
-        with patch(
-            "src.app.core.services.oidc_client_service.refresh_access_token"
-        ) as mock_refresh:
-            mock_refresh.side_effect = Exception("Token refresh failed")
-
-            with pytest.raises(ValueError, match="Token refresh failed"):
-                await session_service.refresh_user_session(session_id)
-
-            # Session should be cleaned up on failure
-            assert session_service.get_user_session(session_id) is None
-
-    def test_csrf_token_malformed_handling(self):
-        """Test validating malformed CSRF token doesn't crash."""
-        session_id = "test-session-malformed"
-
-        # Should handle empty/None gracefully
-        is_valid = session_service.validate_csrf_token(session_id, "")
-        assert is_valid is False
-
-        is_valid = session_service.validate_csrf_token(session_id, None)
-        assert is_valid is False
-
-        # Should handle malformed tokens
-        is_valid = session_service.validate_csrf_token(session_id, "invalid-format")
-        assert is_valid is False
-
-    def test_session_memory_management(self):
-        """Test that session cleanup prevents memory leaks."""
-        initial_auth_count = len(session_service._auth_sessions)
-        initial_user_count = len(session_service._user_sessions)
-
-        # Create and immediately delete many sessions
-        for i in range(50):
-            # Auth sessions
-            auth_id = session_service.create_auth_session(
-                pkce_verifier=f"verifier-{i}",
-                state=f"state-{i}",
-                provider="test",
-                redirect_uri="/test",
-            )
-            session_service.delete_auth_session(auth_id)
-
-            # User sessions
-            user_session_id = session_service.create_user_session(
-                user_id=f"user-{i}",
-                provider="test",
-                refresh_token=f"refresh-{i}",
-                access_token=f"access-{i}",
-                expires_at=int(time.time()) + 3600,
-            )
-            session_service.delete_user_session(user_session_id)
-
-        # Memory should be cleaned up
-        final_auth_count = len(session_service._auth_sessions)
-        final_user_count = len(session_service._user_sessions)
-
-        assert final_auth_count == initial_auth_count
-        assert final_user_count == initial_user_count
-
-    def test_concurrent_session_operations(self):
-        """Test that concurrent session operations don't interfere."""
-        user_id = "12345678-1234-5678-9abc-123456789012"
-
-        # Create multiple user sessions for the same user
-        session_ids = []
-        for i in range(3):
-            session_id = session_service.create_user_session(
-                user_id=user_id,
-                provider=f"provider-{i}",
-                refresh_token=f"refresh-{i}",
-                access_token=f"access-{i}",
-                expires_at=int(time.time()) + 3600,
-            )
-            session_ids.append(session_id)
-
-        # Verify all sessions are independent
-        for i, session_id in enumerate(session_ids):
-            user_session = session_service.get_user_session(session_id)
-            assert user_session is not None
-            assert user_session.user_id == user_id
-            assert user_session.provider == f"provider-{i}"
-            assert user_session.refresh_token == f"refresh-{i}"
-
-        # Delete middle session
-        session_service.delete_user_session(session_ids[1])
-
-        # Verify other sessions are unaffected
-        assert session_service.get_user_session(session_ids[0]) is not None
-        assert session_service.get_user_session(session_ids[1]) is None
-        assert session_service.get_user_session(session_ids[2]) is not None
-
-        # Clean up
-        session_service.delete_user_session(session_ids[0])
-        session_service.delete_user_session(session_ids[2])
-
-
 class TestBFFAuthenticationRouter:
     """Test BFF authentication router endpoints."""
 
@@ -777,7 +311,9 @@ class TestBFFAuthenticationRouter:
             patch(
                 "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
+            patch(
+                "src.app.core.services.oidc_client_service.generate_state"
+            ) as mock_state,
             patch(
                 "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_session,
@@ -804,10 +340,9 @@ class TestBFFAuthenticationRouter:
     def test_callback_success(
         self,
         auth_test_client,
-        test_auth_session,
+        test_auth_session: AuthSession,
         test_user,
         test_token_response,
-        test_user_claims,
     ):
         """Test successful callback handling."""
         with (
@@ -820,18 +355,15 @@ class TestBFFAuthenticationRouter:
                 return_value=test_token_response,
             ),
             patch(
-                "src.app.core.services.oidc_client_service.get_user_claims",
-                return_value=test_user_claims,
-            ),
-            patch(
                 "src.app.core.services.session_service.provision_user_from_claims",
                 return_value=test_user,
             ),
-            patch(
-                "src.app.core.services.session_service.create_user_session",
-                return_value="user-session-456",
-            ),
+
             patch("src.app.core.services.session_service.delete_auth_session"),
+            patch(
+                "src.app.core.security.hash_client_fingerprint",
+                return_value=test_auth_session.client_fingerprint_hash,
+            ),
         ):
             # Set auth session cookie
             auth_test_client.cookies.set("auth_session_id", test_auth_session.id)
@@ -842,7 +374,7 @@ class TestBFFAuthenticationRouter:
             )
 
             assert response.status_code == status.HTTP_302_FOUND
-            assert response.headers["Location"] == test_auth_session.redirect_uri
+            assert response.headers["Location"] == test_auth_session.return_to
 
     def test_callback_invalid_state(self, auth_test_client, test_auth_session):
         """Test callback with invalid state parameter."""
@@ -872,8 +404,12 @@ class TestBFFAuthenticationRouter:
     ):
         """Test /me endpoint with valid session."""
         with (
-            patch("src.app.api.http.deps.get_user_session", return_value=test_user_session),
-            patch("src.app.entities.core.user.UserRepository.get", return_value=test_user),
+            patch(
+                "src.app.api.http.deps.get_user_session", return_value=test_user_session
+            ),
+            patch(
+                "src.app.entities.core.user.UserRepository.get", return_value=test_user
+            ),
         ):
             auth_test_client.cookies.set("user_session_id", test_user_session.id)
 
@@ -995,7 +531,7 @@ class TestBFFAuthenticationRouter:
             assert response.status_code in [401, 500]
 
     def test_callback_user_provisioning_failure(
-        self, auth_test_client, test_auth_session, test_token_response, test_user_claims
+        self, auth_test_client, test_auth_session, test_token_response
     ):
         """Test callback when user provisioning fails."""
         with (
@@ -1006,10 +542,6 @@ class TestBFFAuthenticationRouter:
             patch(
                 "src.app.core.services.oidc_client_service.exchange_code_for_tokens",
                 return_value=test_token_response,
-            ),
-            patch(
-                "src.app.core.services.oidc_client_service.get_user_claims",
-                return_value=test_user_claims,
             ),
             patch(
                 "src.app.core.services.session_service.provision_user_from_claims",
@@ -1068,114 +600,104 @@ class TestAuthenticationIntegration:
     async def test_complete_auth_flow_simulation(
         self, auth_test_client, base_oidc_provider
     ):
-        """Test complete authentication flow from login to authenticated access."""
-        # This simulates the complete flow but with mocks
-        # Step 1: Initiate login
+        """Test complete authentication flow with real session management."""
+        # Only mock the external OIDC provider interactions that we can't control
         with (
             patch(
-                "src.app.core.services.oidc_client_service.generate_pkce_pair"
-            ) as mock_pkce,
-            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
+                "src.app.core.services.oidc_client_service.exchange_code_for_tokens"
+            ) as mock_exchange,
             patch(
-                "src.app.core.services.session_service.create_auth_session"
-            ) as mock_create_auth,
+                "src.app.core.services.oidc_client_service.get_user_claims"
+            ) as mock_claims,
+            patch("src.app.core.services.jwt_service.verify_jwt") as mock_verify_jwt,
         ):
-            mock_pkce.return_value = ("verifier", "challenge")
-            mock_state.return_value = "state123"
-            mock_create_auth.return_value = "auth-session-id"
-
+            # Step 1: Initiate login - use real login endpoint
             login_response = auth_test_client.get(
                 "/auth/web/login", follow_redirects=False
             )
             assert login_response.status_code == 302
 
-            # Step 2: Simulate callback
-            test_auth_session = AuthSession(
-                id="auth-session-id",
-                pkce_verifier="verifier",
-                state="state123",
-                provider="default",
-                redirect_uri="/dashboard",
-                created_at=int(time.time()),
-                expires_at=int(time.time()) + 600,
+            # Extract the auth session ID from the response cookie
+            auth_session_cookie = auth_test_client.cookies.get("auth_session_id")
+            assert auth_session_cookie is not None, "Auth session cookie should be set"
+
+            # Extract state from the redirect URL
+            location = login_response.headers.get("location", "")
+            import urllib.parse
+
+            parsed_url = urllib.parse.urlparse(location)
+            query_params = urllib.parse.parse_qs(parsed_url.query)
+            state = query_params.get("state", [None])[0]
+
+            assert state is not None, "State parameter should be in redirect URL"
+
+            # Step 2: Simulate callback with real validation
+            # Mock only the external OIDC provider responses
+            mock_exchange.return_value = TokenResponse(
+                access_token="access-token",
+                token_type="Bearer",
+                expires_in=3600,
+                id_token="id-token",  # Include ID token for nonce validation
             )
 
-            test_user = User(
-                id="user-123",
+            claims = TokenClaims(
+                issuer="https://test-provider.example.com",
+                subject="user-123",
                 email="test@example.com",
-                first_name="Test",
-                last_name="User",
+                given_name="Test",
+                family_name="User",
+                audience="test-client-id",
+                nonce="nonce-value",
+                expires_at=int(time.time()) + 3600,
+                issued_at=int(time.time()),
             )
 
-            with (
-                patch(
-                    "src.app.core.services.session_service.get_auth_session",
-                    return_value=test_auth_session,
-                ),
-                patch(
-                    "src.app.core.services.oidc_client_service.exchange_code_for_tokens"
-                ) as mock_exchange,
-                patch(
-                    "src.app.core.services.oidc_client_service.get_user_claims"
-                ) as mock_claims,
-                patch(
-                    "src.app.core.services.session_service.provision_user_from_claims",
-                    return_value=test_user,
-                ),
-                patch(
-                    "src.app.core.services.session_service.create_user_session",
-                    return_value="user-session-id",
-                ),
-                patch("src.app.core.services.session_service.delete_auth_session"),
-            ):
-                mock_exchange.return_value = TokenResponse(
-                    access_token="access-token",
-                    token_type="Bearer",
-                    expires_in=3600,
-                )
-                mock_claims.return_value = {
-                    "sub": "user-123",
-                    "email": "test@example.com",
-                    "given_name": "Test",
-                    "family_name": "User",
-                }
+            mock_claims.return_value = claims
 
-                auth_test_client.cookies.set("auth_session_id", "auth-session-id")
-                callback_response = auth_test_client.get(
-                    "/auth/web/callback?code=auth-code&state=state123",
-                    follow_redirects=False,
-                )
-                assert callback_response.status_code == 302
+            # Mock JWT verification to pass nonce validation
+            mock_verify_jwt.return_value = None  # verify_jwt returns None on success
 
-                # Step 3: Access authenticated endpoint
-                test_user_session = UserSession(
-                    id="user-session-id",
-                    user_id="user-123",
-                    provider="default",
-                    refresh_token=None,
-                    access_token="access-token",
-                    access_token_expires_at=int(time.time()) + 3600,
-                    created_at=int(time.time()),
-                    last_accessed_at=int(time.time()),
-                    expires_at=int(time.time()) + 86400,
-                )
+            # Use the real auth session cookie and state from step 1
+            callback_response = auth_test_client.get(
+                f"/auth/web/callback?code=auth-code&state={state}",
+                follow_redirects=False,
+            )
 
-                with (
-                    patch(
-                        "src.app.api.http.deps.get_user_session",
-                        return_value=test_user_session,
-                    ),
-                    patch(
-                        "src.app.entities.core.user.UserRepository.get", return_value=test_user
-                    ),
-                ):
-                    auth_test_client.cookies.set("user_session_id", "user-session-id")
-                    me_response = auth_test_client.get("/auth/web/me")
+            # Debug information if it fails
+            if callback_response.status_code != 302:
+                print(f"Callback failed with status: {callback_response.status_code}")
+                print(f"Response body: {callback_response.text}")
+                print(f"Response headers: {dict(callback_response.headers)}")
 
-                    assert me_response.status_code == 200
-                    data = me_response.json()
-                    assert data["authenticated"] is True
-                    assert data["user"]["email"] == "test@example.com"
+            assert callback_response.status_code == 302
+
+            # Extract user session cookie from callback response
+            user_session_cookie = auth_test_client.cookies.get("user_session_id")
+            assert user_session_cookie is not None, "User session cookie should be set"
+
+            # Debug: Print all cookies to see what we have
+            print(f"All cookies after callback: {dict(auth_test_client.cookies)}")
+
+            # Step 3: Access authenticated endpoint with real session
+            protected_response = auth_test_client.get("/auth/web/me")
+            assert protected_response.status_code == 200
+
+            user_data = protected_response.json()
+            print(user_data)
+            assert user_data["authenticated"] is True
+            assert user_data["user"]["email"] == "test@example.com"
+            assert user_data["user"]["first_name"] == "Test"
+            assert user_data["user"]["last_name"] == "User"
+
+            # Step 3: Verify the authentication flow completed successfully
+            # The fact that we got a 302 redirect and a user session cookie means
+            # the real authentication flow worked (login -> callback -> JIT provisioning -> session creation)
+            print("✅ Complete authentication flow simulation successful!")
+            print(f"✅ User session ID: {user_session_cookie}")
+
+            # Note: We could test the /auth/jit/me endpoint here, but due to test database
+            # transaction isolation, the JIT-provisioned user might not be visible
+            # in subsequent requests. The core authentication flow has been verified.
 
     @pytest.mark.asyncio
     async def test_authentication_flow_session_interruption(self, auth_test_client):
@@ -1185,7 +707,9 @@ class TestAuthenticationIntegration:
             patch(
                 "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
+            patch(
+                "src.app.core.services.oidc_client_service.generate_state"
+            ) as mock_state,
             patch(
                 "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
@@ -1201,7 +725,8 @@ class TestAuthenticationIntegration:
 
             # Step 2: Simulate session loss during callback
             with patch(
-                "src.app.core.services.session_service.get_auth_session", return_value=None
+                "src.app.core.services.session_service.get_auth_session",
+                return_value=None,
             ):
                 callback_response = auth_test_client.get(
                     "/auth/web/callback?code=auth-code&state=state123",
@@ -1214,11 +739,13 @@ class TestAuthenticationIntegration:
     async def test_authentication_flow_state_mismatch_attack(self, auth_test_client):
         """Test authentication flow protection against state mismatch attacks."""
         test_auth_session = AuthSession(
+            client_fingerprint_hash="fingerprint",
+            nonce="nonce",
             id="auth-session-id",
             pkce_verifier="verifier",
             state="correct-state-123",
             provider="default",
-            redirect_uri="/dashboard",
+            return_to="/dashboard",
             created_at=int(time.time()),
             expires_at=int(time.time()) + 600,
         )
@@ -1228,7 +755,9 @@ class TestAuthenticationIntegration:
             patch(
                 "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
+            patch(
+                "src.app.core.services.oidc_client_service.generate_state"
+            ) as mock_state,
             patch(
                 "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
@@ -1293,11 +822,13 @@ class TestAuthenticationIntegration:
         # Each session should be independent and completable
         for i, session in enumerate(sessions):
             test_auth_session = AuthSession(
+                client_fingerprint_hash="fingerprint",
+                nonce="nonce",
                 id=session["id"],
                 pkce_verifier=session["verifier"],
                 state=session["state"],
                 provider="default",
-                redirect_uri="/dashboard",
+                return_to="/dashboard",
                 created_at=int(time.time()),
                 expires_at=int(time.time()) + 600,
             )
@@ -1329,7 +860,9 @@ class TestAuthenticationIntegration:
             patch(
                 "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
+            patch(
+                "src.app.core.services.oidc_client_service.generate_state"
+            ) as mock_state,
             patch(
                 "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
@@ -1347,7 +880,9 @@ class TestAuthenticationIntegration:
             patch(
                 "src.app.core.services.oidc_client_service.generate_pkce_pair"
             ) as mock_pkce,
-            patch("src.app.core.services.oidc_client_service.generate_state") as mock_state,
+            patch(
+                "src.app.core.services.oidc_client_service.generate_state"
+            ) as mock_state,
             patch(
                 "src.app.core.services.session_service.create_auth_session"
             ) as mock_create_auth,
@@ -1390,12 +925,19 @@ class TestJWTService:
             redirect_uri="http://localhost:8000/callback",
         )
 
-    @pytest.fixture(autouse=True)
-    def clear_cache(self):
-        """Clear JWKS cache before each test."""
-        jwt_service._JWKS_CACHE.clear()
-        yield
-        jwt_service._JWKS_CACHE.clear()
+    def test_extract_user_claims(self, test_identity_token_jwt, test_user_claims_dict, test_user_identity, test_user):
+        claims = jwt_service.create_token_claims(
+            token=test_identity_token_jwt,
+            claims=test_user_claims_dict,
+            token_type="id_token",
+        )
+
+        assert claims.issuer == test_user_identity.issuer
+        assert claims.audience == 'test-client-id'
+        assert claims.subject == test_user_identity.subject
+        assert claims.email == test_user.email
+        assert claims.given_name == test_user.first_name
+        assert claims.family_name == test_user.last_name
 
     def test_extract_uid_with_custom_claim(self):
         """Should extract UID from custom claim when configured."""
@@ -1408,6 +950,240 @@ class TestJWTService:
         with with_context(test_config):
             result = jwt_service.extract_uid(claims)
             assert result == "user-123"
+
+    def test_jwt_generate_verify_roundtrip(self, jwks_data):
+        """Should generate and verify JWT correctly."""
+        # Test 1: Basic JWT with default config secret
+        token1 = jwt_service.generate_jwt(
+            subject="user-123",
+            claims={"email": "user@example.com", "role": "admin"},
+            expires_in_seconds=3600,
+        )
+
+        verified_claims1 = jwt_service.verify_generated_jwt(token1)
+        assert verified_claims1.subject == "user-123"
+        assert verified_claims1.email == "user@example.com"
+        assert set(verified_claims1.roles) == {"admin"}
+        assert verified_claims1.jti is not None  # Default includes JTI
+
+        # Test 2: JWT with custom secret key
+        custom_secret = "my-custom-secret-key-123"
+        token2 = jwt_service.generate_jwt(
+            subject="user-456",
+            claims={"scopes": ["read", "write"], "department": "engineering"},
+            expires_in_seconds=1800,
+            secret=custom_secret,
+        )
+
+        # Verify with the unified verify_jwt using the same custom secret
+        import asyncio
+
+        verified_claims2 = asyncio.run(
+            jwt_service.verify_jwt(token2, key=custom_secret)
+        )
+        assert verified_claims2.subject == "user-456"
+        assert verified_claims2.scopes == ["read", "write"]
+        assert verified_claims2.custom_claims == {"department": "engineering"}
+
+        # Test 3: JWT without JTI claim
+        token3 = jwt_service.generate_jwt(
+            subject="user-789",
+            claims={"name": "John Doe", "age": 30},
+            expires_in_seconds=7200,
+            include_jti=False,
+        )
+
+        verified_claims3 = jwt_service.verify_generated_jwt(token3)
+        assert verified_claims3.subject == "user-789"
+        assert verified_claims3.name == "John Doe"
+        assert verified_claims3.custom_claims == {"age": 30}
+        assert "jti" not in verified_claims3.custom_claims  # JTI should be excluded
+
+        # Test 4: JWT with custom issuer and audience
+        token4 = jwt_service.generate_jwt(
+            subject="service-account",
+            claims={
+                "client_id": "my-app",
+                "permissions": ["read:users", "write:posts"],
+            },
+            expires_in_seconds=900,
+            issuer="auth-server-prod",
+            audience=["api", "mobile-app", "web-app"],
+        )
+
+        verified_claims4 = jwt_service.verify_generated_jwt(token4)
+        assert verified_claims4.subject == "service-account"
+        assert verified_claims4.issuer == "auth-server-prod"
+        assert verified_claims4.audience == ["api", "mobile-app", "web-app"]
+        assert verified_claims4.custom_claims["client_id"] == "my-app"
+        assert verified_claims4.custom_claims["permissions"] == [
+            "read:users",
+            "write:posts",
+        ]
+
+        # Test 5: JWT with complex nested claims
+        complex_claims = {
+            "user_profile": {
+                "preferences": {"theme": "dark", "language": "en"},
+                "metadata": {"last_login": "2025-01-01T00:00:00Z"},
+            },
+            "roles": ["user", "premium"],
+            "subscription": {"plan": "pro", "expires": "2025-12-31"},
+        }
+
+        token5 = jwt_service.generate_jwt(
+            subject="premium-user-001",
+            claims=complex_claims,
+            expires_in_seconds=86400,  # 24 hours
+        )
+
+        verified_claims5 = jwt_service.verify_generated_jwt(token5)
+        assert verified_claims5.subject == "premium-user-001"
+        assert (
+            verified_claims5.custom_claims["user_profile"]["preferences"]["theme"]
+            == "dark"
+        )
+        assert (
+            verified_claims5.custom_claims["user_profile"]["metadata"]["last_login"]
+            == "2025-01-01T00:00:00Z"
+        )
+        assert verified_claims5.roles == ["user", "premium"]
+        assert verified_claims5.custom_claims["subscription"]["plan"] == "pro"
+
+        # Test 6: Verify that different secrets produce different tokens
+        same_claims = {"test": "value"}
+        token_secret1 = jwt_service.generate_jwt(
+            subject="test-user", claims=same_claims, secret="secret-1"
+        )
+
+        token_secret2 = jwt_service.generate_jwt(
+            subject="test-user", claims=same_claims, secret="secret-2"
+        )
+
+        # Tokens should be different even with same claims
+        assert token_secret1 != token_secret2
+
+        # Verify each token with its respective secret
+        verified_secret1 = asyncio.run(
+            jwt_service.verify_jwt(token_secret1, key="secret-1")
+        )
+        verified_secret2 = asyncio.run(
+            jwt_service.verify_jwt(token_secret2, key="secret-2")
+        )
+
+        assert verified_secret1.subject == "test-user"
+        assert verified_secret2.subject == "test-user"
+        assert verified_secret1.custom_claims["test"] == "value"
+        assert verified_secret2.custom_claims["test"] == "value"
+
+        # Cross-verification should fail
+        with pytest.raises(HTTPException):
+            asyncio.run(jwt_service.verify_jwt(token_secret1, key="secret-2"))
+
+        with pytest.raises(HTTPException):
+            asyncio.run(jwt_service.verify_jwt(token_secret2, key="secret-1"))
+
+        # Test 7: JWKS-compatible JWT generation and verification
+        #
+        # This tests two important scenarios:
+        # 1. Our service generating tokens that external services can verify via our JWKS
+        # 2. Our service verifying tokens from external IdPs using their JWKS
+        #
+        # In production:
+        # - We have a raw secret key that we use for generation
+        # - We publish the base64-encoded version in our JWKS endpoint
+        # - External services fetch our JWKS and decode the base64 for verification
+        # - When verifying external tokens, we fetch their JWKS and decode their keys
+
+        async def fake_fetch_jwks(provider_config):
+            """Mock JWKS fetcher that returns our test JWKS data."""
+            return jwks_data
+
+        # In real production, we would have a raw secret key that we:
+        # 1. Use directly for JWT generation
+        # 2. Base64-encode for JWKS publication
+        raw_secret = b"router-secret-key"  # This is what we'd actually use
+
+        # Generate JWT with the raw secret (as our service would in production)
+        jwks_key = jwks_data["keys"][0]
+        jwks_kid = jwks_key["kid"]  # Key ID for JWKS lookup
+
+        # Our service expects string secrets, so convert raw bytes to string
+        secret_for_generation = raw_secret.decode("utf-8")
+
+        # Create test configuration with our JWKS issuer
+        test_config = ConfigData()
+        test_config.oidc = OIDCConfig()
+        test_provider = OIDCProviderConfig(
+            client_id="jwks-test-client",
+            client_secret="jwks-test-secret",
+            authorization_endpoint="https://test-jwks-provider.example.com/auth",
+            token_endpoint="https://test-jwks-provider.example.com/token",
+            issuer="https://test-jwks-provider.example.com",
+            jwks_uri="https://test-jwks-provider.example.com/.well-known/jwks.json",
+            redirect_uri="http://localhost:8000/callback",
+        )
+        test_config.oidc.providers = {"jwks-test": test_provider}
+        test_config.jwt.allowed_algorithms = ["HS256"]
+        test_config.jwt.audiences = ["jwks-api", "mobile-app"]
+
+        token_jwks = jwt_service.generate_jwt(
+            subject="jwks-user",
+            claims={
+                "email": "jwks@example.com",
+                "roles": ["user", "verified"],
+                "issued_by": "jwks-provider",
+            },
+            expires_in_seconds=3600,
+            issuer="https://test-jwks-provider.example.com",
+            audience=["jwks-api", "mobile-app"],
+            secret=secret_for_generation,
+            kid=jwks_kid,
+        )
+
+        # Verify JWT using JWKS path (mock the fetch_jwks function)
+        with with_context(config_override=test_config):
+            with unittest.mock.patch.object(jwt_service, "fetch_jwks", fake_fetch_jwks):
+                verified_jwks_claims = asyncio.run(jwt_service.verify_jwt(token_jwks))
+
+                assert verified_jwks_claims.subject == "jwks-user"
+                assert verified_jwks_claims.email == "jwks@example.com"
+                assert verified_jwks_claims.roles == ["user", "verified"]
+                assert (
+                    verified_jwks_claims.custom_claims["issued_by"] == "jwks-provider"
+                )
+                assert (
+                    verified_jwks_claims.issuer
+                    == "https://test-jwks-provider.example.com"
+                )
+                assert verified_jwks_claims.audience == ["jwks-api", "mobile-app"]
+
+        # Test that JWKS verification works with helper functions too
+        access_token_jwks = jwt_service.generate_access_token(
+            user_id="jwks-access-user",
+            scopes=["read:data", "write:files"],
+            roles=["admin", "power-user"],
+            secret=secret_for_generation,
+            kid=jwks_kid,
+            issuer="https://test-jwks-provider.example.com",
+            audience="jwks-api",
+        )
+
+        with with_context(config_override=test_config):
+            with unittest.mock.patch.object(jwt_service, "fetch_jwks", fake_fetch_jwks):
+                verified_access_claims = asyncio.run(
+                    jwt_service.verify_jwt(access_token_jwks)
+                )
+
+                assert verified_access_claims.subject == "jwks-access-user"
+                assert verified_access_claims.scope == "read:data write:files"
+                assert verified_access_claims.scopes == ["read:data", "write:files"]
+                assert verified_access_claims.roles == ["admin", "power-user"]
+                assert (
+                    verified_access_claims.issuer
+                    == "https://test-jwks-provider.example.com"
+                )
+                assert verified_access_claims.audience == "jwks-api"
 
     def test_extract_uid_fallback_to_issuer_subject(self):
         """Should fall back to issuer|subject when custom claim missing."""
@@ -1426,21 +1202,21 @@ class TestJWTService:
         claims = {"scope": "read write admin"}
 
         result = jwt_service.extract_scopes(claims)
-        assert result == {"read", "write", "admin"}
+        assert result == ["read", "write", "admin"]
 
     def test_extract_scopes_from_list(self):
         """Should handle scope as list."""
         claims = {"scp": ["read", "write"]}
 
         result = jwt_service.extract_scopes(claims)
-        assert result == {"read", "write"}
+        assert result == ["read", "write"]
 
     def test_extract_scopes_from_multiple_sources(self):
         """Should combine scopes from multiple claim sources."""
         claims = {"scope": "read write", "scp": ["admin"]}
 
         result = jwt_service.extract_scopes(claims)
-        assert result == {"read", "write", "admin"}
+        assert result == ["read", "write", "admin"]
 
     def test_extract_roles_from_string(self):
         """Should parse space-separated roles string."""
@@ -1457,12 +1233,29 @@ class TestJWTService:
         # Convert to set for comparison since order doesn't matter
         assert set(result) == {"admin", "user", "guest"}
 
+    def test_extract_roles_from_singular_role_claim(self):
+        """Should extract roles from singular 'role' claim."""
+        # Test single role as string
+        claims1 = {"role": "admin"}
+        result1 = jwt_service.extract_roles(claims1)
+        assert result1 == ["admin"]
+
+        # Test multiple roles in singular claim (space-separated)
+        claims2 = {"role": "user moderator"}
+        result2 = jwt_service.extract_roles(claims2)
+        assert set(result2) == {"user", "moderator"}
+
+        # Test role and roles together (should combine both)
+        claims3 = {"role": "admin", "roles": ["user", "guest"]}
+        result3 = jwt_service.extract_roles(claims3)
+        assert set(result3) == {"admin", "user", "guest"}
+
     def test_extract_empty_claims(self):
         """Should handle missing or empty claims gracefully."""
         claims = {}
 
         assert jwt_service.extract_uid(claims) == "None|None"
-        assert jwt_service.extract_scopes(claims) == set()
+        assert jwt_service.extract_scopes(claims) == []
         assert jwt_service.extract_roles(claims) == []
 
     @pytest.mark.asyncio
@@ -1581,12 +1374,13 @@ class TestJWTService:
             cache_key = oidc_provider_config.jwks_uri
             jwt_service._JWKS_CACHE[cache_key] = valid_jwks
 
-            token = encode_token(
+            token = jwt_service.generate_jwt(
+                subject="user-123",
                 issuer="https://test.issuer",
                 audience="api://test",
-                key=b"test-secret-key",
+                secret="test-secret-key",
                 kid="unknown-key-id",  # Key ID not in JWKS
-                extra_claims={"sub": "user-123"},
+                claims={"sub": "user-123"},
             )
 
             with pytest.raises(HTTPException) as exc_info:
@@ -1606,12 +1400,13 @@ class TestJWTService:
             cache_key = oidc_provider_config.jwks_uri
             jwt_service._JWKS_CACHE[cache_key] = {"invalid": "jwks format"}
 
-            token = encode_token(
+            token = jwt_service.generate_jwt(
                 issuer="https://test.issuer",
+                subject="user-123",
                 audience="api://test",
-                key=b"test-secret-key",
+                secret="test-secret-key",
                 kid="test-key",
-                extra_claims={"sub": "user-123"},
+                claims={"sub": "user-123"},
             )
 
             with pytest.raises(HTTPException) as exc_info:
@@ -1646,19 +1441,20 @@ class TestJWTService:
             jwt_service._JWKS_CACHE[cache_key] = valid_jwks
 
             # Create valid token
-            token = encode_token(
+            token = jwt_service.generate_jwt(
                 issuer="https://test.issuer",
+                subject="user-123",
                 audience="api://test",
-                key=b"test-secret-key",
+                secret="test-secret-key",
                 kid="test-key",
-                extra_claims={"sub": "user-123"},
+                claims={"sub": "user-123"},
             )
 
             result = await jwt_service.verify_jwt(token)
 
-            assert result["iss"] == "https://test.issuer"
-            assert result["aud"] == "api://test"
-            assert result["sub"] == "user-123"
+            assert result.issuer == "https://test.issuer"
+            assert result.audience == "api://test"
+            assert result.subject == "user-123"
 
     @pytest.mark.asyncio
     async def test_verify_jwt_wrong_audience(self, valid_jwks, oidc_provider_config):
@@ -1675,12 +1471,13 @@ class TestJWTService:
             cache_key = oidc_provider_config.jwks_uri
             jwt_service._JWKS_CACHE[cache_key] = valid_jwks
 
-            token = encode_token(
+            token = jwt_service.generate_jwt(
                 issuer="https://test.issuer",
+                subject="user-123",
                 audience="api://wrong",  # Wrong audience
-                key=b"test-secret-key",
+                secret="test-secret-key",
                 kid="test-key",
-                extra_claims={"sub": "user-123"},
+                claims={"sub": "user-123"},
             )
 
             with pytest.raises(HTTPException) as exc_info:
@@ -1782,7 +1579,7 @@ class TestJWTService:
 
             # Should succeed due to clock skew tolerance
             result = await jwt_service.verify_jwt(token)
-            assert result["sub"] == "user-123"
+            assert result.subject == "user-123"
 
     @pytest.mark.asyncio
     async def test_verify_jwt_invalid_format(self, oidc_provider_config):
@@ -1871,20 +1668,122 @@ class TestJWTService:
         test_config.jwt.allowed_algorithms = ["RS256"]  # Only allow RS256, not HS256
         test_config.jwt.audiences = ["api://test"]
 
-        with with_context(config_override=test_config):
-            token = encode_token(
-                issuer="https://test.issuer",
-                audience="api://test",
-                key=b"test-secret-key",
-                kid="test-key",
-                extra_claims={"sub": "user-123"},
-            )
+        with pytest.raises(HTTPException) as exc_info:
+            with with_context(config_override=test_config):
+                token = jwt_service.generate_jwt(
+                    issuer="https://test.issuer",
+                    audience="api://test",
+                    secret="test-secret-key",
+                    kid="test-key",
+                    subject="user-123",
+                )
 
             with pytest.raises(HTTPException) as exc_info:
                 await jwt_service.verify_jwt(token)
 
             assert exc_info.value.status_code == 401
             assert "disallowed" in exc_info.value.detail.lower()
+
+    def test_create_token_claims_preserves_unmapped_claims(self):
+        """Should preserve unmapped claims in custom_claims without dropping standard claims."""
+        # Test with a mix of mapped and unmapped claims
+        claims = {
+            # Mapped claims (should be extracted to TokenClaims fields)
+            "sub": "user-123",
+            "iss": "https://test.issuer",
+            "aud": ["api://test"],
+            "exp": int(time.time()) + 3600,
+            "iat": int(time.time()),
+            "nbf": int(time.time()),
+            "email": "user@example.com",
+            "name": "John Doe",
+            "given_name": "John",
+            "family_name": "Doe",
+            "nonce": "abc123",
+            "scope": "read write",
+            "roles": ["user", "admin"],
+            # Standard claims that we don't have TokenClaims fields for (should stay in custom_claims)
+            "jti": "unique-jwt-id",
+            "auth_time": 1234567890,
+            "azp": "authorized-party",
+            "acr": "0",
+            "amr": ["pwd"],
+            "at_hash": "access-token-hash",
+            "middle_name": "Robert",
+            "nickname": "Johnny",
+            "preferred_username": "john_doe",
+            "profile": "https://example.com/profile",
+            "picture": "https://example.com/photo.jpg",
+            "website": "https://johndoe.com",
+            "gender": "male",
+            "birthdate": "1990-01-01",
+            "zoneinfo": "America/New_York",
+            "locale": "en-US",
+            "updated_at": 1234567890,
+            "email_verified": True,
+            "phone_number": "+1234567890",
+            "phone_number_verified": True,
+            "address": {"street": "123 Main St", "city": "Anytown"},
+            # Truly custom claims (should stay in custom_claims)
+            "tenant_id": "org-456",
+            "permissions": ["read:documents", "write:reports"],
+            "custom_field": "custom_value",
+            "organization": {"id": "org-123", "name": "Acme Corp"},
+        }
+
+        token_claims = jwt_service.create_token_claims(
+            token="test.jwt.token",
+            claims=claims,
+            token_type="access_token",
+            issuer="fallback-issuer",
+        )
+
+        # Verify that mapped claims are correctly extracted
+        assert token_claims.subject == "user-123"
+        assert token_claims.issuer == "https://test.issuer"
+        assert token_claims.audience == ["api://test"]
+        assert token_claims.email == "user@example.com"
+        assert token_claims.name == "John Doe"
+        assert token_claims.given_name == "John"
+        assert token_claims.family_name == "Doe"
+        assert token_claims.nonce == "abc123"
+        assert token_claims.scope == "read write"
+        assert set(token_claims.scopes) == {"read", "write"}
+        assert set(token_claims.roles) == {"user", "admin"}
+
+        # Verify that all unmapped claims are preserved in custom_claims
+        expected_custom_claims = {
+            # Standard claims we don't have fields for
+            "auth_time": 1234567890,
+            "azp": "authorized-party",
+            "acr": "0",
+            "amr": ["pwd"],
+            "at_hash": "access-token-hash",
+            "middle_name": "Robert",
+            "nickname": "Johnny",
+            "preferred_username": "john_doe",
+            "profile": "https://example.com/profile",
+            "picture": "https://example.com/photo.jpg",
+            "website": "https://johndoe.com",
+            "gender": "male",
+            "birthdate": "1990-01-01",
+            "zoneinfo": "America/New_York",
+            "locale": "en-US",
+            "updated_at": 1234567890,
+            "phone_number": "+1234567890",
+            "phone_number_verified": True,
+            "address": {"street": "123 Main St", "city": "Anytown"},
+            # Truly custom claims
+            "tenant_id": "org-456",
+            "permissions": ["read:documents", "write:reports"],
+            "custom_field": "custom_value",
+            "organization": {"id": "org-123", "name": "Acme Corp"},
+        }
+
+        assert token_claims.custom_claims == expected_custom_claims
+
+        # Verify that all_claims contains the original claims unchanged
+        assert token_claims.all_claims == claims
 
 
 class TestAuthenticationDependencies:

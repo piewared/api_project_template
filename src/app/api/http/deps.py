@@ -197,7 +197,7 @@ async def _authenticate_with_session(
         return None
 
     try:
-        user_session = get_user_session(session_id)
+        user_session = await get_user_session(session_id)
         if not user_session:
             if required:
                 raise HTTPException(

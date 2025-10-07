@@ -32,17 +32,6 @@ def mock_oidc_provider() -> OIDCProviderConfig:
     )
 
 
-@pytest.fixture
-def mock_token_response() -> TokenResponse:
-    """Mock OIDC token response for testing."""
-    return TokenResponse(
-        access_token="mock-access-token",
-        token_type="Bearer",
-        expires_in=3600,
-        refresh_token="mock-refresh-token",
-        id_token="mock-id-token",
-    )
-
 
 @pytest.fixture
 def mock_user_claims() -> dict[str, Any]:
@@ -70,36 +59,6 @@ def mock_user() -> User:
         email="test@example.com",
         first_name="Test",
         last_name="User",
-    )
-
-
-@pytest.fixture
-def mock_auth_session() -> AuthSession:
-    """Mock auth session for OIDC flow testing."""
-    return AuthSession(
-        id="auth-session-123",
-        pkce_verifier="test-pkce-verifier",
-        state="test-state-parameter",
-        provider="default",
-        redirect_uri="/dashboard",
-        created_at=int(time.time()),
-        expires_at=int(time.time()) + 600,
-    )
-
-
-@pytest.fixture
-def mock_user_session(mock_user: User) -> UserSession:
-    """Mock user session for testing."""
-    return UserSession(
-        id="user-session-456",
-        user_id=mock_user.id,
-        provider="default",
-        refresh_token="mock-refresh-token",
-        access_token="mock-access-token",
-        access_token_expires_at=int(time.time()) + 3600,
-        created_at=int(time.time()),
-        last_accessed_at=int(time.time()),
-        expires_at=int(time.time()) + 86400,
     )
 
 
@@ -225,74 +184,20 @@ def oidc_test_config():
     return config
 
 
-# Async mocks for services
 @pytest.fixture
-def mock_oidc_client_service():
-    """Mock OIDC client service for testing."""
-    mock_service = AsyncMock()
-
-    # Configure default return values
-    mock_service.generate_pkce_pair.return_value = ("test-verifier", "test-challenge")
-    mock_service.generate_state.return_value = "test-state"
-    mock_service.exchange_code_for_tokens.return_value = TokenResponse(
-        access_token="mock-access-token",
-        token_type="Bearer",
-        expires_in=3600,
-        refresh_token="mock-refresh-token",
-        id_token="mock-id-token",
-    )
-    mock_service.get_user_claims.return_value = {
-        "iss": "https://mock-provider.test",
-        "sub": "user-12345",
-        "email": "test@example.com",
-        "given_name": "Test",
-        "family_name": "User",
-    }
-    mock_service.refresh_access_token.return_value = TokenResponse(
-        access_token="new-access-token",
-        token_type="Bearer",
-        expires_in=3600,
-        refresh_token="new-refresh-token",
-    )
-
-    return mock_service
-
-
-@pytest.fixture
-def mock_session_service():
+def mock_session_service(
+    test_user: User, test_auth_session: AuthSession, test_user_session: UserSession
+):
     """Mock session service for testing."""
     mock_service = AsyncMock()
 
     # Configure default return values
     mock_service.create_auth_session.return_value = "auth-session-123"
-    mock_service.get_auth_session.return_value = AuthSession(
-        id="auth-session-123",
-        pkce_verifier="test-pkce-verifier",
-        state="test-state-parameter",
-        provider="default",
-        redirect_uri="/dashboard",
-        created_at=int(time.time()),
-        expires_at=int(time.time()) + 600,
-    )
+    mock_service.get_auth_session.return_value = test_auth_session
     mock_service.delete_auth_session.return_value = None
-    mock_service.provision_user_from_claims.return_value = User(
-        id="93743658555595339",
-        email="test@example.com",
-        first_name="Test",
-        last_name="User",
-    )
+    mock_service.provision_user_from_claims.return_value = test_user
     mock_service.create_user_session.return_value = "user-session-456"
-    mock_service.get_user_session.return_value = UserSession(
-        id="user-session-456",
-        user_id=str(UUID("93743658555595339")),
-        provider="default",
-        refresh_token="mock-refresh-token",
-        access_token="mock-access-token",
-        access_token_expires_at=int(time.time()) + 3600,
-        created_at=int(time.time()),
-        last_accessed_at=int(time.time()),
-        expires_at=int(time.time()) + 86400,
-    )
+    mock_service.get_user_session.return_value = test_user_session
     mock_service.delete_user_session.return_value = None
     mock_service.refresh_user_session.return_value = "new-user-session-789"
     mock_service.generate_csrf_token.return_value = "csrf-token-123"

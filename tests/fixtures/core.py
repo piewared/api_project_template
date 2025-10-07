@@ -16,7 +16,8 @@ from src.app.api.http.deps import get_session
 from src.app.api.http.middleware.limiter import configure_rate_limiter
 from src.app.core.services import jwt_service
 from src.app.runtime.config.config_data import OIDCProviderConfig
-from src.app.runtime.context import get_config
+from src.app.runtime.context import get_config, with_context
+from tests.fixtures.auth import ConfigData
 from tests.utils import oct_jwk
 
 main_config = get_config()
@@ -28,6 +29,33 @@ _HS_KEY = b"router-secret-key"
 _ISSUER = "https://issuer.test"
 _AUDIENCE = "api://router"
 _KID = "router-key"
+_NONCE = "test-nonce-value"
+
+
+@pytest.fixture
+def session_nonce() -> str:
+    return _NONCE
+
+
+@pytest.fixture
+def secret_for_jwt_generation() -> str:
+    return _HS_KEY.decode("utf-8")
+
+
+@pytest.fixture
+def secret_for_jwt_verification() -> str:
+    return _HS_KEY.decode("utf-8")
+
+
+@pytest.fixture
+def kid_for_jwt() -> str:
+    return _KID
+
+
+@pytest.fixture
+def jwks_data(secret_for_jwt_generation: str, kid_for_jwt: str) -> dict[str, Any]:
+    """Mock JWKS data for testing."""
+    return {"keys": [oct_jwk(secret_for_jwt_generation.encode("utf-8"), kid_for_jwt)]}
 
 
 @pytest.fixture(autouse=True)
@@ -80,7 +108,9 @@ def response_factory() -> Callable[[], Any]:
 
 @pytest.fixture
 def client(
-    session: Session, oidc_provider_config: OIDCProviderConfig
+    jwks_data: dict[str, Any],
+    session: Session,
+    oidc_provider_config: OIDCProviderConfig,
 ) -> Generator[TestClient]:
     """Yield a TestClient wired to the shared SQLModel session and test-friendly config."""
 
@@ -89,16 +119,6 @@ def client(
 
     async def _no_limit(request: Request, response: Response) -> None:
         return None
-
-    jwks_data = {"keys": [oct_jwk(_HS_KEY, _KID)]}
-
-    # Store original values to restore later
-    original_requests = main_config.rate_limiter.requests
-    original_window = main_config.rate_limiter.window_ms
-    original_allowed_algorithms = list(main_config.jwt.allowed_algorithms)
-    original_audiences = list(main_config.jwt.audiences)
-    original_uid_claim = main_config.jwt.claims.user_id
-    original_environment = main_config.app.environment
 
     async def fake_fetch_jwks(issuer: str):
         return jwks_data
@@ -112,27 +132,22 @@ def client(
         )  # use local no-op limiter
         app.dependency_overrides[get_session] = override_get_session
 
-        main_config.app.environment = "test"
-        main_config.rate_limiter.requests = 1000
-        main_config.rate_limiter.window_ms = 60
-        main_config.oidc.providers[_ISSUER] = oidc_provider_config
-
-        main_config.jwt.allowed_algorithms = ["HS256"]
-        main_config.jwt.audiences = [_AUDIENCE]
-        main_config.jwt.claims.user_id = "uid"
+        # Create a test configuration with proper overrides
+        test_config = ConfigData()
+        test_config.app.environment = "test"
+        test_config.rate_limiter.requests = 1000
+        test_config.rate_limiter.window_ms = 60
+        test_config.oidc.providers = {_ISSUER: oidc_provider_config}
+        test_config.jwt.allowed_algorithms = ["HS256"]
+        test_config.jwt.audiences = [_AUDIENCE]
+        test_config.jwt.claims.user_id = "uid"
 
         try:
-            with TestClient(app) as test_client:
-                yield test_client
+            with with_context(config_override=test_config):
+                with TestClient(app) as test_client:
+                    yield test_client
         finally:
             app.dependency_overrides.clear()
-            main_config.rate_limiter.requests = original_requests
-            main_config.rate_limiter.window_ms = original_window
-            main_config.oidc.providers.pop(_ISSUER)
-            main_config.jwt.allowed_algorithms = original_allowed_algorithms
-            main_config.jwt.audiences = original_audiences
-            main_config.jwt.claims.user_id = original_uid_claim
-            main_config.app.environment = original_environment
 
 
 @pytest.fixture(scope="session")
@@ -159,7 +174,7 @@ def persistent_session() -> Generator[Session]:
 @pytest.fixture
 def session() -> Generator[Session]:
     """Create a fresh database session for testing."""
-    # Create engine first
+    # Create a unique engine for each test to avoid metadata conflicts
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -171,8 +186,57 @@ def session() -> Generator[Session]:
     from src.app.entities.core.user import UserTable  # noqa: F401
     from src.app.entities.core.user_identity import UserIdentityTable  # noqa: F401
 
-    # Create all tables using the current metadata state
+    # Create all tables - each test gets a fresh database
     SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
-        yield session
+        try:
+            yield session
+        finally:
+            # Explicit cleanup
+            session.rollback()
+            session.close()
+            engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def reset_session_storage():
+    """Reset session storage before each test to avoid Redis connection conflicts."""
+    from src.app.core.storage.session_storage import _reset_storage
+
+    _reset_storage()
+    yield
+    # Reset again after test to clean up
+    _reset_storage()
+
+
+@pytest.fixture(autouse=True)
+def reset_global_state():
+    """Reset all global state before each test to prevent test interference."""
+    # Clear JWKS cache (redundant with clear_jwks_cache but ensures it's cleared)
+    from src.app.core.services import jwt_service
+
+    jwt_service._JWKS_CACHE.clear()
+
+    # Reset context module global state
+    from src.app.runtime import context
+
+    context._default_config = None
+    context._default_context = None
+
+    # Clear any context variable state
+    try:
+        # Get the current context token and reset it
+        context._app_context.get()
+        # If we got here, there's a context set - we need to clear it
+        # We'll let it naturally expire since we can't directly reset ContextVar
+    except LookupError:
+        # No context set, which is what we want
+        pass
+
+    yield
+
+    # Clean up after test
+    jwt_service._JWKS_CACHE.clear()
+    context._default_config = None
+    context._default_context = None

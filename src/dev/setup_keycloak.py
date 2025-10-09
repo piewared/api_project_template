@@ -3,48 +3,48 @@
 
 import sys
 import time
-from urllib.parse import urljoin
 
 import requests
 
+from .keycloak_client import KeycloakClient
+
 
 class KeycloakSetup:
-    """Keycloak configuration setup for development."""
+    """Keycloak configuration setup for development.
 
-    def __init__(self, base_url="http://localhost:8080"):
+    This class handles the business logic of setting up a Keycloak instance
+    for development use, including creating realms, clients, and test users.
+    """
+
+    def __init__(self, base_url: str = "http://localhost:8080"):
+        """Initialize the Keycloak setup.
+
+        Args:
+            base_url: Base URL of the Keycloak server
+        """
+        self.client = KeycloakClient(base_url)
         self.base_url = base_url
-        self.admin_username = "admin"
-        self.admin_password = "admin"
-        self.access_token = None
 
-    def get_admin_token(self):
-        """Get admin access token."""
-        token_url = urljoin(
-            self.base_url, "/realms/master/protocol/openid-connect/token"
-        )
+    def get_admin_token(self) -> str:
+        """Authenticate with Keycloak admin credentials.
 
-        data = {
-            "grant_type": "password",
-            "client_id": "admin-cli",
-            "username": self.admin_username,
-            "password": self.admin_password,
-        }
+        Returns:
+            Access token string
 
-        response = requests.post(token_url, data=data, timeout=30)
-        response.raise_for_status()
+        Raises:
+            requests.RequestException: If authentication fails
+        """
+        return self.client.authenticate("admin", "admin")
 
-        token_data = response.json()
-        self.access_token = token_data["access_token"]
-        return self.access_token
+    def create_realm(self, realm_name: str = "test-realm") -> None:
+        """Create a test realm if it doesn't exist.
 
-    def create_realm(self, realm_name="test-realm"):
-        """Create a test realm."""
-        url = urljoin(self.base_url, "/admin/realms")
-
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
+        Args:
+            realm_name: Name of the realm to create
+        """
+        if self.client.realm_exists(realm_name):
+            print(f"✅ Realm '{realm_name}' already exists")
+            return
 
         realm_config = {
             "realm": realm_name,
@@ -59,32 +59,24 @@ class KeycloakSetup:
             "bruteForceProtected": False,
         }
 
-        # Check if realm already exists
-        check_url = urljoin(self.base_url, f"/admin/realms/{realm_name}")
-        check_response = requests.get(check_url, headers=headers)
-
-        if check_response.status_code == 200:
-            print(f"✅ Realm '{realm_name}' already exists")
-            return
-
-        response = requests.post(url, json=realm_config, headers=headers, timeout=30)
-
-        if response.status_code == 201:
+        if self.client.create_realm(realm_config):
             print(f"✅ Created realm '{realm_name}'")
         else:
-            print(
-                f"❌ Failed to create realm: {response.status_code} - {response.text}"
-            )
+            print(f"❌ Failed to create realm '{realm_name}'")
             sys.exit(1)
 
-    def create_client(self, realm_name="test-realm", client_id="test-client"):
-        """Create a test client for OIDC flows."""
-        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/clients")
+    def create_client(
+        self, realm_name: str = "test-realm", client_id: str = "test-client"
+    ) -> None:
+        """Create a test client for OIDC flows if it doesn't exist.
 
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
+        Args:
+            realm_name: Name of the realm
+            client_id: ID of the client to create
+        """
+        if self.client.client_exists(realm_name, client_id):
+            print(f"✅ Client '{client_id}' already exists")
+            return
 
         client_config = {
             "clientId": client_id,
@@ -112,64 +104,38 @@ class KeycloakSetup:
             },
         }
 
-        # Check if client already exists
-        check_response = requests.get(
-            url, headers=headers, params={"clientId": client_id}
-        )
-        if check_response.status_code == 200 and check_response.json():
-            print(f"✅ Client '{client_id}' already exists")
-            return
-
-        response = requests.post(url, json=client_config, headers=headers, timeout=30)
-
-        if response.status_code == 201:
+        if self.client.create_client(realm_name, client_config):
             print(f"✅ Created client '{client_id}'")
 
-            # Get the created client to set the secret
-            clients_response = requests.get(
-                url, headers=headers, params={"clientId": client_id}
-            )
-            clients = clients_response.json()
-
-            if clients:
-                client_uuid = clients[0]["id"]
-                self.set_client_secret(realm_name, client_uuid, "test-client-secret")
-
+            # Set the client secret
+            client = self.client.get_client_by_id(realm_name, client_id)
+            if client:
+                self.set_client_secret(realm_name, client["id"], "test-client-secret")
         else:
-            print(
-                f"❌ Failed to create client: {response.status_code} - {response.text}"
-            )
+            print(f"❌ Failed to create client '{client_id}'")
             sys.exit(1)
 
-    def set_client_secret(self, realm_name, client_uuid, secret):
-        """Set client secret."""
-        url = urljoin(
-            self.base_url, f"/admin/realms/{realm_name}/clients/{client_uuid}"
-        )
+    def set_client_secret(self, realm_name: str, client_uuid: str, secret: str) -> None:
+        """Set the secret for a client.
 
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
+        Args:
+            realm_name: Name of the realm
+            client_uuid: UUID of the client
+            secret: Secret to set
+        """
         update_config = {"secret": secret}
 
-        response = requests.put(url, json=update_config, headers=headers, timeout=30)
-
-        if response.status_code == 204:
-            print(f"✅ Set client secret")
+        if self.client.update_client(realm_name, client_uuid, update_config):
+            print("✅ Set client secret")
         else:
-            print(f"❌ Failed to set client secret: {response.status_code}")
+            print("❌ Failed to set client secret")
 
-    def create_test_users(self, realm_name="test-realm"):
-        """Create test users."""
-        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users")
+    def create_test_users(self, realm_name: str = "test-realm") -> None:
+        """Create default test users if they don't exist.
 
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
+        Args:
+            realm_name: Name of the realm
+        """
         test_users = [
             {
                 "username": "testuser1",
@@ -204,25 +170,26 @@ class KeycloakSetup:
         ]
 
         for user in test_users:
-            # Check if user exists
-            check_response = requests.get(
-                url, headers=headers, params={"username": user["username"]}
-            )
-            if check_response.status_code == 200 and check_response.json():
-                print(f"✅ User '{user['username']}' already exists")
+            username = user["username"]
+
+            if self.client.user_exists(realm_name, username):
+                print(f"✅ User '{username}' already exists")
                 continue
 
-            response = requests.post(url, json=user, headers=headers, timeout=30)
-
-            if response.status_code == 201:
-                print(f"✅ Created user '{user['username']}'")
+            if self.client.create_user(realm_name, user):
+                print(f"✅ Created user '{username}'")
             else:
-                print(
-                    f"❌ Failed to create user '{user['username']}': {response.status_code}"
-                )
+                print(f"❌ Failed to create user '{username}'")
 
-    def print_configuration(self, realm_name="test-realm", client_id="test-client"):
-        """Print the configuration details."""
+    def print_configuration(
+        self, realm_name: str = "test-realm", client_id: str = "test-client"
+    ) -> None:
+        """Print the configuration details for the setup.
+
+        Args:
+            realm_name: Name of the realm
+            client_id: ID of the client
+        """
         print("\n" + "=" * 60)
         print("🔧 KEYCLOAK CONFIGURATION")
         print("=" * 60)
@@ -244,12 +211,12 @@ class KeycloakSetup:
         )
         print("")
         print(f"Client ID: {client_id}")
-        print(f"Client Secret: test-client-secret")
-        print(f"Redirect URI: http://localhost:8000/auth/web/callback")
+        print("Client Secret: test-client-secret")
+        print("Redirect URI: http://localhost:8000/auth/web/callback")
         print("")
         print("Environment Variables for .env:")
         print(f"OIDC_DEFAULT_CLIENT_ID={client_id}")
-        print(f"OIDC_DEFAULT_CLIENT_SECRET=test-client-secret")
+        print("OIDC_DEFAULT_CLIENT_SECRET=test-client-secret")
         print(f"OIDC_DEFAULT_ISSUER={self.base_url}/realms/{realm_name}")
         print(
             f"OIDC_DEFAULT_AUTHORIZATION_ENDPOINT={self.base_url}/realms/{realm_name}/protocol/openid-connect/auth"
@@ -266,91 +233,11 @@ class KeycloakSetup:
         print(
             f"OIDC_DEFAULT_END_SESSION_ENDPOINT={self.base_url}/realms/{realm_name}/protocol/openid-connect/logout"
         )
-        print(f"OIDC_DEFAULT_REDIRECT_URI=http://localhost:8000/auth/web/callback")
+        print("OIDC_DEFAULT_REDIRECT_URI=http://localhost:8000/auth/web/callback")
         print("=" * 60)
 
-    def list_users(self, realm_name="test-realm", limit=100):
-        """List users in a realm."""
-        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users")
-
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
-        params = {"max": limit}
-
-        response = requests.get(url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-
-        return response.json()
-
-    def get_user_by_username(self, realm_name, username):
-        """Get a user by username."""
-        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users")
-
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
-        params = {"username": username, "exact": True}
-
-        response = requests.get(url, headers=headers, params=params, timeout=30)
-        response.raise_for_status()
-
-        users = response.json()
-        return users[0] if users else None
-
-    def create_user(self, realm_name, user_data):
-        """Create a new user in a realm."""
-        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users")
-
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
-        response = requests.post(url, json=user_data, headers=headers, timeout=30)
-
-        return response.status_code == 201
-
-    def delete_user(self, realm_name, user_id):
-        """Delete a user from a realm."""
-        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users/{user_id}")
-
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
-        response = requests.delete(url, headers=headers, timeout=30)
-
-        return response.status_code == 204
-
-    def reset_user_password(self, realm_name, user_id, new_password, temporary=False):
-        """Reset a user's password."""
-        url = urljoin(
-            self.base_url, f"/admin/realms/{realm_name}/users/{user_id}/reset-password"
-        )
-
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json",
-        }
-
-        password_data = {
-            "type": "password",
-            "value": new_password,
-            "temporary": temporary,
-        }
-
-        response = requests.put(url, json=password_data, headers=headers, timeout=30)
-
-        return response.status_code == 204
-
-    def setup_all(self):
-        """Run the complete setup."""
+    def setup_all(self) -> None:
+        """Run the complete Keycloak setup process."""
         try:
             print("🔐 Getting admin token...")
             self.get_admin_token()
@@ -373,8 +260,77 @@ class KeycloakSetup:
             print(f"❌ Unexpected error: {e}")
             sys.exit(1)
 
+    # Delegate user management methods to the client for backward compatibility
+    def list_users(
+        self, realm_name: str = "test-realm", limit: int = 100
+    ) -> list[dict]:
+        """List users in a realm.
 
-def main():
+        Args:
+            realm_name: Name of the realm
+            limit: Maximum number of users to return
+
+        Returns:
+            List of user dictionaries
+        """
+        return self.client.get_users(realm_name, limit=limit)
+
+    def get_user_by_username(self, realm_name: str, username: str) -> dict | None:
+        """Get a user by username.
+
+        Args:
+            realm_name: Name of the realm
+            username: Username to search for
+
+        Returns:
+            User dictionary or None if not found
+        """
+        return self.client.get_user_by_username(realm_name, username)
+
+    def create_user(self, realm_name: str, user_data: dict) -> bool:
+        """Create a new user in a realm.
+
+        Args:
+            realm_name: Name of the realm
+            user_data: User configuration dictionary
+
+        Returns:
+            True if created successfully, False otherwise
+        """
+        return self.client.create_user(realm_name, user_data)
+
+    def delete_user(self, realm_name: str, user_id: str) -> bool:
+        """Delete a user from a realm.
+
+        Args:
+            realm_name: Name of the realm
+            user_id: ID of the user to delete
+
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        return self.client.delete_user(realm_name, user_id)
+
+    def reset_user_password(
+        self, realm_name: str, user_id: str, new_password: str, temporary: bool = False
+    ) -> bool:
+        """Reset a user's password.
+
+        Args:
+            realm_name: Name of the realm
+            user_id: ID of the user
+            new_password: New password to set
+            temporary: Whether the password should be temporary
+
+        Returns:
+            True if password reset successfully, False otherwise
+        """
+        return self.client.reset_user_password(
+            realm_name, user_id, new_password, temporary
+        )
+
+
+def main() -> None:
     """Main entry point."""
     print("🔧 Configuring Keycloak for development...")
 

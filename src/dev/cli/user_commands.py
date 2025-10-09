@@ -1,321 +1,215 @@
 """Keycloak user management CLI commands."""
 
 import typer
-from rich.panel import Panel
+from rich.console import Console
 from rich.table import Table
+from rich.prompt import Confirm
 
-from ..setup_keycloak import KeycloakSetup
-from .utils import console
+from ..keycloak_client import KeycloakClient
 
-# Create the users command group
-users_app = typer.Typer(help="👥 Keycloak user management commands")
+console = Console()
+
+# Create the users subcommand app
+users_app = typer.Typer(help="Manage Keycloak users in development environment")
 
 
-def get_keycloak_setup() -> KeycloakSetup:
-    """Get a configured KeycloakSetup instance."""
-    setup = KeycloakSetup()
+def get_keycloak_client() -> KeycloakClient:
+    """Get an authenticated Keycloak client."""
+    client = KeycloakClient("http://localhost:8080")
     try:
-        setup.get_admin_token()
-        return setup
+        client.authenticate("admin", "admin")
+        return client
     except Exception as e:
         console.print(f"[red]❌ Failed to connect to Keycloak: {e}[/red]")
-        console.print("[yellow]Make sure Keycloak is running: uv run cli dev start-env[/yellow]")
-        raise typer.Exit(1) from None
+        raise typer.Exit(code=1) from e
 
 
 @users_app.command("list")
 def list_users(
-    realm: str = typer.Option("test-realm", help="Keycloak realm to list users from"),
-    limit: int = typer.Option(10, help="Maximum number of users to show"),
+    realm: str = typer.Option("test-realm", "--realm", "-r", help="Keycloak realm name"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of users to show"),
 ) -> None:
-    """
-    📋 List users in a Keycloak realm.
-
-    Shows a table of users with their basic information including username,
-    email, name, and enabled status.
-    """
-    console.print(
-        Panel.fit(
-            f"[bold cyan]Users in Realm: {realm}[/bold cyan]",
-            border_style="cyan",
-        )
-    )
-
-    setup = get_keycloak_setup()
-
+    """List all users in the Keycloak realm."""
+    client = get_keycloak_client()
+    
     try:
-        users = setup.list_users(realm, limit)
-
+        users = client.get_users(realm, limit=limit)
+        
         if not users:
             console.print(f"[yellow]No users found in realm '{realm}'[/yellow]")
             return
 
-        # Create table
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("Username", style="cyan")
-        table.add_column("Email", style="green")
-        table.add_column("First Name", style="blue")
-        table.add_column("Last Name", style="blue")
+        table = Table(title=f"Users in realm '{realm}'")
+        table.add_column("ID", style="cyan")
+        table.add_column("Username", style="green")
+        table.add_column("Email", style="blue")
+        table.add_column("First Name", style="magenta")
+        table.add_column("Last Name", style="magenta")
         table.add_column("Enabled", style="yellow")
-        table.add_column("Email Verified", style="yellow")
 
         for user in users:
-            enabled = "✅" if user.get("enabled", False) else "❌"
-            email_verified = "✅" if user.get("emailVerified", False) else "❌"
             table.add_row(
+                user.get("id", ""),
                 user.get("username", ""),
                 user.get("email", ""),
                 user.get("firstName", ""),
                 user.get("lastName", ""),
-                enabled,
-                email_verified,
+                "✅" if user.get("enabled", False) else "❌"
             )
 
         console.print(table)
-        console.print(f"\n[dim]Showing {len(users)} users[/dim]")
+        console.print(f"\n[green]Found {len(users)} users[/green]")
 
     except Exception as e:
         console.print(f"[red]❌ Failed to list users: {e}[/red]")
-        raise typer.Exit(1) from None
+        raise typer.Exit(code=1) from e
 
 
 @users_app.command("add")
 def add_user(
     username: str = typer.Argument(..., help="Username for the new user"),
-    email: str = typer.Argument(..., help="Email address for the new user"),
-    password: str = typer.Option(
-        "password123", "--password", "-p", help="Password for the new user"
-    ),
-    first_name: str | None = typer.Option(None, "--first-name", help="First name"),
-    last_name: str | None = typer.Option(None, "--last-name", help="Last name"),
-    realm: str = typer.Option("test-realm", help="Keycloak realm to add user to"),
-    enabled: bool = typer.Option(True, help="Whether the user should be enabled"),
-    email_verified: bool = typer.Option(True, help="Whether the email should be marked as verified"),
-    temporary_password: bool = typer.Option(False, help="Whether the password is temporary"),
+    email: str = typer.Option(..., "--email", "-e", help="Email address"),
+    password: str = typer.Option(..., "--password", "-p", help="Password"),
+    first_name: str = typer.Option("", "--first-name", "-f", help="First name"),
+    last_name: str = typer.Option("", "--last-name", "-l", help="Last name"),
+    realm: str = typer.Option("test-realm", "--realm", "-r", help="Keycloak realm name"),
+    enabled: bool = typer.Option(True, "--enabled/--disabled", help="Enable the user"),
+    temporary_password: bool = typer.Option(False, "--temporary/--permanent", help="Require password change on first login"),
 ) -> None:
-    """
-    ➕ Add a new user to a Keycloak realm.
-
-    Creates a new user with the specified credentials and attributes.
-    The user will be created with basic profile information and a password.
-    """
-    console.print(
-        Panel.fit(
-            f"[bold green]Adding User: {username}[/bold green]",
-            border_style="green",
-        )
-    )
-
-    setup = get_keycloak_setup()
-
-    # Prepare user data
-    user_data = {
-        "username": username,
-        "email": email,
-        "enabled": enabled,
-        "emailVerified": email_verified,
-        "credentials": [
-            {
-                "type": "password",
-                "value": password,
-                "temporary": temporary_password,
-            }
-        ],
-    }
-
-    if first_name:
-        user_data["firstName"] = first_name
-    if last_name:
-        user_data["lastName"] = last_name
-
+    """Add a new user to the Keycloak realm."""
+    client = get_keycloak_client()
+    
     try:
-        success = setup.create_user(realm, user_data)
+        # Check if user already exists
+        if client.user_exists(realm, username):
+            console.print(f"[red]❌ User '{username}' already exists in realm '{realm}'[/red]")
+            raise typer.Exit(code=1)
 
-        if success:
-            console.print(f"[green]✅ User '{username}' created successfully![/green]")
-            console.print(f"[blue]Realm:[/blue] {realm}")
-            console.print(f"[blue]Email:[/blue] {email}")
-            console.print(f"[blue]Password:[/blue] {password}")
-            if temporary_password:
-                console.print("[yellow]⚠️  Password is temporary - user must change it on first login[/yellow]")
+        user_data = {
+            "username": username,
+            "email": email,
+            "firstName": first_name,
+            "lastName": last_name,
+            "enabled": enabled,
+            "emailVerified": True,
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": password,
+                    "temporary": temporary_password,
+                }
+            ],
+        }
+
+        if client.create_user(realm, user_data):
+            console.print(f"[green]✅ Successfully created user '{username}' in realm '{realm}'[/green]")
         else:
             console.print(f"[red]❌ Failed to create user '{username}'[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(code=1)
 
     except Exception as e:
         console.print(f"[red]❌ Failed to create user: {e}[/red]")
-        raise typer.Exit(1) from None
+        raise typer.Exit(code=1) from e
 
 
 @users_app.command("delete")
 def delete_user(
-    username: str = typer.Argument(..., help="Username of the user to delete"),
-    realm: str = typer.Option("test-realm", help="Keycloak realm to delete user from"),
-    force: bool = typer.Option(False, "--force", help="Skip confirmation prompt"),
+    username: str = typer.Argument(..., help="Username to delete"),
+    realm: str = typer.Option("test-realm", "--realm", "-r", help="Keycloak realm name"),
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation prompt"),
 ) -> None:
-    """
-    🗑️  Delete a user from a Keycloak realm.
-
-    Permanently removes a user from the specified realm. This action cannot be undone.
-    """
-    setup = get_keycloak_setup()
-
-    # Get user info first
+    """Delete a user from the Keycloak realm."""
+    client = get_keycloak_client()
+    
     try:
-        user = setup.get_user_by_username(realm, username)
+        # Get user details
+        user = client.get_user_by_username(realm, username)
         if not user:
             console.print(f"[red]❌ User '{username}' not found in realm '{realm}'[/red]")
-            raise typer.Exit(1)
-    except Exception as e:
-        console.print(f"[red]❌ Failed to find user: {e}[/red]")
-        raise typer.Exit(1) from None
+            raise typer.Exit(code=1)
 
-    # Show user info
-    console.print(
-        Panel.fit(
-            f"[bold red]Delete User: {username}[/bold red]",
-            border_style="red",
-        )
-    )
+        # Confirm deletion unless --force is used
+        if not force:
+            user_info = f"{user.get('firstName', '')} {user.get('lastName', '')}".strip()
+            if user_info:
+                user_info = f" ({user_info})"
+            
+            if not Confirm.ask(f"Are you sure you want to delete user '{username}'{user_info}?"):
+                console.print("[yellow]Deletion cancelled[/yellow]")
+                return
 
-    console.print(f"[blue]Username:[/blue] {user.get('username', '')}")
-    console.print(f"[blue]Email:[/blue] {user.get('email', '')}")
-    console.print(f"[blue]Name:[/blue] {user.get('firstName', '')} {user.get('lastName', '')}")
-    console.print(f"[blue]Realm:[/blue] {realm}")
-
-    # Confirmation
-    if not force:
-        confirm = typer.confirm(
-            f"\nAre you sure you want to delete user '{username}'? This cannot be undone."
-        )
-        if not confirm:
-            console.print("[yellow]Operation cancelled[/yellow]")
-            raise typer.Exit(0)
-
-    try:
-        success = setup.delete_user(realm, user["id"])
-
-        if success:
-            console.print(f"[green]✅ User '{username}' deleted successfully![/green]")
+        # Delete the user
+        if client.delete_user(realm, user["id"]):
+            console.print(f"[green]✅ Successfully deleted user '{username}' from realm '{realm}'[/green]")
         else:
             console.print(f"[red]❌ Failed to delete user '{username}'[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(code=1)
 
     except Exception as e:
         console.print(f"[red]❌ Failed to delete user: {e}[/red]")
-        raise typer.Exit(1) from None
+        raise typer.Exit(code=1) from e
 
 
 @users_app.command("info")
 def user_info(
-    username: str = typer.Argument(..., help="Username to get information for"),
-    realm: str = typer.Option("test-realm", help="Keycloak realm to search in"),
+    username: str = typer.Argument(..., help="Username to get info for"),
+    realm: str = typer.Option("test-realm", "--realm", "-r", help="Keycloak realm name"),
 ) -> None:
-    """
-    ℹ️  Show detailed information about a user.
-
-    Displays comprehensive user information including profile, roles, and status.
-    """
-    console.print(
-        Panel.fit(
-            f"[bold cyan]User Information: {username}[/bold cyan]",
-            border_style="cyan",
-        )
-    )
-
-    setup = get_keycloak_setup()
-
+    """Show detailed information about a user."""
+    client = get_keycloak_client()
+    
     try:
-        user = setup.get_user_by_username(realm, username)
+        user = client.get_user_by_username(realm, username)
         if not user:
             console.print(f"[red]❌ User '{username}' not found in realm '{realm}'[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(code=1)
+
+        table = Table(title=f"User Information: {username}")
+        table.add_column("Property", style="cyan")
+        table.add_column("Value", style="white")
 
         # Basic information
-        console.print("[bold]Basic Information:[/bold]")
-        console.print(f"  Username: {user.get('username', 'N/A')}")
-        console.print(f"  Email: {user.get('email', 'N/A')}")
-        console.print(f"  First Name: {user.get('firstName', 'N/A')}")
-        console.print(f"  Last Name: {user.get('lastName', 'N/A')}")
-        console.print(f"  User ID: {user.get('id', 'N/A')}")
+        table.add_row("ID", user.get("id", ""))
+        table.add_row("Username", user.get("username", ""))
+        table.add_row("Email", user.get("email", ""))
+        table.add_row("First Name", user.get("firstName", ""))
+        table.add_row("Last Name", user.get("lastName", ""))
+        table.add_row("Enabled", "✅" if user.get("enabled", False) else "❌")
+        table.add_row("Email Verified", "✅" if user.get("emailVerified", False) else "❌")
+        table.add_row("Created", str(user.get("createdTimestamp", "")))
 
-        # Status
-        console.print("\n[bold]Status:[/bold]")
-        enabled = "✅ Enabled" if user.get("enabled", False) else "❌ Disabled"
-        email_verified = "✅ Verified" if user.get("emailVerified", False) else "❌ Not verified"
-        console.print(f"  Account: {enabled}")
-        console.print(f"  Email: {email_verified}")
-
-        # Timestamps
-        console.print("\n[bold]Timestamps:[/bold]")
-        created_timestamp = user.get("createdTimestamp")
-        if created_timestamp:
-            import datetime
-            created_date = datetime.datetime.fromtimestamp(created_timestamp / 1000)
-            console.print(f"  Created: {created_date.strftime('%Y-%m-%d %H:%M:%S')}")
-        else:
-            console.print("  Created: N/A")
-
-        # Attributes
-        attributes = user.get("attributes", {})
-        if attributes:
-            console.print("\n[bold]Custom Attributes:[/bold]")
-            for key, value in attributes.items():
-                if isinstance(value, list):
-                    value = ", ".join(value)
-                console.print(f"  {key}: {value}")
-
-        # Required actions
-        required_actions = user.get("requiredActions", [])
-        if required_actions:
-            console.print("\n[bold]Required Actions:[/bold]")
-            for action in required_actions:
-                console.print(f"  • {action}")
+        console.print(table)
 
     except Exception as e:
-        console.print(f"[red]❌ Failed to get user information: {e}[/red]")
-        raise typer.Exit(1) from None
+        console.print(f"[red]❌ Failed to get user info: {e}[/red]")
+        raise typer.Exit(code=1) from e
 
 
 @users_app.command("reset-password")
 def reset_password(
     username: str = typer.Argument(..., help="Username to reset password for"),
-    new_password: str = typer.Argument(..., help="New password for the user"),
-    realm: str = typer.Option("test-realm", help="Keycloak realm"),
-    temporary: bool = typer.Option(False, help="Whether the password is temporary"),
+    password: str = typer.Option(..., "--password", "-p", help="New password"),
+    realm: str = typer.Option("test-realm", "--realm", "-r", help="Keycloak realm name"),
+    temporary: bool = typer.Option(False, "--temporary", "-t", help="Require password change on next login"),
 ) -> None:
-    """
-    🔑 Reset a user's password.
-
-    Changes the password for an existing user. Can be set as temporary to force
-    the user to change it on next login.
-    """
-    console.print(
-        Panel.fit(
-            f"[bold yellow]Reset Password: {username}[/bold yellow]",
-            border_style="yellow",
-        )
-    )
-
-    setup = get_keycloak_setup()
-
+    """Reset a user's password."""
+    client = get_keycloak_client()
+    
     try:
-        # Verify user exists first
-        user = setup.get_user_by_username(realm, username)
+        # Get user details
+        user = client.get_user_by_username(realm, username)
         if not user:
             console.print(f"[red]❌ User '{username}' not found in realm '{realm}'[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(code=1)
 
-        success = setup.reset_user_password(realm, user["id"], new_password, temporary)
-
-        if success:
-            console.print(f"[green]✅ Password reset successfully for user '{username}'![/green]")
-            if temporary:
-                console.print("[yellow]⚠️  Password is temporary - user must change it on next login[/yellow]")
+        # Reset password
+        if client.reset_user_password(realm, user["id"], password, temporary):
+            temp_msg = " (temporary)" if temporary else ""
+            console.print(f"[green]✅ Successfully reset password for user '{username}'{temp_msg}[/green]")
         else:
             console.print(f"[red]❌ Failed to reset password for user '{username}'[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(code=1)
 
     except Exception as e:
         console.print(f"[red]❌ Failed to reset password: {e}[/red]")
-        raise typer.Exit(1) from None
+        raise typer.Exit(code=1) from e

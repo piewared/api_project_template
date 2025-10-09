@@ -77,11 +77,10 @@ def generate_csrf_token(session_id: str, timestamp: int | None = None) -> str:
         timestamp = int(time.time() // 3600)  # Hour-based for reasonable lifetime
 
     config = get_config()
-    secret_key = (
-        config.app.session_jwt_secret.encode()
-        if config.app.session_jwt_secret
-        else b"dev-secret"
-    )
+    if not config.app.csrf_signing_secret:
+        raise ValueError("CSRF_SIGNING_SECRET must be set to generate CSRF tokens")
+
+    secret_key = config.app.csrf_signing_secret.encode()
 
     message = f"{session_id}:{timestamp}"
     csrf_token = hmac.new(secret_key, message.encode(), hashlib.sha256).hexdigest()

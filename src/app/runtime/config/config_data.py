@@ -186,7 +186,8 @@ class AppConfig(BaseModel):
     host: str = Field(default="localhost", description="Application host")
     port: int = Field(default=8000, description="Application port")
     session_max_age: int = Field(default=3600, description="Session maximum age in seconds")
-    session_jwt_secret: str = Field(default='TEST_SECRET_NEVER_USE_IN_PRODUCTION', description="Secret for signing session JWTs")
+    session_signing_secret: str | None = Field(default=None, description="Secret for signing session JWTs")
+    csrf_signing_secret: str | None = Field(default=None, description="Secret for signing CSRF tokens")
     cors: CORSConfig = Field(default_factory=CORSConfig, description="CORS configuration")
 
     @property
@@ -245,7 +246,7 @@ class ConfigData(BaseModel):
     jwt: JWTConfig = Field(default_factory=JWTConfig, description="JWT validation configuration")
     logging: LoggingConfig = Field(default_factory=LoggingConfig, description="Logging configuration")
     database: DatabaseConfig = Field(default_factory=DatabaseConfig, description="Database configuration")
-    app: AppConfig = Field(default_factory=AppConfig, description="Application configuration")
+    app: AppConfig = Field(default_factory=lambda: AppConfig(session_signing_secret=None, csrf_signing_secret=None), description="Application configuration")
     security: SecurityConfig = Field(default_factory=SecurityConfig, description="Security configuration")
 
 

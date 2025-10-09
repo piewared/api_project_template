@@ -102,7 +102,7 @@ class TestCSRFTokens:
     def test_generate_csrf_token(self):
         """Test CSRF token generation."""
         with patch('src.app.runtime.context.get_config') as mock_config:
-            mock_config.return_value.app.session_jwt_secret = "test-secret"
+            mock_config.return_value.app.session_signing_secret = "test-secret"
             
             token = generate_csrf_token("session-123")
             
@@ -116,7 +116,7 @@ class TestCSRFTokens:
     def test_generate_csrf_token_custom_timestamp(self):
         """Test CSRF token with custom timestamp."""
         with patch('src.app.runtime.context.get_config') as mock_config:
-            mock_config.return_value.app.session_jwt_secret = "test-secret"
+            mock_config.return_value.app.session_signing_secret = "test-secret"
             
             token1 = generate_csrf_token("session-123", 1000)
             token2 = generate_csrf_token("session-123", 2000)
@@ -126,7 +126,7 @@ class TestCSRFTokens:
     def test_validate_csrf_token_success(self):
         """Test successful CSRF token validation."""
         with patch('src.app.runtime.context.get_config') as mock_config:
-            mock_config.return_value.app.session_jwt_secret = "test-secret"
+            mock_config.return_value.app.session_signing_secret = "test-secret"
             
             token = generate_csrf_token("session-123")
             assert validate_csrf_token("session-123", token) is True
@@ -134,7 +134,7 @@ class TestCSRFTokens:
     def test_validate_csrf_token_wrong_session(self):
         """Test CSRF token validation with wrong session."""
         with patch('src.app.runtime.context.get_config') as mock_config:
-            mock_config.return_value.app.session_jwt_secret = "test-secret"
+            mock_config.return_value.app.session_signing_secret = "test-secret"
             
             token = generate_csrf_token("session-123")
             assert validate_csrf_token("session-456", token) is False
@@ -151,7 +151,7 @@ class TestCSRFTokens:
     def test_validate_csrf_token_expired(self):
         """Test CSRF token validation with expired token."""
         with patch('src.app.runtime.context.get_config') as mock_config:
-            mock_config.return_value.app.session_jwt_secret = "test-secret"
+            mock_config.return_value.app.session_signing_secret = "test-secret"
             
             # Generate token from 25 hours ago
             old_timestamp = int(time.time() // 3600) - 25
@@ -162,7 +162,7 @@ class TestCSRFTokens:
     def test_validate_csrf_token_custom_max_age(self):
         """Test CSRF token validation with custom max age."""
         with patch('src.app.runtime.context.get_config') as mock_config:
-            mock_config.return_value.app.session_jwt_secret = "test-secret"
+            mock_config.return_value.app.session_signing_secret = "test-secret"
             
             # Generate token from 2 hours ago
             old_timestamp = int(time.time() // 3600) - 2
@@ -311,7 +311,7 @@ class TestSecurityUtilsIntegration:
     def test_full_csrf_flow(self):
         """Test complete CSRF token generation and validation flow."""
         with patch('src.app.runtime.context.get_config') as mock_config:
-            mock_config.return_value.app.session_jwt_secret = "test-secret-key"
+            mock_config.return_value.app.session_signing_secret = "test-secret-key"
             
             session_id = "user-session-abc123"
             

@@ -147,12 +147,14 @@ What’s generated:
 
 ## Built-in Development Environment
 
-Dockerized services for local dev/test:
+**Start here:** **[docs/dev_env/README.md](docs/dev_env/README.md)**
 
-* **Keycloak** – OIDC provider with pre-configured dev realm/users (**dev/test only**)
-* **PostgreSQL** – production-like DB with persistent volume
-* **Redis** – cache, sessions, rate limiting
-* **Temporal** – workflow engine + UI
+Dockerized services for local dev/test to quickly spin up a local stack that mimics production:
+
+* 🔐 **Keycloak** – OIDC provider with pre-configured dev realm/users (**dev/test only**) → [docs/dev_env/keycloak.md](docs/dev_env/keycloak.md)
+* 🗄️ **PostgreSQL** – production-like DB with persistent volume → [docs/dev_env/postgres.md](docs/dev_env/postgres.md)
+* ⚡ **Redis** – cache, sessions, rate limiting → [docs/dev_env/redis.md](docs/dev_env/redis.md)
+* ⏱️ **Temporal** – workflow engine + UI → [docs/dev_env/temporal.md](docs/dev_env/temporal.md)
 
 Common commands:
 
@@ -160,7 +162,7 @@ Common commands:
 uv run cli dev start-env
 uv run cli dev status
 uv run cli dev logs [service]
-uv run cli dev stop
+uv run cli dev stop-env
 uv run cli dev start-server
 ```
 
@@ -196,27 +198,25 @@ Key sections in `config.yaml`:
 
 ### 🔐 Authentication & Redirects
 
-* The **OIDC `redirect_uri`** (callback endpoint) is defined *server-side* per provider in `config.yaml` — never accepted from clients.
-* Clients may optionally specify a `return_to` parameter, used for post-login redirection.
+* The **OIDC `redirect_uri`** (callback) is defined *server-side* per provider in `config.yaml` — never accepted from clients.
+* Clients may optionally pass a `return_to` param (relative path or allowlisted host) for post-login redirection.
+* The application:
 
-  * Must be a **relative path** (e.g., `/dashboard`) or from an **allowlisted host**.
-* The application automatically:
-
-  * Stores the OIDC state and PKCE verifier securely in Redis.
-  * Validates `state` and `nonce` during callback.
-  * Issues an HttpOnly, `SameSite=Lax`, signed session cookie.
+  * Stores state and PKCE verifier securely (e.g., in Redis).
+  * Validates `state` and `nonce` on callback.
+  * Issues an HttpOnly, `SameSite=Lax` signed session cookie.
   * Rotates session ID and CSRF token on refresh.
 
 ### 🍪 Cookie & Security Notes
 
-* `HttpOnly` cookies are always used (no access from JS).
+* `HttpOnly` cookies always (no JS access).
 * In **production**, `Secure=true` and HTTPS are mandatory.
 * For cross-site frontends, set `SameSite=None` + `Secure=true`.
 * Configure `CLIENT_ORIGINS` as a **list** (comma-separated in `.env`).
 
 ### 🗝️ Provider Configuration
 
-Use discovery where possible:
+Prefer discovery:
 
 ```yaml
 oidc:
@@ -228,11 +228,11 @@ oidc:
       scopes: ["openid", "email", "profile"]
 ```
 
-For production providers (e.g., Google, Microsoft, Okta), set:
+For production IdPs (Google, Microsoft, Okta, etc.), set:
 
-* `issuer` to the IdP base URL.
-* `client_id` / `client_secret` via environment variables.
-* `end_session_endpoint` only if the provider supports RP-initiated logout.
+* `issuer` to the IdP base URL
+* `client_id` / `client_secret` via env vars
+* `end_session_endpoint` if your provider supports RP-initiated logout
 
 ---
 
@@ -240,7 +240,7 @@ For production providers (e.g., Google, Microsoft, Okta), set:
 
 ```bash
 ENVIRONMENT=development
-DATABASE_URL=postgresql://devuser:devpass@localhost:5432/app_db
+DATABASE_URL=postgresql://devuser:devpass@localhost:5432/devdb
 REDIS_URL=redis://localhost:6379/0
 BASE_URL=http://localhost:8000
 SESSION_SIGNING_SECRET=change-this-32-char-secret
@@ -263,7 +263,7 @@ OIDC_KEYCLOAK_CLIENT_SECRET=test-secret
 >
 > * Replace Keycloak URLs with your IdP’s `issuer` and `client_id`.
 > * Configure OIDC discovery, JWKS validation, and session rotation.
-> * Set `Secure=true`, `SameSite=None`, and strong `SESSION_SIGNING_SECRET`.
+> * Set `Secure=true`, `SameSite=None`, and a strong `SESSION_SIGNING_SECRET`.
 
 ---
 
@@ -333,7 +333,7 @@ sudo netstat -tlnp | grep -E ':8080|:5432'
 **DB reset**
 
 ```bash
-uv run cli dev stop
+uv run cli dev stop-env
 docker volume rm dev_env_postgres_data
 uv run cli dev start-env
 ```
@@ -348,8 +348,8 @@ uv run cli dev logs keycloak
 **Clean reset**
 
 ```bash
-uv run cli dev stop
-docker-compose -f dev_env/docker-compose.yml down -v
+uv run cli dev stop-env
+docker compose -f dev_env/docker-compose.yml down -v
 uv run cli dev start-env
 ```
 

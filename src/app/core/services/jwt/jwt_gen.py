@@ -55,7 +55,7 @@ class JwtGeneratorService:
 
         # Get signing secret
         if not secret:
-            secret = config.app.session_jwt_secret
+            secret = config.app.session_signing_secret
 
         if not secret:
             raise HTTPException(

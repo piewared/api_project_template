@@ -199,7 +199,7 @@ def auth_test_config(secret_for_jwt_generation, base_oidc_provider: OIDCProvider
     config.jwt.allowed_algorithms = ["HS256"]
     config.jwt.audiences = [audience]
     config.jwt.claims.user_id = "app_uid"
-    config.app.session_jwt_secret = secret_for_jwt_generation
+    config.app.session_signing_secret = secret_for_jwt_generation
     return config
 
 

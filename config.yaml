@@ -122,7 +122,8 @@ config:
     host: "${APP_HOST:-localhost}"
     port: "${APP_PORT:-8000}"
     session_max_age: ${SESSION_MAX_AGE:-3600}  # Session max age in seconds
-    session_jwt_secret: "${SESSION_JWT_SECRET}"  # Secret for signing session JWTs
+    session_signing_secret: "${SESSION_SIGNING_SECRET}"  # Secret for signing session JWTs
+    csrf_signing_secret: "${CSRF_SIGNING_SECRET}"  # Secret for signing CSRF tokens
     cors:
       origins:
         - "${CLIENT_ORIGIN:-http://localhost:3000}"

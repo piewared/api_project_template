@@ -66,7 +66,7 @@ class JwtVerificationService:
 
 
         if internal:
-            verification_key = key or cfg.app.session_jwt_secret
+            verification_key = key or cfg.app.session_signing_secret
             if not verification_key:
                 raise HTTPException(status_code=500, detail="JWT signing secret not configured")
             claims_options = None
@@ -189,7 +189,7 @@ class JwtVerificationService:
         """
 
         config = get_config()
-        secret = config.app.session_jwt_secret
+        secret = config.app.session_signing_secret
         if not secret:
             raise HTTPException(status_code=500, detail="JWT signing secret not configured")
 

@@ -1,8 +1,27 @@
 # 🚀 FastAPI Production Template
 
-A comprehensive, production-ready FastAPI template with built-in authentication, development tools, and modern Python architecture patterns.
+A production-ready FastAPI template with built-in authentication, development tools, and modern Python architecture patterns for quickly spinning up a SaaS or microservices.
 
-## 📋 Overview
+## � Table of Contents
+
+- [📋 Overview](#-overview)
+- [🎯 Key Features](#-key-features)
+- [🛠️ Requirements](#️-requirements)
+- [🚀 Quick Start](#-quick-start)
+- [💡 Building Your Service](#-building-your-service)
+- [🏗️ Built-in Development Environment](#️-built-in-development-environment)
+- [🚀 CLI Commands Reference](#-cli-commands-reference)
+- [🔐 Authentication API](#-authentication-api)
+- [📱 Client Integration Examples](#-client-integration-examples)
+- [🧪 Testing](#-testing)
+- [🛠️ Development Workflow](#️-development-workflow)
+- [🔧 Troubleshooting](#-troubleshooting)
+- [📁 Project Structure](#-project-structure)
+- [🎯 Architecture & Design](#-architecture--design)
+- [📄 License](#-license)
+- [🆘 Support](#-support)
+
+## �📋 Overview
 
 This template provides a complete foundation for building scalable FastAPI applications with:
 
@@ -11,7 +30,6 @@ This template provides a complete foundation for building scalable FastAPI appli
 - **⚡ Complete Development Environment** - Integrated Keycloak, PostgreSQL, Redis, and Temporal via Docker
 - **🔄 Template Updates** - Automatic updates using Cruft
 - **🗄️ Flexible Database Support** - PostgreSQL for production, SQLite for development/testing
-- **🧪 Comprehensive Testing** - Unit, integration, and fixture-based testing
 - **📊 Entity Modeling** - SQLModel for type-safe ORM with Pydantic integration
 - **🛠️ Development CLI** - Rich command-line tools for development workflow
 

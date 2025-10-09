@@ -71,7 +71,7 @@ Using Cruft (recommended for updates):
 pip install cruft
 
 # Create project from template
-cruft create https://github.com/your-org/api-project-template
+cruft create https://github.com/piewared/api_project_template
 
 # Follow the prompts to configure your project
 ```
@@ -83,7 +83,7 @@ Using Cookiecutter:
 pip install cookiecutter
 
 # Create project from template
-cookiecutter https://github.com/your-org/api-project-template
+cookiecutter https://github.com/piewared/api_project_template
 ```
 
 ### 2. Set Up Development Environment
@@ -509,7 +509,7 @@ The config.yaml file supports environment variable substitution using the `${VAR
 #### Key Configuration Sections
 
 **Rate Limiter**: Controls API request throttling per endpoint/method
-**Database**: PostgreSQL connection settings with pooling configuration  
+**Database**: PostgreSQL connection settings with pooling configuration
 **Temporal**: Workflow engine settings for background tasks
 **Redis**: Cache and session storage configuration
 **OIDC**: Multi-provider authentication setup (Google, Microsoft, Keycloak)
@@ -1153,54 +1153,6 @@ uv run cli dev start-env
 - **Health Checks**: All services include health check endpoints
 - **Documentation**: Check service-specific READMEs in `dev_env/`
 
-## 📁 Project Structure
-
-```
-your_project/
-├── src/
-│   └── your_package/
-│       ├── app/
-│       │   ├── entities/          # Domain entities
-│       │   │   ├── core/          # Base classes
-│       │   │   └── [entity]/      # Entity packages
-│       │   ├── api/               # FastAPI routers
-│       │   ├── core/              # Core functionality
-│       │   │   ├── auth.py        # Authentication
-│       │   │   ├── database.py    # Database setup
-│       │   │   └── config.py      # Configuration
-│       │   ├── runtime/           # Application runtime
-│       │   └── service/           # Business services
-│       └── dev/                   # Development tools
-├── tests/                         # Test suites
-├── dev_env/                       # Development environment
-├── docs/                          # Documentation
-└── scripts/                       # Utility scripts
-```
-
-### Data Persistence
-
-Development data is persisted in Docker volumes:
-- `dev_env/postgres-data/` - PostgreSQL data
-- `dev_env/redis-data/` - Redis data  
-- `dev_env/temporal-data/` - Temporal data
-- `dev_env/keycloak-data/` - Keycloak configuration
-
-## 🎯 Architecture & Design
-
-This template follows **Domain-Driven Design** principles with **Clean Architecture**:
-
-- **Entities**: Core business objects with SQLModel
-- **Repositories**: Data access layer with type safety
-- **Services**: Business logic and workflows
-- **API Layer**: FastAPI routers and dependency injection
-- **Infrastructure**: Database, auth, external services
-
-### Key Patterns
-- **Repository Pattern**: Standardized data access
-- **Dependency Injection**: Clean separation of concerns
-- **Event-Driven**: Temporal workflows for complex processes
-- **Type Safety**: Full mypy compatibility with Pydantic/SQLModel
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
@@ -1216,5 +1168,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 **Ready to build something amazing?** 🚀
 
 ```bash
-cruft create https://github.com/your-org/api-project-template
+cruft create https://github.com/piewared/api_project_template
 ```

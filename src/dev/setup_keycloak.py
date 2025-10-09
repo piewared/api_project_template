@@ -269,6 +269,86 @@ class KeycloakSetup:
         print(f"OIDC_DEFAULT_REDIRECT_URI=http://localhost:8000/auth/web/callback")
         print("=" * 60)
 
+    def list_users(self, realm_name="test-realm", limit=100):
+        """List users in a realm."""
+        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users")
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        params = {"max": limit}
+
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+
+        return response.json()
+
+    def get_user_by_username(self, realm_name, username):
+        """Get a user by username."""
+        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users")
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        params = {"username": username, "exact": True}
+
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+
+        users = response.json()
+        return users[0] if users else None
+
+    def create_user(self, realm_name, user_data):
+        """Create a new user in a realm."""
+        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users")
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.post(url, json=user_data, headers=headers, timeout=30)
+
+        return response.status_code == 201
+
+    def delete_user(self, realm_name, user_id):
+        """Delete a user from a realm."""
+        url = urljoin(self.base_url, f"/admin/realms/{realm_name}/users/{user_id}")
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        response = requests.delete(url, headers=headers, timeout=30)
+
+        return response.status_code == 204
+
+    def reset_user_password(self, realm_name, user_id, new_password, temporary=False):
+        """Reset a user's password."""
+        url = urljoin(
+            self.base_url, f"/admin/realms/{realm_name}/users/{user_id}/reset-password"
+        )
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+
+        password_data = {
+            "type": "password",
+            "value": new_password,
+            "temporary": temporary,
+        }
+
+        response = requests.put(url, json=password_data, headers=headers, timeout=30)
+
+        return response.status_code == 204
+
     def setup_all(self):
         """Run the complete setup."""
         try:

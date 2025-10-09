@@ -16,10 +16,14 @@ from ..dev_utils import (
     run_keycloak_setup,
     wait_for_keycloak,
 )
+from .user_commands import users_app
 from .utils import console, get_dev_dir, run_command
 
 # Create the dev command group
 dev_app = typer.Typer(help="🚀 Development environment commands")
+
+# Add users subcommand
+dev_app.add_typer(users_app, name="users")
 
 
 @dev_app.command(name="start-server")

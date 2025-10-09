@@ -34,7 +34,7 @@ class UserIdentityRepository:
         if row is None:
             return None
         return UserIdentity.model_validate(row, from_attributes=True)
-    
+
     def list(self, offset: int = 0, limit: int = 100) -> list[UserIdentity]:
         """List user identities with pagination."""
         statement = select(UserIdentityTable).offset(offset).limit(limit)

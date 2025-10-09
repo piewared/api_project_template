@@ -3,25 +3,26 @@
 import time
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
-import httpx
 import pytest
+from fastapi import Request, Response
 from fastapi.testclient import TestClient
 from sqlmodel import Session
 
-from app.core.services.jwt_service import (
-    generate_access_token,
-    generate_id_token,
-    generate_refresh_token,
+from src.app.api.http.app import app
+from src.app.api.http.deps import get_jwks_service, get_session
+from src.app.api.http.middleware.limiter import configure_rate_limiter
+from src.app.core.models.session import AuthSession, UserSession
+from src.app.core.services import (
+    JwksService,
+    JwtGeneratorService,
 )
 from src.app.core.services.oidc_client_service import TokenResponse
-from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User, UserRepository
 from src.app.entities.core.user_identity import UserIdentity, UserIdentityRepository
 from src.app.runtime.config.config_data import (
     ConfigData,
-    OIDCConfig,
     OIDCProviderConfig,
 )
 
@@ -50,8 +51,8 @@ def test_user() -> User:
     return User(
         id="12345678-1234-5678-9abc-123456789012",
         email="test@example.com",
-        phone='123-456-7890',
-        address='123 Main St, Anytown, USA',
+        phone="123-456-7890",
+        address="123 Main St, Anytown, USA",
         first_name="Test",
         last_name="User",
     )
@@ -74,7 +75,9 @@ def test_user_identity(
 
 
 @pytest.fixture
-def test_user_claims_dict(test_user: User, test_user_identity: UserIdentity) -> dict[str, Any]:
+def test_user_claims_dict(
+    test_user: User, test_user_identity: UserIdentity
+) -> dict[str, Any]:
     """Standard user claims from OIDC provider."""
     return {
         "iss": test_user_identity.issuer,
@@ -91,9 +94,9 @@ def test_user_claims_dict(test_user: User, test_user_identity: UserIdentity) -> 
     }
 
 
-
 @pytest.fixture
 def test_identity_token_jwt(
+    jwt_generate_service: JwtGeneratorService,
     secret_for_jwt_generation: str,
     kid_for_jwt: str,
     session_nonce: str,
@@ -101,7 +104,7 @@ def test_identity_token_jwt(
     test_user: User,
 ) -> str:
     """Standard identity token JWT for user identity."""
-    return generate_id_token(
+    return jwt_generate_service.generate_id_token(
         nonce=session_nonce,
         issuer=test_user_identity.issuer,
         user_id=test_user_identity.subject,
@@ -115,6 +118,7 @@ def test_identity_token_jwt(
 
 @pytest.fixture
 def test_token_response(
+    jwt_generate_service: JwtGeneratorService,
     secret_for_jwt_generation: str,
     kid_for_jwt: str,
     test_user: User,
@@ -122,12 +126,12 @@ def test_token_response(
 ) -> TokenResponse:
     """Standard OIDC token response."""
     return TokenResponse(
-        access_token=generate_access_token(
+        access_token=jwt_generate_service.generate_access_token(
             test_user.id, secret=secret_for_jwt_generation, kid=kid_for_jwt
         ),
         token_type="Bearer",
         expires_in=3600,
-        refresh_token=generate_refresh_token(
+        refresh_token=jwt_generate_service.generate_refresh_token(
             test_user.id, secret=secret_for_jwt_generation, kid=kid_for_jwt
         ),
         id_token=test_identity_token_jwt,
@@ -185,15 +189,17 @@ def test_user_session(test_user: User, test_client_fingerprint: str) -> UserSess
 
 # Configuration Fixtures
 @pytest.fixture
-def auth_test_config(base_oidc_provider: OIDCProviderConfig) -> ConfigData:
+def auth_test_config(secret_for_jwt_generation, base_oidc_provider: OIDCProviderConfig, issuer, audience) -> ConfigData:
     """Application configuration for authentication testing."""
     config = ConfigData()
-    config.app.environment = "test"
-    config.oidc = OIDCConfig()
-    config.oidc.providers = {"default": base_oidc_provider}
+    config.app.environment = "development"
+    config.oidc.providers = {"default": base_oidc_provider, issuer: base_oidc_provider}
+    config.rate_limiter.requests = 1000
+    config.rate_limiter.window_ms = 60
     config.jwt.allowed_algorithms = ["HS256"]
-    config.jwt.audiences = ["test-client-id"]
+    config.jwt.audiences = [audience]
     config.jwt.claims.user_id = "app_uid"
+    config.app.session_jwt_secret = secret_for_jwt_generation
     return config
 
 
@@ -275,12 +281,34 @@ def mock_session_service(
 
 # HTTP Client Fixtures
 @pytest.fixture
-def auth_test_client(client: TestClient, auth_test_config) -> Generator[TestClient]:
+def auth_test_client(auth_test_config: ConfigData, session: Session, jwks_service_fake: JwksService) -> Generator[TestClient]:
     """Test client configured with authentication setup."""
     from src.app.runtime.context import with_context
 
-    with with_context(config_override=auth_test_config):
-        yield client
+    def override_get_session():
+        yield session
+
+    async def _no_limit(request: Request, response: Response) -> None:
+        return None
+
+
+    def override_get_jwks_service():
+        return jwks_service_fake
+
+
+    configure_rate_limiter(
+        limiter_factory=lambda *_a, **_k: _no_limit
+    )  # use local no-op limiter
+
+    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_jwks_service] = override_get_jwks_service
+
+    try:
+        with with_context(config_override=auth_test_config):
+            with TestClient(app) as test_client:
+                yield test_client
+    finally:
+        app.dependency_overrides.clear()
 
 
 # Mock Response Factories

@@ -78,6 +78,8 @@ config:
         token_endpoint: "${OIDC_KEYCLOAK_TOKEN_ENDPOINT:-http://localhost:8080/realms/master/protocol/openid-connect/token}"
     default_provider: "keycloak"
     global_redirect_uri: "${OIDC_REDIRECT_URI:-http://localhost:8000/auth/callback}"
+    allowed_redirect_hosts: []
+    allowed_audiences: []
   jwt:
     # JWT Validation Settings
     allowed_algorithms: 
@@ -87,6 +89,7 @@ config:
       - "ES384"
       - "HS256"  # Only if you have shared secrets
     # Audiences that your API accepts (who the tokens are intended for)
+    gen_issuer: "${BASE_URL:-my-api-issuer}" # Issuer name to use when generating tokens
     audiences:
       - "${JWT_AUDIENCE:-api://default}"
       - "${JWT_AUDIENCE_SECONDARY:-http://localhost:8000}"

@@ -10,13 +10,23 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.app.api.http.app_data import ApplicationDependencies
 from src.app.api.http.middleware.limiter import (
     close_rate_limiter,
     configure_rate_limiter,
 )
 from src.app.api.http.routers.auth import router_jit
 from src.app.api.http.routers.auth_bff_enhanced import router_bff
-from src.app.core.services import jwt_service
+from src.app.core.services import (
+    AuthSessionService,
+    JWKSCacheInMemory,
+    JwksService,
+    JwtGeneratorService,
+    JwtVerificationService,
+    OidcClientService,
+    UserSessionService,
+)
+from src.app.core.storage.session_storage import get_session_storage
 from src.app.runtime.context import get_config
 
 # main_config = get_config()
@@ -61,6 +71,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Allow FastAPI to run startup/shutdown routines once per process
+
     await startup()
     try:
         yield
@@ -177,6 +188,29 @@ async def _initialize_rate_limiter() -> None:
 
 # --- Lifecycle hooks ---
 async def startup() -> None:
+    # Initialize application-wide dependencies here
+    # e.g. database connections, caches, etc.
+    jwks_cache = JWKSCacheInMemory()
+    jwks_service = JwksService(jwks_cache)
+    jwt_verify_service = JwtVerificationService(jwks_service)
+    jwt_generation_service = JwtGeneratorService()
+
+    session_storage = await get_session_storage()
+    oidc_client_service = OidcClientService(jwt_verify_service)
+    user_session_service = UserSessionService(session_storage)
+    auth_session_service = AuthSessionService(session_storage)
+
+    deps = ApplicationDependencies(
+        jwks_cache=jwks_cache,
+        jwks_service=jwks_service,
+        jwt_verify_service=jwt_verify_service,
+        jwt_generation_service=jwt_generation_service,
+        oidc_client_service=oidc_client_service,
+        user_session_service=user_session_service,
+        auth_session_service=auth_session_service,
+    )
+    app.state.app_dependencies = deps
+
     config = get_config()
     logger.info("Starting up application in %s environment", config.app.environment)
     # Validate configuration so we fail fast on misconfiguration
@@ -184,10 +218,11 @@ async def startup() -> None:
 
     # Verify JWKS endpoints so auth failures surface early
     if config.oidc.providers:
+        jwks_service: JwksService = app.state.app_dependencies.jwks_service
         # issuers = list(main_config.oidc_providers.keys())
         issuers = list(config.oidc.providers.values())
         results = await asyncio.gather(
-            *(jwt_service.fetch_jwks(iss) for iss in issuers), return_exceptions=True
+            *(jwks_service.fetch_jwks(iss) for iss in issuers), return_exceptions=True
         )
         errors = [
             (iss, str(err))
@@ -205,6 +240,10 @@ async def startup() -> None:
 async def shutdown() -> None:
     logger.info("Shutting down application")
     await close_rate_limiter()
+    app_dependencies: ApplicationDependencies = app.state.app_dependencies
+    # Clean up application-wide dependencies here
+    await app_dependencies.auth_session_service.purge_expired()
+    await app_dependencies.user_session_service.purge_expired()
 
 
 # --- Route handlers ---

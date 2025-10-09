@@ -6,10 +6,21 @@ These models handle validation and type conversion of the YAML configuration dat
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+
+def deep_freeze(value: Any) -> Any:
+    """Recursively convert mutable containers into hashable equivalents."""
+    if isinstance(value, dict):
+        return tuple(sorted((k, deep_freeze(v)) for k, v in value.items()))
+    elif isinstance(value, (list, tuple)):
+        return tuple(deep_freeze(v) for v in value)
+    elif isinstance(value, set):
+        return frozenset(deep_freeze(v) for v in value)
+    else:
+        return value  # primitive types are already hashable
 
 class CORSConfig(BaseModel):
     """CORS configuration for the application."""
@@ -103,6 +114,10 @@ class OIDCConfig(BaseModel):
         default_factory=list,
         description="Allowed hosts for absolute redirect URLs (empty = relative only)"
     )
+    allowed_audiences: list[str] = Field(
+        default_factory=list,
+        description="Allowed audiences for validating incoming ID tokens (empty = skip audience check)"
+    )
 
 
 class JWTClaimsConfig(BaseModel):
@@ -124,10 +139,8 @@ class JWTConfig(BaseModel):
         default_factory=lambda: ["RS256", "RS512", "ES256", "ES384"],
         description="JWT algorithms allowed for token validation"
     )
-    audiences: list[str] = Field(
-        default_factory=lambda: ["api://default"],
-        description="JWT audiences that this API accepts"
-    )
+    gen_issuer: str = Field(default="my-api-issuer", description="Issuer name to use when generating tokens")
+    audiences: list[str] = Field(default_factory=lambda: ["api://default"], description="JWT audiences that this API accepts")
     clock_skew: int = Field(default=60, description="Clock skew tolerance in seconds")
     verify_signature: bool = Field(default=True, description="Verify JWT signature")
     verify_exp: bool = Field(default=True, description="Verify token expiration")
@@ -166,6 +179,7 @@ class DatabaseConfig(BaseModel):
 
 class AppConfig(BaseModel):
     """Application configuration model."""
+
     environment: Literal["development", "production", "test"] = Field(
         default="development", description="Application environment"
     )
@@ -220,6 +234,7 @@ class SecurityConfig(BaseModel):
 
 class ConfigData(BaseModel):
     """Root configuration model that matches the config.yaml structure."""
+
 
     rate_limiter: RateLimiterConfig = Field(
         default_factory=RateLimiterConfig, description="Rate limiter configuration"

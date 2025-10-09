@@ -9,8 +9,8 @@ import pytest
 from authlib.jose import JsonWebToken
 from fastapi import Request, Response
 
+from src.app.core.models.session import AuthSession, UserSession
 from src.app.core.services.oidc_client_service import TokenResponse
-from src.app.core.services.session_service import AuthSession, UserSession
 from src.app.entities.core.user import User
 from src.app.runtime.config.config_data import OIDCProviderConfig
 

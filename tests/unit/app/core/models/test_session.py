@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.security import hash_client_fingerprint
 from src.app.core.models.session import AuthSession, TokenClaims, UserSession
+from src.app.core.security import hash_client_fingerprint
 
 
 class TestAuthSession:

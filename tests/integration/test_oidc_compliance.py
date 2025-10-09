@@ -13,7 +13,8 @@ from src.app.runtime.context import with_context
 @pytest.fixture
 def client():
     """Create a test client for the FastAPI app."""
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 class TestOIDCRelyingParty:

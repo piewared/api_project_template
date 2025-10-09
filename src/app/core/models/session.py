@@ -140,6 +140,7 @@ class TokenClaims(BaseModel):
     # Standard OIDC claims
     issuer: str = Field(description="Issuer")
     subject: str = Field(description="Subject (user ID)")
+    authorized_party: str | None = Field(default=None, description="Authorized party (azp)")
     audience: str | list[str] = Field(description="Audience")
     expires_at: int = Field(description="Expiration time")
     issued_at: int = Field(description="Issued at")

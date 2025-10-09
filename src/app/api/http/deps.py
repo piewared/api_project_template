@@ -7,8 +7,13 @@ from collections.abc import Iterator
 from fastapi import Depends, HTTPException, Request
 from sqlmodel import Session
 
-from src.app.core.services import jwt_service
-from src.app.core.services.session_service import get_user_session
+from src.app.api.http.app_data import ApplicationDependencies
+from src.app.core.services.jwt import JwtVerificationService
+from src.app.core.services.jwt.jwks import JWKSCache, JwksService
+from src.app.core.services.oidc_client_service import OidcClientService
+from src.app.core.services.session.auth_session import AuthSessionService
+from src.app.core.services.session.user_session import UserSessionService
+from src.app.core.services.user.user_management import UserManagementService
 from src.app.entities.core.user import User, UserRepository
 from src.app.entities.core.user_identity.entity import UserIdentity
 from src.app.entities.core.user_identity.repository import UserIdentityRepository
@@ -30,6 +35,47 @@ def get_session() -> Iterator[Session]:
         db.close()
 
 
+def get_jwks_cache(request: Request) -> JWKSCache:
+    """Get the JWKS cache instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.jwks_cache
+
+
+def get_jwks_service(request: Request) -> JwksService:
+    """Get the JWKS service instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.jwks_service
+
+
+def get_jwt_verify_service(request: Request) -> JwtVerificationService:
+    """Get the JWT verification service instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.jwt_verify_service
+
+
+def get_user_session_service(request: Request) -> UserSessionService:
+    """Get the User Session service instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.user_session_service
+
+def get_auth_session_service(request: Request) -> AuthSessionService:
+    """Get the Auth Session service instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.auth_session_service
+
+def get_oidc_client_service(request: Request) -> OidcClientService:
+    """Get the OIDC Client service instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.oidc_client_service
+
+def get_user_management_service(request: Request, user_session_service: UserSessionService = Depends(get_user_session_service),
+                                jwt_verify_service: JwtVerificationService = Depends(get_jwt_verify_service),
+                                db_session: Session = Depends(get_session)
+                                ) -> UserManagementService:
+    """Get the User Management service instance."""
+    user_mgmt_service = UserManagementService(user_session_service, jwt_verify_service, db_session)
+    return user_mgmt_service
+
 # Add your application-specific repository dependencies here
 # Example:
 # def get_your_repo(db: Session = Depends(get_session)) -> YourRepository:
@@ -45,7 +91,9 @@ _DEV_USER = User(
 
 
 async def get_current_user(
-    request: Request, db: Session = Depends(get_session)
+    request: Request,
+    db: Session = Depends(get_session),
+    jwt_verify: JwtVerificationService = Depends(get_jwt_verify_service),
 ) -> User:
     """Authenticate the request using a Bearer token, with JIT user provisioning."""
 
@@ -63,7 +111,7 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Missing Bearer token")
 
     token = auth_header.split(" ", 1)[1]
-    claims = await jwt_service.verify_jwt(token)
+    claims = await jwt_verify.verify_jwt(token)
     uid = claims.uid
     issuer = claims.issuer
     subject = claims.subject
@@ -161,7 +209,10 @@ def require_role(required_role: str):
 
 
 async def _authenticate_with_session(
-    request: Request, db: Session, required: bool = False
+    request: Request,
+    db: Session,
+    user_session_service: UserSessionService,
+    required: bool = False,
 ) -> User | None:
     """
     Common helper for session-based authentication.
@@ -197,7 +248,7 @@ async def _authenticate_with_session(
         return None
 
     try:
-        user_session = await get_user_session(session_id)
+        user_session = await user_session_service.get_user_session(session_id)
         if not user_session:
             if required:
                 raise HTTPException(
@@ -238,7 +289,10 @@ async def _authenticate_with_session(
 
 
 async def get_authenticated_user(
-    request: Request, db: Session = Depends(get_session)
+    request: Request,
+    db: Session = Depends(get_session),
+    jwt_verify: JwtVerificationService = Depends(get_jwt_verify_service),
+    user_session_service: UserSessionService = Depends(get_user_session_service),
 ) -> User:
     """
     Unified authentication dependency that works with both JWT and session-based auth. JIT user provisioning is supported for JWT auth.
@@ -250,7 +304,9 @@ async def get_authenticated_user(
     """
 
     # Try session-based authentication first (BFF pattern)
-    user = await _authenticate_with_session(request, db, required=False)
+    user = await _authenticate_with_session(
+        request, db, user_session_service, required=False
+    )
     if user:
         return user
 
@@ -259,7 +315,7 @@ async def get_authenticated_user(
     if auth_header and auth_header.startswith("Bearer "):
         try:
             token = auth_header.split(" ", 1)[1]
-            claims = await jwt_service.verify_jwt(token)
+            claims = await jwt_verify.verify_jwt(token)
             uid = claims.uid
             issuer = claims.issuer
             subject = claims.subject
@@ -354,21 +410,29 @@ async def get_authenticated_user(
 
 
 async def get_session_only_user(
-    request: Request, db: Session = Depends(get_session)
+    request: Request,
+    db: Session = Depends(get_session),
+    user_session_service: UserSessionService = Depends(get_user_session_service),
 ) -> User | None:
     """
     Session-only authentication dependency for BFF endpoints.
     Only accepts session cookies, not JWT tokens.
     """
-    return await _authenticate_with_session(request, db, required=True)
+    return await _authenticate_with_session(
+        request, db, user_session_service, required=True
+    )
 
 
 async def get_optional_session_user(
-    request: Request, db: Session = Depends(get_session)
+    request: Request,
+    db: Session = Depends(get_session),
+    user_session_service: UserSessionService = Depends(get_user_session_service),
 ) -> User | None:
     """
     Optional session-only authentication dependency for BFF endpoints.
     Returns None if no session is found instead of raising an exception.
     Used for endpoints that need to check auth state without failing on unauthenticated requests.
     """
-    return await _authenticate_with_session(request, db, required=False)
+    return await _authenticate_with_session(
+        request, db, user_session_service, required=False
+    )

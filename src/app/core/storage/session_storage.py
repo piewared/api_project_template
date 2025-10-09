@@ -316,10 +316,6 @@ class RedisSessionStorage(SessionStorage):
             return False
 
 
-# Global storage instance
-_storage: SessionStorage | None = None
-
-
 async def _detect_redis_availability() -> SessionStorage:
     """Attempt to create Redis storage, fall back to in-memory."""
     try:
@@ -356,15 +352,7 @@ async def _detect_redis_availability() -> SessionStorage:
 
 async def get_session_storage() -> SessionStorage:
     """Get the configured session storage instance."""
-    global _storage
 
-    if _storage is None:
-        _storage = await _detect_redis_availability()
+    _storage = await _detect_redis_availability()
 
     return _storage
-
-
-def _reset_storage() -> None:
-    """Reset storage instance (for testing)."""
-    global _storage
-    _storage = None

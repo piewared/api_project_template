@@ -1,31 +1,39 @@
 # 🚀 FastAPI Production Template
 
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Lint](https://img.shields.io/badge/lint-Ruff-informational)
+![Types](https://img.shields.io/badge/types-MyPy-informational)
+![Tests](https://img.shields.io/badge/tests-pytest-success)
+![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
+
 Build scalable, production-ready REST APIs with built-in **OIDC authentication**, **server-side session management**, and modern **security** (rate limiting, CSRF protection, client fingerprinting).
 
-Develop and test like production with a full **Docker** stack—**PostgreSQL**, **Redis**, **Temporal**, and a **local Keycloak instance for dev/test OIDC flows**.  
-> In **production**, use your organization’s managed IdP (e.g., Azure AD, Okta, Auth0, Google, Cognito, or managed Keycloak).
+Develop and test like production with a full **Docker stack** — **PostgreSQL**, **Redis**, **Temporal**, and a **local Keycloak instance for dev/test OIDC flows**.
 
-A **powerful CLI** streamlines your workflow: start/stop the dev environment, manage databases, run the API with hot reload, and generate boilerplate for new domain entities (Entity class, ORM model, repository, and router with pre-generated CRUD endpoints).
+> In **production**, use a managed IdP (Azure AD, Okta, Auth0, Google, Cognito, etc.).
+
+A **powerful CLI** streamlines your workflow — start/stop the dev environment, manage databases, run the API with hot reload, and generate boilerplate for new domain entities (Entity class, ORM model, repository, and router with pre-generated CRUD endpoints).
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Requirements](#requirements)
-- [Quick Start](#quick-start)
-- [Building Your Service](#building-your-service)
-- [Built-in Development Environment](#built-in-development-environment)
-- [Configuration](#configuration)
-- [Authentication API](#authentication-api)
-- [Testing](#testing)
-- [Development Workflow](#development-workflow)
-- [Troubleshooting](#troubleshooting)
-- [Project Structure](#project-structure)
-- [Architecture & Design](#architecture--design)
-- [License](#license)
-- [Support](#support)
+* [Overview](#overview)
+* [Key Features](#key-features)
+* [Requirements](#requirements)
+* [Quick Start](#quick-start)
+* [Building Your Service](#building-your-service)
+* [Built-in Development Environment](#built-in-development-environment)
+* [Configuration](#configuration)
+* [Authentication API](#authentication-api)
+* [Testing](#testing)
+* [Development Workflow](#development-workflow)
+* [Troubleshooting](#troubleshooting)
+* [Project Structure](#project-structure)
+* [Architecture & Design](#architecture--design)
+* [License](#license)
+* [Support](#support)
 
 ---
 
@@ -33,14 +41,14 @@ A **powerful CLI** streamlines your workflow: start/stop the dev environment, ma
 
 This template provides a complete foundation for building scalable FastAPI applications with:
 
-- 🔐 **OIDC Authentication (BFF)** – Authorization Code + PKCE + nonce, **server-side sessions**, CSRF protection, secure cookies
-- 🏗️ **Clean Architecture** – Entities → Repositories → Services → API layers
-- ⚡ **Complete Dev Environment** – Keycloak (dev/test only), PostgreSQL, Redis, Temporal via Docker Compose
-- 🛠️ **Developer CLI** – Start/stop env, DB tasks, hot-reload server, and **entity/repository/router scaffolding**
-- 🔄 **Template Updates** – Keep in sync with **Cruft**
-- 🗄️ **Flexible Database** – PostgreSQL (prod), SQLite (dev/test)
-- 📊 **Type-safe Modeling** – SQLModel + Pydantic
-- 🧪 **Testing Setup** – Unit, integration, and E2E with pytest + fixtures
+* 🔐 **OIDC Authentication (BFF)** – Authorization Code + PKCE + nonce, secure sessions, CSRF protection, cookies
+* 🏗️ **Clean Architecture** – Entities → Repositories → Services → API layers
+* ⚡ **Complete Dev Environment** – Keycloak (dev/test only), PostgreSQL, Redis, Temporal
+* 🛠️ **Developer CLI** – Manage env, DB, hot reload, and scaffold entities/routes
+* 🔄 **Cruft Updates** – Keep your fork synced with template updates
+* 🗄️ **Flexible Database** – PostgreSQL (prod), SQLite (dev/test)
+* 📊 **Type-safe ORM** – SQLModel + Pydantic
+* 🧪 **Comprehensive Testing** – pytest (unit, integration, E2E)
 
 ---
 
@@ -160,19 +168,102 @@ uv run cli dev start-server
 
 ## Configuration
 
-Copy `.env.example` → `.env`. Most settings are driven by `config.yaml` with `${ENV_VAR:-default}` substitution.
+### 🔧 Overview
 
-**Highlights:**
+Configuration is centralized in a single **`config.yaml`**, with environment variable overrides (`${VAR_NAME:-default}` syntax).
+This allows clean defaults under version control, while keeping secrets and environment-specific overrides in `.env`.
 
-* Use **discovery** (`/.well-known/openid-configuration`) where possible to resolve OIDC endpoints.
-* Do **not** accept `redirect_uri` from clients—callback URIs are configured server-side per provider.
-* `return_to` (post-login navigation) is sanitized to **relative paths** by default (or allowlisted hosts).
-* Cookies: `HttpOnly=true`, `SameSite=Lax` (default), `Secure=true` in production. Cross-site apps require `SameSite=None` + HTTPS.
+### ⚙️ Layers
 
-**Notes:**
+| Layer           | Source                | Description                               |
+| --------------- | --------------------- | ----------------------------------------- |
+| `.env`          | Environment variables | Environment-specific values               |
+| `config.yaml`   | Application config    | Structured defaults with env substitution |
+| FastAPI startup | Pydantic models       | Final validation & type safety            |
 
-* Deduplicate `app:` keys—keep a single `environment`, `host`, `port`, `session_max_age`, `session_signing_secret` (rename from `SESSION_JWT_SECRET` if you prefer clarity).
-* Prefer `CLIENT_ORIGINS` as a **list**; parse from a comma-separated env var.
+### 🧭 Structure
+
+Key sections in `config.yaml`:
+
+* `app` → app metadata, session, CORS, and host configuration
+* `database` → DB URL, pool size, timeouts
+* `redis` → cache/session store config
+* `temporal` → background workflows
+* `oidc.providers` → multi-provider authentication
+* `jwt` → token validation rules & claim mappings
+* `rate_limiter` → per-endpoint throttling
+* `logging` → log level, structured format
+
+### 🔐 Authentication & Redirects
+
+* The **OIDC `redirect_uri`** (callback endpoint) is defined *server-side* per provider in `config.yaml` — never accepted from clients.
+* Clients may optionally specify a `return_to` parameter, used for post-login redirection.
+
+  * Must be a **relative path** (e.g., `/dashboard`) or from an **allowlisted host**.
+* The application automatically:
+
+  * Stores the OIDC state and PKCE verifier securely in Redis.
+  * Validates `state` and `nonce` during callback.
+  * Issues an HttpOnly, `SameSite=Lax`, signed session cookie.
+  * Rotates session ID and CSRF token on refresh.
+
+### 🍪 Cookie & Security Notes
+
+* `HttpOnly` cookies are always used (no access from JS).
+* In **production**, `Secure=true` and HTTPS are mandatory.
+* For cross-site frontends, set `SameSite=None` + `Secure=true`.
+* Configure `CLIENT_ORIGINS` as a **list** (comma-separated in `.env`).
+
+### 🗝️ Provider Configuration
+
+Use discovery where possible:
+
+```yaml
+oidc:
+  providers:
+    keycloak:
+      issuer: http://localhost:8080/realms/test-realm
+      client_id: test-client
+      client_secret: test-secret
+      scopes: ["openid", "email", "profile"]
+```
+
+For production providers (e.g., Google, Microsoft, Okta), set:
+
+* `issuer` to the IdP base URL.
+* `client_id` / `client_secret` via environment variables.
+* `end_session_endpoint` only if the provider supports RP-initiated logout.
+
+---
+
+### ⚡️ Example `.env`
+
+```bash
+ENVIRONMENT=development
+DATABASE_URL=postgresql://devuser:devpass@localhost:5432/app_db
+REDIS_URL=redis://localhost:6379/0
+BASE_URL=http://localhost:8000
+SESSION_SIGNING_SECRET=change-this-32-char-secret
+CLIENT_ORIGINS=http://localhost:3000
+OIDC_KEYCLOAK_ISSUER=http://localhost:8080/realms/test-realm
+OIDC_KEYCLOAK_CLIENT_ID=test-client
+OIDC_KEYCLOAK_CLIENT_SECRET=test-secret
+```
+
+---
+
+### 🏁 Prod vs Dev Auth
+
+| Environment    | Provider                                          | Redirect URI                              | Security                                        |
+| -------------- | ------------------------------------------------- | ----------------------------------------- | ----------------------------------------------- |
+| **Dev/Test**   | Local Keycloak                                    | `http://localhost:8000/auth/web/callback` | Self-contained, no internet access              |
+| **Production** | Managed IdP (e.g., Azure AD, Okta, Auth0, Google) | `https://your-api.com/auth/web/callback`  | HTTPS required, Secure cookies, rotated secrets |
+
+> ✅ In production:
+>
+> * Replace Keycloak URLs with your IdP’s `issuer` and `client_id`.
+> * Configure OIDC discovery, JWKS validation, and session rotation.
+> * Set `Secure=true`, `SameSite=None`, and strong `SESSION_SIGNING_SECRET`.
 
 ---
 

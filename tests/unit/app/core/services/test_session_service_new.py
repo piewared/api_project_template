@@ -4,7 +4,6 @@ import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from src.app.runtime.context import with_context
 
 from src.app.core.models.session import AuthSession, UserSession
 from src.app.core.security import (
@@ -20,6 +19,7 @@ from src.app.core.services import (
 from src.app.core.services.jwt.jwt_utils import create_token_claims
 from src.app.core.services.user.user_management import UserManagementService
 from src.app.entities.core.user import User
+from src.app.runtime.context import with_context
 
 
 class TestSessionService:

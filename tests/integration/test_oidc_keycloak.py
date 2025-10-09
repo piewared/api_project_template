@@ -161,12 +161,13 @@ class TestOIDCIntegration:
         assert result["csrf_token"] is None
 
     def test_logout_without_session(self, integration_client):
-        """Test logout without session."""
+        """Test logout without session returns 401."""
         response = integration_client.post("/auth/web/logout")
 
-        assert response.status_code == 200
+        # Should fail with 401 because no session/CSRF token provided
+        assert response.status_code == 401
         result = response.json()
-        assert result["message"] == "Logged out"
+        assert "No session found" in result["detail"]
 
     @pytest.mark.manual
     def test_full_oidc_flow_manual(self, integration_client):

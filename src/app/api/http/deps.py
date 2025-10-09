@@ -3,17 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from functools import lru_cache
+from urllib.parse import urlparse
 
 from fastapi import Depends, HTTPException, Request
 from sqlmodel import Session
 
 from src.app.api.http.app_data import ApplicationDependencies
-from src.app.core.services.jwt import JwtVerificationService
-from src.app.core.services.jwt.jwks import JWKSCache, JwksService
-from src.app.core.services.oidc_client_service import OidcClientService
-from src.app.core.services.session.auth_session import AuthSessionService
-from src.app.core.services.session.user_session import UserSessionService
-from src.app.core.services.user.user_management import UserManagementService
+from src.app.core.security import validate_csrf_token
+from src.app.core.services import (
+    AuthSessionService,
+    JWKSCache,
+    JwksService,
+    JwtVerificationService,
+    OidcClientService,
+    UserManagementService,
+    UserSessionService,
+)
 from src.app.entities.core.user import User, UserRepository
 from src.app.entities.core.user_identity.entity import UserIdentity
 from src.app.entities.core.user_identity.repository import UserIdentityRepository
@@ -436,3 +442,170 @@ async def get_optional_session_user(
     return await _authenticate_with_session(
         request, db, user_session_service, required=False
     )
+
+
+@lru_cache(maxsize=50)
+def normalize_origin(origin: str) -> tuple[str, str, int]:
+    """Normalize an origin string into a tuple for comparison."""
+    parsed = urlparse(origin)
+    return (
+        parsed.scheme.lower(),
+        (parsed.hostname or "").lower(),
+        parsed.port or (443 if parsed.scheme == "https" else 80),
+    )
+
+
+@lru_cache(maxsize=1)
+def get_allowed_origins() -> set[tuple[str, str, int]]:
+    """Get allowed origins from config for CORS checks."""
+    cfg = get_config()
+    allowed_parsed = {normalize_origin(a) for a in cfg.app.cors.origins}
+
+    return allowed_parsed
+
+
+def is_origin_allowed(origin: str) -> bool:
+    """Compare candidate origin against allowed origins."""
+    allowed_origins = get_allowed_origins()
+    candidate = normalize_origin(origin)
+
+    return candidate in allowed_origins
+
+
+def enforce_origin(request: Request) -> None:
+    """
+    Enforce Origin/Referer allowlist for state-changing requests.
+    Allows same-origin requests; allowlist is derived from config.app.base_url.
+    """
+
+    """
+    Enforce Origin/Referer allowlist for state-changing requests.
+    Skips CORS preflight (OPTIONS).
+    """
+    # 1) Ignore preflight
+    if request.method == "OPTIONS":
+        return
+
+    # 2) (Optional) Only enforce on state-changing verbs
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return
+
+    # 3) Skip enforcement in development mode
+    cfg = get_config()
+    if cfg.app.environment == 'development' or cfg.app.environment == 'test':
+        return
+
+    allowed_origins = get_allowed_origins()  # normalized list of (scheme, host, port)
+    origin = request.headers.get("origin")
+    referer = request.headers.get("referer")
+    host_header = request.headers.get("host")
+    candidate = origin or referer
+
+    # --- 1️⃣ If Origin header present ---
+    if origin:
+        if origin == "null":
+            raise HTTPException(status_code=403, detail="Origin 'null' not allowed")
+        if not is_origin_allowed(origin):
+            raise HTTPException(status_code=403, detail="Origin not allowed")
+        return  # ✅ OK
+
+    # --- 2️⃣ No Origin — fall back to same-host check ---
+    if not candidate:
+        # No Origin or Referer — check Host header
+        if host_header:
+            try:
+                scheme, host, port = normalize_origin(f"https://{host_header}")
+                if (scheme, host, port) in allowed_origins:
+                    return  # ✅ Treat as same-origin
+            except Exception:
+                pass
+        # Fail closed
+        raise HTTPException(status_code=403, detail="Missing or invalid Origin")
+
+    # --- 3️⃣ Use Referer fallback ---
+    if not is_origin_allowed(candidate):
+        raise HTTPException(status_code=403, detail="Referer origin not allowed")
+
+
+#TODO: REMOVE
+def enforce_origin_old(request: Request) -> None:
+    """
+    Enforce Origin/Referer allowlist for state-changing requests.
+    Allows same-origin requests; allowlist is derived from config.app.base_url.
+    """
+
+    """
+    Enforce Origin/Referer allowlist for state-changing requests.
+    Skips CORS preflight (OPTIONS).
+    """
+    # 1) Ignore preflight
+    if request.method == "OPTIONS":
+        return
+
+    # 2) (Optional) Only enforce on state-changing verbs
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return
+
+    cfg = get_config()
+    allowed_origins = cfg.app.cors.origins
+    origin = request.headers.get("origin", None)
+    referer = request.headers.get("referer")
+    candidate: str
+    if origin is None:
+        # No origin header, can use referer as fallback
+        candidate = referer or ""
+    else:
+        # origin is set; must use it
+        if origin == "null":
+            # Some browsers set Origin: null for file:// or sandboxed contexts. This is not allowed.
+            raise HTTPException(status_code=403, detail="Origin 'null' not allowed")
+        candidate = origin
+
+    if not allowed_origins:
+        # If allowed_origins is empty, fall back to rejecting cross-site requests explicitly
+        if origin:
+            raise HTTPException(
+                status_code=403, detail="Cross-origin request not allowed"
+            )
+        return
+    if not candidate:
+        # Some agents might omit Origin; fail closed for state-changing endpoints
+        raise HTTPException(status_code=403, detail="Missing Origin")
+    try:
+        if is_origin_allowed(candidate):
+            return
+        # If no match found, reject
+        raise HTTPException(status_code=403, detail="Origin not allowed")
+    except Exception:
+        raise HTTPException(
+            status_code=403, detail="Origin validation failed"
+        ) from None
+
+
+def require_csrf(request: Request) -> None:
+    """Dependency to require CSRF token header for state-changing requests."""
+
+    # 1) Ignore preflight
+    if request.method == "OPTIONS":
+        return
+
+    # 2) (Optional) Only enforce on state-changing verbs
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return
+
+    # 3) Skip enforcement in development mode
+    cfg = get_config()
+    if cfg.app.environment == 'development' or cfg.app.environment == 'test':
+        return
+
+    csrf_header = request.headers.get("x-csrf-token")
+    if not csrf_header:
+        raise HTTPException(status_code=403, detail="Missing CSRF token header")
+
+    session_id = request.cookies.get("user_session_id")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="No session found")
+
+    if not validate_csrf_token(session_id, csrf_header):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+

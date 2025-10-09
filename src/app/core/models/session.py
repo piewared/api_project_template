@@ -63,9 +63,7 @@ class UserSession(BaseModel):
     provider: str = Field(description="OIDC provider identifier")
     refresh_token: str | None = Field(default=None, description="OAuth refresh token")
     access_token: str | None = Field(default=None, description="OAuth access token")
-    access_token_expires_at: int | None = Field(
-        default=None, description="Access token expiry"
-    )
+    access_token_expires_at: int | None = Field(default=None, description="Access token expiry")
     client_fingerprint: str = Field(description="Client context fingerprint")
     created_at: int = Field(description="Creation timestamp")
     last_accessed_at: int = Field(description="Last access timestamp")

@@ -91,7 +91,7 @@ def generate_csrf_token(session_id: str, timestamp: int | None = None) -> str:
 
 
 def validate_csrf_token(
-    session_id: str, csrf_token: str | None, max_age_hours: int = 24
+    session_id: str, csrf_token: str | None, max_age_hours: int = 12
 ) -> bool:
     """Validate CSRF token for session.
 

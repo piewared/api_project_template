@@ -125,7 +125,7 @@ config:
     session_jwt_secret: "${SESSION_JWT_SECRET}"  # Secret for signing session JWTs
     cors:
       origins:
-        - "${CORS_ORIGINS:-http://localhost:3000}"
+        - "${CLIENT_ORIGIN:-http://localhost:3000}"
       allow_credentials: true
       allow_methods:
         - GET

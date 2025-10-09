@@ -1,11 +1,4 @@
-"""Enhanced BFF (Backend-for-Frontend) authentication endpoints with security improvements.
-
-Fixes applied:
-- Validate `state` and fingerprint even when the provider returns an `error`.
-- Verify ID token (including `nonce`) BEFORE using any claims.
-- Require an ID token for OIDC logins; treat missing ID token as an error.
-- Make nonce single-use by retiring the auth session in all outcomes.
-"""
+"""Enhanced BFF (Backend-for-Frontend) authentication endpoints with CSRF protection and hardened flows."""
 
 from typing import Any
 from urllib.parse import urlencode
@@ -14,16 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from loguru import logger
 from pydantic import BaseModel
-from sqlmodel import Session
 
 from src.app.api.http.deps import (
+    enforce_origin,
     get_auth_session_service,
     get_jwt_verify_service,
     get_oidc_client_service,
     get_optional_session_user,
-    get_session,
     get_user_management_service,
     get_user_session_service,
+    require_csrf,
 )
 from src.app.core.security import (
     extract_client_fingerprint,
@@ -32,24 +25,19 @@ from src.app.core.security import (
     generate_pkce_pair,
     generate_state,
     sanitize_return_url,
-    validate_csrf_token,
 )
-from src.app.core.services.jwt.jwt_verify import JwtVerificationService
-from src.app.core.services.oidc_client_service import OidcClientService
-from src.app.core.services.session.auth_session import AuthSessionService
-from src.app.core.services.session.user_session import UserSessionService
-from src.app.core.services.user.user_management import UserManagementService
+from src.app.core.services import (
+    AuthSessionService,
+    JwtVerificationService,
+    OidcClientService,
+    UserManagementService,
+    UserSessionService,
+)
 from src.app.entities.core.user import User
 from src.app.runtime.context import get_config
 
 router_bff = APIRouter(prefix="/web", tags=["auth-bff"])
 
-
-class LoginRequest(BaseModel):
-    """Request to initiate login flow."""
-
-    redirect_uri: str | None = None
-    provider: str = "default"
 
 
 class AuthState(BaseModel):
@@ -67,6 +55,7 @@ def _get_secure_cookie_settings() -> dict[str, Any]:
         "httponly": True,
         "secure": config.app.environment == "production",
         "samesite": "lax",
+        "path": "/",
     }
 
 
@@ -74,7 +63,7 @@ def _get_secure_cookie_settings() -> dict[str, Any]:
 async def initiate_login(
     request: Request,
     provider: str = "default",
-    redirect_uri: str | None = None,
+    return_to: str | None = None,  # post-login navigation (NOT IdP redirect_uri)
     auth_session_service: AuthSessionService = Depends(get_auth_session_service),
 ) -> RedirectResponse:
     """Initiate OIDC login flow with enhanced security.
@@ -95,12 +84,11 @@ async def initiate_login(
     # Extract client fingerprint for session binding
     client_fingerprint = extract_client_fingerprint(request)
 
-    # Sanitize return URL
-    safe_return_uri = redirect_uri or "/"
-    if redirect_uri:
-        safe_return_uri = sanitize_return_url(
-            redirect_uri, allowed_hosts=config.oidc.allowed_redirect_hosts
-        )
+    # Sanitize post-login return destination. Prefer relative paths; allowlist absolute if configured.
+    safe_return_uri = sanitize_return_url(
+        return_to or "/",
+        allowed_hosts=getattr(config.oidc, "allowed_redirect_hosts", None),
+    )
 
     # Create secure auth session (server-side, short TTL)
     session_id = await auth_session_service.create_auth_session(
@@ -112,7 +100,7 @@ async def initiate_login(
         client_fingerprint_hash=client_fingerprint,
     )
 
-    # Build authorization URL with nonce
+    # Build authorization URL with nonce (IdP redirect_uri is always server-configured)
     provider_config = config.oidc.providers[provider]
     auth_params = {
         "client_id": provider_config.client_id,
@@ -146,7 +134,6 @@ async def handle_callback(
     state: str | None = None,
     code: str | None = None,
     error: str | None = None,
-    session: Session = Depends(get_session),
     auth_session_service: AuthSessionService = Depends(get_auth_session_service),
     user_session_service: UserSessionService = Depends(get_user_session_service),
     jwt_verify_service: JwtVerificationService = Depends(get_jwt_verify_service),
@@ -158,11 +145,9 @@ async def handle_callback(
     Performs comprehensive validation including state, fingerprint,
     ID token (incl. nonce) verification, and secure session creation.
     """
-    # --- Always load and validate the auth session & state, even on error ---
     session_id = request.cookies.get("auth_session_id")
-    logger.debug(
-        f"Callback received: state={state}, code={'present' if code else 'absent'}, error={error}, session_id={session_id}"
-    )
+    # Avoid logging state/code/session ids to prevent leakage
+    logger.debug("Callback received for provider login")
 
     if not session_id:
         # No linkage to our initiated flow; treat as CSRF / invalid callback
@@ -186,17 +171,16 @@ async def handle_callback(
     if error:
         # Retire the single-use auth session on any terminal outcome
         await auth_session_service.delete_auth_session(session_id)
-        # Clear the cookie to avoid reuse
         response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-        response.delete_cookie("auth_session_id")
-        # Surface the error (state was already validated)
-        raise HTTPException(status_code=400, detail=f"Authorization failed: {error}")
+        response.delete_cookie("auth_session_id", path="/")
+        # Return generic error (details go to server logs)
+        return response
 
     if not code:
         await auth_session_service.delete_auth_session(session_id)
         response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-        response.delete_cookie("auth_session_id")
-        raise HTTPException(status_code=400, detail="Missing authorization code")
+        response.delete_cookie("auth_session_id", path="/")
+        return response
 
     try:
         # Mark session as used ASAP to prevent replay (single-use guarantee)
@@ -211,11 +195,10 @@ async def handle_callback(
 
         # --- Require an ID token for OIDC login ---
         if not tokens.id_token:
-            # Retire the auth session and abort
             await auth_session_service.delete_auth_session(session_id)
             response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-            response.delete_cookie("auth_session_id")
-            raise HTTPException(status_code=400, detail="Missing ID token in OIDC flow")
+            response.delete_cookie("auth_session_id", path="/")
+            return response
 
         # --- Verify the ID token BEFORE using any claims ---
         # Verify signature, issuer, audience, and nonce. Depending on your jwt_service,
@@ -253,6 +236,9 @@ async def handle_callback(
             access_token_expires_at=tokens.expires_at,
         )
 
+        # Note: CSRF token generation could be added here for future enhancements
+        # csrf_token = generate_csrf_token(user_session_id)
+
         # Clean up single-use auth session (retires nonce/state)
         await auth_session_service.delete_auth_session(session_id)
 
@@ -270,11 +256,11 @@ async def handle_callback(
         )
 
         # Clear the short-lived auth session cookie
-        response.delete_cookie("auth_session_id")
+        response.delete_cookie("auth_session_id", path="/")
 
         return response
 
-    except Exception as e:
+    except Exception:
         # Clean up auth session on any error path to retire nonce/state
         try:
             await auth_session_service.delete_auth_session(session_id)
@@ -282,13 +268,13 @@ async def handle_callback(
             pass
         # Clear cookie to avoid dangling references
         response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
-        response.delete_cookie("auth_session_id")
-        raise HTTPException(
-            status_code=500, detail=f"Authentication failed: {str(e)}"
-        ) from e
+        response.delete_cookie("auth_session_id", path="/")
+        # Return a generic response; log server-side
+        logger.exception("Authentication failed during callback")
+        return response
 
 
-@router_bff.post("/logout")
+@router_bff.post("/logout", dependencies=[Depends(enforce_origin), Depends(require_csrf)])
 async def logout(
     request: Request,
     response: Response,
@@ -296,9 +282,13 @@ async def logout(
 ) -> dict[str, str]:
     """Logout user with secure session cleanup.
 
-    Validates CSRF token and optionally redirects to provider logout.
+    Requires CSRF token and optionally returns provider logout URL.
     """
+
     session_id = request.cookies.get("user_session_id")
+    if not session_id:
+        raise HTTPException(status_code=401, detail="No session found")
+
     if session_id:
         # Get session info for provider logout
         user_session = await user_session_service.get_user_session(session_id)
@@ -307,7 +297,7 @@ async def logout(
         await user_session_service.delete_user_session(session_id)
 
         # Clear session cookie
-        response.delete_cookie("user_session_id")
+        response.delete_cookie("user_session_id", path="/")
 
         # Optionally trigger provider logout
         if (
@@ -353,17 +343,18 @@ async def get_auth_state(
     )
 
 
-@router_bff.get("/refresh")
+@router_bff.post("/refresh", dependencies=[Depends(enforce_origin), Depends(require_csrf)])
 async def refresh_session(
     request: Request,
     response: Response,
     user_session_service: UserSessionService = Depends(get_user_session_service),
     oidc_client_service: OidcClientService = Depends(get_oidc_client_service),
 ) -> dict[str, str]:
-    """Refresh user session with security validation.
+    """Refresh user session with CSRF + Origin validation and rotation.
 
-    Validates client fingerprint and rotates session ID for security.
+    Requires X-CSRF-Token header; validates client fingerprint; rotates session ID and CSRF token.
     """
+
     session_id = request.cookies.get("user_session_id")
     if not session_id:
         raise HTTPException(status_code=401, detail="No session found")
@@ -378,12 +369,14 @@ async def refresh_session(
     )
 
     if not user_session:
-        response.delete_cookie("user_session_id")
+        response.delete_cookie("user_session_id", path="/")
         raise HTTPException(status_code=401, detail="Invalid session")
 
     try:
         # Refresh tokens and rotate session ID
-        new_session_id = await user_session_service.refresh_user_session(session_id, oidc_client_service)
+        new_session_id = await user_session_service.refresh_user_session(
+            session_id, oidc_client_service
+        )
 
         # Update session cookie with new ID
         cookie_settings = _get_secure_cookie_settings()
@@ -394,26 +387,12 @@ async def refresh_session(
             **cookie_settings,
         )
 
-        return {"message": "Session refreshed"}
+        # Rotate CSRF token and return it so the client can update in memory
+        new_csrf = generate_csrf_token(new_session_id)
+        return {"message": "Session refreshed", "csrf_token": new_csrf}
 
-    except Exception as e:
+    except Exception:
         # Clear invalid session
-        response.delete_cookie("user_session_id")
-        raise HTTPException(
-            status_code=401, detail=f"Session refresh failed: {str(e)}"
-        ) from e
-
-
-@router_bff.post("/validate-csrf")
-async def validate_csrf(request: Request, csrf_token: str) -> dict[str, bool]:
-    """Validate CSRF token for AJAX requests."""
-    session_id = request.cookies.get("user_session_id")
-    if not session_id:
-        raise HTTPException(status_code=401, detail="No session found")
-
-    is_valid = validate_csrf_token(session_id, csrf_token)
-
-    if not is_valid:
-        raise HTTPException(status_code=403, detail="Invalid CSRF token")
-
-    return {"valid": True}
+        response.delete_cookie("user_session_id", path="/")
+        logger.exception("Session refresh failed")
+        raise HTTPException(status_code=401, detail="Session refresh failed") from None

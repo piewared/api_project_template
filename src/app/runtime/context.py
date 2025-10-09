@@ -27,8 +27,9 @@ def _get_default_config():
     if _default_config is None:
         # Load environment variables before config parsing
         from dotenv import load_dotenv
+
         load_dotenv()
-        
+
         _default_config = load_templated_yaml(Path("config.yaml"))
         _default_context = AppContext(config=_default_config)
     return _default_config

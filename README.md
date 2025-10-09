@@ -1,6 +1,11 @@
 # 🚀 FastAPI Production Template
 
-A production-ready FastAPI template with built-in authentication, development tools, and modern Python architecture patterns for quickly spinning up a SaaS or microservices.
+Build scalable, production-ready REST APIs with built-in OIDC authentication, session management, and advanced security features such as rate limiting, CSRF protection, and client fingerprinting.
+
+Develop and test in an environment that mirrors production with an integrated Docker stack featuring PostgreSQL, Redis, Temporal, and a local Keycloak instance for OIDC authentication flows.
+
+Designed for a seamless developer experience, it includes a powerful CLI to manage your entire workflow — from starting or stopping the full Dockerized development environment to managing databases, running the API with hot reload, and even generating boilerplate code for new domain entities (including Entity classes, ORM models, repositories, and routers with pre-generated CRUD endpoints).
+
 
 ## � Table of Contents
 

@@ -1,0 +1,88 @@
+# Temporal Dynamic Configuration for Production
+# These settings can be updated without restarting the service
+
+# Worker Configuration
+limit.maxConcurrentActivityExecutionSize:
+  - value: 1000
+    constraints: {}
+
+limit.maxConcurrentWorkflowTaskExecutionSize:
+  - value: 1000
+    constraints: {}
+
+# History Service Configuration
+history.maxAutoResetPoints:
+  - value: 20
+    constraints: {}
+
+history.defaultActivityRetryPolicy:
+  - value:
+      InitialIntervalInSeconds: 1
+      MaximumIntervalInSeconds: 100
+      BackoffCoefficient: 2.0
+      MaximumAttempts: 0
+    constraints: {}
+
+history.defaultWorkflowRetryPolicy:
+  - value:
+      InitialIntervalInSeconds: 1
+      MaximumIntervalInSeconds: 100
+      BackoffCoefficient: 2.0
+      MaximumAttempts: 0
+    constraints: {}
+
+# Matching Service Configuration
+matching.numTaskqueueReadPartitions:
+  - value: 4
+    constraints: {}
+
+matching.numTaskqueueWritePartitions:
+  - value: 4
+    constraints: {}
+
+# Frontend Service Configuration
+frontend.enableClientVersionCheck:
+  - value: true
+    constraints: {}
+
+frontend.maxBadBinaries:
+  - value: 10
+    constraints: {}
+
+# Security Configuration
+frontend.enableAdminProtection:
+  - value: true
+    constraints: {}
+
+# Performance Tuning
+system.enableParentClosePolicy:
+  - value: true
+    constraints: {}
+
+system.enableCrossNamespaceChild:
+  - value: false
+    constraints: {}
+
+# Visibility Configuration
+system.advancedVisibilityWritingMode:
+  - value: "on"
+    constraints: {}
+
+# Archival Configuration (disabled by default for production)
+system.enableArchival:
+  - value: false
+    constraints: {}
+
+# Rate Limiting
+frontend.rps:
+  - value: 1200
+    constraints: {}
+
+frontend.globalNamespaceRPS:
+  - value: 1000
+    constraints: {}
+
+# Metrics and Monitoring
+system.enableDebugMode:
+  - value: false
+    constraints: {}

@@ -1,0 +1,258 @@
+# Production Docker Compose Configuration
+# Security-focused, scalable deployment with secrets management
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      BACKUP_PASSWORD_FILE: /run/secrets/backup_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_backups:/var/lib/postgresql/backups
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - app-network
+    secrets:
+      - postgres_password
+      - backup_password
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Redis Cache/Session Store
+  redis:
+    build:
+      context: ./docker/redis
+      dockerfile: Dockerfile
+    environment:
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    volumes:
+      - redis_data:/data
+      - redis_backups:/var/lib/redis/backups
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - app-network
+    secrets:
+      - redis_password
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Temporal Workflow Engine
+  temporal:
+    build:
+      context: ./docker/temporal
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PWD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      POSTGRES_TLS_ENABLED: "false"
+      TEMPORAL_LOG_LEVEL: ${TEMPORAL_LOG_LEVEL:-info}
+      SKIP_SCHEMA_SETUP: ${SKIP_TEMPORAL_SCHEMA_SETUP:-false}
+      TEMPORAL_AUTH_ENABLED: "true"
+      TEMPORAL_TLS_ENABLED: "true"
+    depends_on:
+      - postgres
+    volumes:
+      - temporal_certs:/etc/temporal/certs
+    networks:
+      - app-network
+    secrets:
+      - postgres_password
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # FastAPI Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-appuser}@postgres:5432/${POSTGRES_DB:-appdb}
+      REDIS_URL: redis://redis:6379/0
+      TEMPORAL_URL: temporal:7233
+      TEMPORAL_TLS_ENABLED: "true"
+      BASE_URL: ${BASE_URL:-https://yourdomain.com}
+      OIDC_REDIRECT_URI: ${BASE_URL:-https://yourdomain.com}/auth/web/callback
+      
+      # JWT Configuration
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-api://default}
+      JWT_AUDIENCE_SECONDARY: ${BASE_URL:-https://yourdomain.com}
+      SESSION_SIGNING_SECRET_FILE: /run/secrets/session_signing_secret
+      CSRF_SIGNING_SECRET_FILE: /run/secrets/csrf_signing_secret
+      
+      # OIDC Providers
+      OIDC_GOOGLE_CLIENT_ID: ${OIDC_GOOGLE_CLIENT_ID}
+      OIDC_GOOGLE_CLIENT_SECRET_FILE: /run/secrets/oidc_google_client_secret
+      OIDC_MICROSOFT_CLIENT_ID: ${OIDC_MICROSOFT_CLIENT_ID}
+      OIDC_MICROSOFT_CLIENT_SECRET_FILE: /run/secrets/oidc_microsoft_client_secret
+      
+      # CORS Configuration
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-https://yourdomain.com}
+    depends_on:
+      - postgres
+      - redis
+      - temporal
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - temporal_certs:/etc/temporal/certs:ro
+    networks:
+      - app-network
+    secrets:
+      - postgres_password
+      - redis_password
+      - session_signing_secret
+      - csrf_signing_secret
+      - oidc_google_client_secret
+      - oidc_microsoft_client_secret
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      replicas: ${APP_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - app
+    networks:
+      - app-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Network Configuration
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volume Configuration
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/postgres
+  
+  postgres_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/postgres-backups
+  
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/redis
+  
+  redis_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/redis-backups
+  
+  temporal_certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/temporal-certs
+
+# Secrets Configuration
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  
+  backup_password:
+    file: ./secrets/backup_password.txt
+  
+  redis_password:
+    file: ./secrets/redis_password.txt
+  
+  session_signing_secret:
+    file: ./secrets/session_signing_secret.txt
+  
+  csrf_signing_secret:
+    file: ./secrets/csrf_signing_secret.txt
+  
+  oidc_google_client_secret:
+    file: ./secrets/oidc_google_client_secret.txt
+  
+  oidc_microsoft_client_secret:
+    file: ./secrets/oidc_microsoft_client_secret.txt

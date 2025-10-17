@@ -4,6 +4,8 @@ A complete **Docker-based development stack** that mirrors production to ensure 
 Includes **Keycloak** (for local OIDC), **PostgreSQL**, **Redis**, and **Temporal** with a dedicated Temporal Postgres instance.  
 Automated setup scripts and a built-in CLI streamline developer onboarding and environment management.
 
+> **🔌 Port Configuration**: Development services use non-conflicting ports (PostgreSQL: 5433, Redis: 6380) to allow simultaneous operation with production containers.
+
 ---
 
 ## 📚 Related Documentation
@@ -79,8 +81,8 @@ uv run cli dev reset-env
 | ------------------- | ------------------- | ---------------------------------------------- | ------------------------ |
 | **API**             | FastAPI app         | [http://localhost:8000](http://localhost:8000) | `api` (if containerized) |
 | **Keycloak**        | Local OIDC provider | [http://localhost:8080](http://localhost:8080) | `keycloak:8080`          |
-| **PostgreSQL**      | Primary DB          | localhost:5432                                 | `postgres:5432`          |
-| **Redis**           | Caching / sessions  | localhost:6379                                 | `redis:6379`             |
+| **PostgreSQL**      | Primary DB          | localhost:5433                                 | `postgres:5432`          |
+| **Redis**           | Caching / sessions  | localhost:6380                                 | `redis:6379`             |
 | **Temporal Server** | Workflow RPC        | localhost:7233                                 | `temporal-server:7233`   |
 | **Temporal UI**     | Workflow dashboard  | [http://localhost:8081](http://localhost:8081) | `temporal-web:8080`      |
 
@@ -109,7 +111,7 @@ Primary relational database for development and tests.
 * Databases: `devdb`, `testdb`
 * Credentials: `devuser / devpass`
 * Connection:
-  `postgresql://devuser:devpass@localhost:5432/devdb`
+  `postgresql://devuser:devpass@localhost:5433/devdb`
 
 ---
 
@@ -172,11 +174,11 @@ Example `.env` file:
 
 ```bash
 # Database
-DATABASE_URL=postgresql://devuser:devpass@localhost:5432/devdb
-TEST_DATABASE_URL=postgresql://devuser:devpass@localhost:5432/testdb
+DATABASE_URL=postgresql://devuser:devpass@localhost:5433/devdb
+TEST_DATABASE_URL=postgresql://devuser:devpass@localhost:5433/testdb
 
 # Redis
-REDIS_URL=redis://localhost:6379/0
+REDIS_URL=redis://localhost:6380/0
 
 # Temporal
 TEMPORAL_URL=localhost:7233

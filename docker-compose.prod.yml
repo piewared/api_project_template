@@ -1,0 +1,297 @@
+version: "3.8"
+
+x-entrypoint-common-vars: &entrypoint-common-vars
+  SECRETS_SOURCE_DIR: /run/secrets
+  SECRETS_TARGET_DIR: /app/secrets
+  CREATE_ENV_VARS: "true"
+  SKIP_USER_SWITCH: "false"
+
+services:
+  postgres:
+    image: app_data_postgres_image
+    build:
+      context: ./docker/prod
+      dockerfile: postgres/Dockerfile
+    shm_size: "1g"
+    environment:
+      <<: *entrypoint-common-vars
+      CERTS_TARGET_DIR: /etc/postgresql/ssl
+
+      # Application DB settings
+      APP_DB: ${APP_DB:-appdb}
+      APP_DB_USER: ${APP_DB_USER:-appuser}
+      APP_DB_OWNER: ${APP_DB_OWNER:-appowner}
+      APP_DB_RO_USER: ${APP_DB_RO_USER:-backupuser}
+
+      # Temporal DB settings
+      TEMPORAL_DB: ${TEMPORAL_DB:-temporal}
+      TEMPORAL_VIS_DB: ${TEMPORAL_VIS_DB:-temporal_visibility}
+      TEMPORAL_DB_USER: ${TEMPORAL_DB_USER:-temporaluser}
+
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
+      CONTAINER_USER_UID: postgres
+      CONTAINER_USER_GID: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      - postgres_password
+      - postgres_app_owner_pw
+      - postgres_app_user_pw
+      - postgres_app_ro_pw
+      - postgres_temporal_pw
+      - source: postgres_tls_cert
+        target: server.crt
+        mode: 0400
+      - source: postgres_tls_key
+        target: server.key
+        mode: 0400
+    entrypoint: ["/opt/entry/start-scripts/universal-entrypoint.sh"]
+    command: ["/bin/sh","-lc","/opt/entry/start-scripts/pg-start.sh"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/prod/postgres/init-scripts:/opt/entry/init-scripts:ro
+      - /etc/localtime:/etc/localtime:ro
+      - postgres_data:/var/lib/postgresql/data
+      - postgres_backups:/var/lib/postgresql/backups
+      - ./docker/prod/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./docker/prod/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$APP_DB_USER\" ${APP_DB:+-d \"$APP_DB\"} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [backend]
+
+  postgres-verifier:
+    image: postgres:15
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    secrets:
+      - postgres_app_user_pw          # for APP_USER auth
+      - postgres_password             # ⬅️ superuser (postgres) password, used only for pg_hba checks
+    volumes:
+      - ./docker/prod/postgres/verify-init.sh:/verify.sh:ro
+    entrypoint: /bin/sh
+    command:
+      - -ec
+      - |
+        set -euo pipefail
+        export PGPASSWORD="$(cat /run/secrets/postgres_app_user_pw)"      # APP_USER for most checks
+        export PGSU_PASSWORD="$(cat /run/secrets/postgres_password)"      # ⬅️ superuser just for pg_hba checks
+        exec /verify.sh
+    networks:
+      - backend
+
+  
+  # Redis Cache/Session Store
+  redis:
+    image: app_data_redis_image
+    build:
+      context: ./docker/prod/redis
+      dockerfile: Dockerfile
+    environment:
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    volumes:
+      - redis_data:/data
+      - redis_backups:/var/lib/redis/backups
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - backend
+    secrets:
+      - redis_password
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  temporal-schema-setup:
+    image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [backend]
+    environment:
+      TEMPORAL_DB: ${TEMPORAL_DB:-temporal}
+      TEMPORAL_VIS_DB: ${TEMPORAL_VIS_DB:-temporal_visibility}
+      EP: postgres
+      TEMPORAL_DB_USER: ${TEMPORAL_DB_USER:-temporaluser}
+      PW_FILE: /run/secrets/postgres_temporal_pw
+
+      # TLS settings - adjust as needed
+      TLS_ENABLE: "true"
+      SSL_MODE: verify-ca                # or 'require' / 'verify-full'
+      TLS_CA_FILE: /run/secrets/postgres_server_ca
+      
+      # Optional overrides:
+      # PG_PORT: "5432"
+      # PLUGIN: postgres12
+    secrets:
+      - postgres_temporal_pw
+      - postgres_server_ca
+    volumes:
+      - ./docker/prod/temporal/scripts/schema-setup.sh:/schema-setup.sh:ro
+    entrypoint: ["/bin/sh","-lc"]
+    command: "/schema-setup.sh"
+
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
+    networks: [backend]
+    environment:
+      TEMPORAL_CLI_ADDRESS: temporal:7233
+
+
+  # Temporal Workflow Engine
+  temporal:
+    image: temporalio/server:1.29.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal-schema-setup:
+        condition: service_completed_successfully
+    environment:
+      SERVICES: "history,matching,worker,frontend"
+      DB: 'postgres12'
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporaluser}
+      POSTGRES_DB: ${TEMPORAL_DB:-temporal}
+      SQL_TLS_ENABLED: "true"
+      SQL_CA: /run/secrets/ca-bundle.crt
+      SQL_HOST_VERIFICATION: "false"
+      SQL_HOST_NAME: postgres
+
+      #Performance Tuning (optional)
+      NUM_HISTORY_SHARDS: 64
+
+
+      DBNAME: ${TEMPORAL_DB:-temporal}
+      VISIBILITY_DBNAME: ${TEMPORAL_VIS_DB:-temporal_visibility}
+
+      DB_PORT: 5432
+
+    volumes:
+      - temporal_certs:/etc/temporal/certs
+      - /etc/localtime:/etc/localtime:ro
+      - ./docker/prod/temporal/scripts:/opt/entry/scripts:ro
+      #- ./docker/temporal/new/config:/etc/temporal/config
+    secrets:
+      - postgres_temporal_pw
+      - source: postgres_server_ca
+        target: ca-bundle.crt
+        mode: 0400
+
+
+    entrypoint: ["/opt/entry/scripts/entrypoint.sh"]
+    networks:
+      - backend
+    # Remove the secrets section since we're using volume mounts + tmpfs
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+
+
+# Volume Configuration
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/postgres
+  postgres_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/postgres-backups
+  postgres_ssl:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/postgres-ssl
+
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/redis
+  
+  redis_backups:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/redis-backups
+
+  # FOR TESTING ONLY - Temporal certs (if using TLS). DELETE after testing.
+  temporal_certs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/temporal-certs
+
+# Secrets Configuration
+secrets:
+  postgres_password:
+    file: ./secrets/keys/postgres_password.txt
+  postgres_app_owner_pw:
+    file: ./secrets/keys/postgres_app_owner_pw.txt
+  postgres_app_user_pw:
+    file: ./secrets/keys/postgres_app_user_pw.txt
+  postgres_app_ro_pw:
+    file: ./secrets/keys/postgres_app_ro_pw.txt
+
+
+  # TLS secrets (example)
+  postgres_tls_cert:
+    file: ./secrets/certs/postgres/server-chain-no-root.crt
+  postgres_tls_key:
+    file: ./secrets/certs/postgres/server.key
+  postgres_server_ca:
+    file: ./secrets/certs/ca-bundle.crt # CA cert for TLS
+
+  # Redis password
+  redis_password:
+    file: ./secrets/keys/redis_password.txt
+
+  # Temporal Postgres user password
+  postgres_temporal_pw:
+    file: ./secrets/keys/postgres_temporal_pw.txt
+
+networks:
+  backend:
+    name: application_internal
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.50.0/24
+          gateway: 172.30.50.1

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from src.app.api.http.deps import get_session
+from src.app.api.http.deps import get_db_session
 from src.app.entities.service.{{entity_name.lower()}} import {{entity_name}}, {{entity_name}}Repository
 
 
@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/", response_model={{entity_name}})
 def create_{{entity_name.lower()}}(
     {{entity_name.lower()}}: {{entity_name}},
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ) -> {{entity_name}}:
     """Create a new {{entity_name.lower()}}."""
     repository = {{entity_name}}Repository(session)
@@ -25,7 +25,7 @@ def create_{{entity_name.lower()}}(
 @router.get("/{{ "{" }}item_id{{ "}" }}", response_model={{entity_name}})
 def get_{{entity_name.lower()}}(
     item_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ) -> {{entity_name}}:
     """Get a {{entity_name.lower()}} by ID."""
     repository = {{entity_name}}Repository(session)
@@ -39,7 +39,7 @@ def get_{{entity_name.lower()}}(
 def update_{{entity_name.lower()}}(
     item_id: str,
     {{entity_name.lower()}}_update: {{entity_name}},
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ) -> {{entity_name}}:
     """Update a {{entity_name.lower()}}."""
     repository = {{entity_name}}Repository(session)
@@ -58,7 +58,7 @@ def update_{{entity_name.lower()}}(
 @router.delete("/{{ "{" }}item_id{{ "}" }}")
 def delete_{{entity_name.lower()}}(
     item_id: str,
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ) -> dict[str, str]:
     """Delete a {{entity_name.lower()}}."""
     repository = {{entity_name}}Repository(session)
@@ -71,7 +71,7 @@ def delete_{{entity_name.lower()}}(
 
 @router.get("/", response_model=list[{{entity_name}}])
 def list_{{entity_name.lower()}}s(
-    session: Session = Depends(get_session),
+    session: Session = Depends(get_db_session),
 ) -> list[{{entity_name}}]:
     """List all {{entity_name.lower()}}s."""
     repository = {{entity_name}}Repository(session)

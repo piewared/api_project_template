@@ -59,7 +59,7 @@ docker compose logs -f postgres
 | Property     | Host        | In-Network Hostname |
 | ------------ | ----------- | ------------------- |
 | **Host**     | `localhost` | `postgres`          |
-| **Port**     | `5432`      | `5432`              |
+| **Port**     | `5433`      | `5432`              |
 | **Username** | `devuser`   | `devuser`           |
 | **Password** | `devpass`   | `devpass`           |
 | **Main DB**  | `devdb`     | `devdb`             |
@@ -70,7 +70,7 @@ docker compose logs -f postgres
 ## 🔗 Connection String
 
 ```bash
-postgresql://devuser:devpass@localhost:5432/devdb
+postgresql://devuser:devpass@localhost:5433/devdb
 ```
 
 If connecting from another container on the same Docker network:

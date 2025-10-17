@@ -58,3 +58,168 @@ node_modules/
 src/app/entities/service/
 src/app/api/http/routers/service/
 
+# =============================================================================
+# PRODUCTION INFRASTRUCTURE - DO NOT COMMIT
+# =============================================================================
+
+# Secrets and credentials (CRITICAL - NEVER COMMIT)
+# Ignore all files in secrets/ directory
+secrets/*
+# But allow the README and generation script
+!secrets/README.md
+!secrets/generate_secrets.sh
+*.secret
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+.env.production
+.env.prod
+.env.local
+
+# Docker data volumes and persistent storage
+data/
+volumes/
+postgres_data/
+redis_data/
+temporal_data/
+
+# Database backups (may contain sensitive data)
+backups/
+dumps/
+*.sql
+*.dump
+*.backup
+
+# SSL/TLS certificates and keys
+certs/
+certificates/
+ssl/
+tls/
+*.csr
+
+# Docker build context (avoid large builds)
+.dockerignore
+Dockerfile.dev
+
+# Container logs and runtime data
+logs/
+*.log
+log/
+
+# Temporary files and caches
+tmp/
+temp/
+.cache/
+.tmp/
+
+# Development Docker overrides
+docker-compose.override.yml
+docker-compose.local.yml
+
+# Build artifacts and images
+.build/
+build-output/
+
+# Monitoring and metrics data
+metrics/
+monitoring/
+grafana/
+prometheus/
+
+# =============================================================================
+# SECURITY SENSITIVE - DOUBLE CHECK BEFORE COMMITTING
+# =============================================================================
+
+# Environment-specific configurations
+config.prod.yaml
+config.production.yaml
+*.prod.conf
+*.production.conf
+
+# JWT keys and signing secrets
+jwt_keys/
+signing_keys/
+*.jwk
+*.jwt
+
+# OIDC/OAuth credentials  
+oidc_*.txt
+oauth_*.txt
+client_secret*.txt
+
+# Database connection strings with embedded credentials
+database.url
+db_url.txt
+connection_string.txt
+
+# Terraform state (if using IaC)
+*.tfstate
+*.tfstate.backup
+terraform.tfvars
+.terraform/
+
+# Kubernetes secrets (if deploying to k8s)
+k8s-secrets/
+*.k8s.yaml
+kube-secrets/
+
+# Cloud provider credentials
+.aws/
+.gcp/
+.azure/
+credentials.json
+service-account.json
+
+# =============================================================================
+# DEVELOPMENT AND TESTING
+# =============================================================================
+
+# Local development databases
+dev.db
+test.db
+local.db
+
+# Test data and fixtures
+test_data/
+fixtures/data/
+sample_data/
+
+# Development scripts with credentials
+setup_dev_*.sh
+init_dev_*.sh
+
+# IDE and editor specific
+.vscode/settings.json
+.idea/workspace.xml
+
+# OS and filesystem
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# DOCUMENTATION BUILD ARTIFACTS
+# =============================================================================
+
+# Generated documentation
+docs/_build/
+docs/build/
+site/
+_site/
+
+# =============================================================================
+# RECOMMENDED: Create these files but keep them local
+# =============================================================================
+# 
+# Create template versions and document in README:
+# - secrets/README.md (with instructions)
+# - data/README.md (with directory structure)
+# - certs/README.md (with certificate setup guide)
+# - .env.example (template without real values)
+# - docker-compose.local.yml.example
+#
+

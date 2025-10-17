@@ -7,6 +7,8 @@ from src.app.core.storage.session_storage import (
     RedisSessionStorage,
 )
 
+# Database Service
+from .database.db_session import DbSessionService
 from .jwt.jwks import JWKSCache, JWKSCacheInMemory, JwksService
 from .jwt.jwt_gen import JwtGeneratorService
 from .jwt.jwt_verify import JwtVerificationService
@@ -38,4 +40,6 @@ __all__ = [
     # Session Storage for testing
     "InMemorySessionStorage",
     "RedisSessionStorage",
+    # Database Service
+    "DbSessionService",
 ]

@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from src.app.api.http.app_data import ApplicationDependencies
+from src.app.api.http.app_data import ApplicationDependencies, DbSessionService
 from src.app.api.http.middleware.limiter import (
     close_rate_limiter,
     configure_rate_limiter,
@@ -155,32 +155,34 @@ def _activate_local_rate_limiter() -> None:
 # --- Rate limiter setup ---
 async def _initialize_rate_limiter() -> None:
     # Skip initialization when Redis is not configured
-    if get_config().redis.url is None:
+    config = get_config()
+    if config.redis.url is None:
         logger.info("Redis URL not configured; skipping rate limiter initialization")
         _activate_local_rate_limiter()
         return None
     if FastAPILimiter is None or redis_async is None:
         logger.error("Rate limiter deps missing but REDIS_URL provided")
-        if get_config().app.environment == "production":
+        if config.app.environment == "production":
             raise RuntimeError("Rate limiter dependencies missing in production")
         _activate_local_rate_limiter()
         return
 
     try:
+        logger.info("Initializing FastAPI limiter with Redis: %s", config.redis.url)
         client = redis_async.from_url(
-            get_config().redis.url, encoding="utf-8", decode_responses=True
+            config.redis.connection_string, encoding="utf-8", decode_responses=config.redis.decode_responses
         )
         await FastAPILimiter.init(client)
         app.state.redis = client
         logger.info(
-            "FastAPI limiter initialized with Redis: %s", get_config().redis.url
+            "FastAPI limiter initialized with Redis: %s", config.redis.connection_string
         )
         configure_rate_limiter()  # use default redis-based limiter
         app.state.local_rate_limiter = None
         return
     except Exception:
         logger.exception("Failed to initialize FastAPI limiter with Redis")
-        if get_config().app.environment == "production":
+        if config.app.environment == "production":
             raise
         _activate_local_rate_limiter()
         return
@@ -190,6 +192,65 @@ async def _initialize_rate_limiter() -> None:
 async def startup() -> None:
     # Initialize application-wide dependencies here
     # e.g. database connections, caches, etc.
+
+    # DEBUG: Log environment variables from secrets
+    import os
+
+    logger.info("=== DEBUG: Environment Variables from Secrets ===")
+    secret_vars = []
+    for key, value in os.environ.items():
+        if any(
+            secret in key
+            for secret in ["POSTGRES", "REDIS", "CSRF", "SESSION", "BACKUP", "OIDC"]
+        ):
+            if "PASSWORD" in key or "SECRET" in key:
+                if key.endswith("_FILE"):
+                    secret_vars.append(f"{key}: {value}")
+                else:
+                    secret_vars.append(
+                        f"{key}: [PRESENT - length {len(value)}] - first 5: '{value[:5]}...'"
+                    )
+            else:
+                secret_vars.append(f"{key}: {value}")
+
+    if secret_vars:
+        #logger.info("Found secret environment variables:")
+        for var in sorted(secret_vars):
+            logger.info("  %s", var)
+    else:
+        logger.warning("No secret environment variables found!")
+
+    # Compare environment variables with their corresponding files
+    logger.info("=== Comparing ENV vars with FILE contents ===")
+    for key, value in os.environ.items():
+        if key.endswith("_FILE") and any(
+            secret in key
+            for secret in ["POSTGRES", "REDIS", "CSRF", "SESSION", "BACKUP", "OIDC"]
+        ):
+            base_name = key[:-5]  # Remove '_FILE' suffix
+            env_value = os.getenv(base_name, "")
+            if env_value and os.path.exists(value):
+                try:
+                    with open(value) as f:
+                        file_content = f.read()
+                    matches = env_value == file_content
+                    logger.info(
+                        "%s: ENV='%s...' FILE='%s...' MATCH=%s",
+                        base_name,
+                        env_value[:5],
+                        file_content[:5],
+                        matches,
+                    )
+                except Exception as e:
+                    logger.error("Failed to read %s: %s", value, e)
+
+    # Specifically check for key passwords
+    postgres_password = os.getenv("POSTGRES_PASSWORD", "")
+    redis_password = os.getenv("REDIS_PASSWORD", "")
+    logger.info("POSTGRES_PASSWORD available: %s", "YES" if postgres_password else "NO")
+    logger.info("REDIS_PASSWORD available: %s", "YES" if redis_password else "NO")
+    logger.info("=== END DEBUG ===")
+
     jwks_cache = JWKSCacheInMemory()
     jwks_service = JwksService(jwks_cache)
     jwt_verify_service = JwtVerificationService(jwks_service)
@@ -199,6 +260,7 @@ async def startup() -> None:
     oidc_client_service = OidcClientService(jwt_verify_service)
     user_session_service = UserSessionService(session_storage)
     auth_session_service = AuthSessionService(session_storage)
+    database_service = DbSessionService()
 
     deps = ApplicationDependencies(
         jwks_cache=jwks_cache,
@@ -208,13 +270,13 @@ async def startup() -> None:
         oidc_client_service=oidc_client_service,
         user_session_service=user_session_service,
         auth_session_service=auth_session_service,
+        database_service=database_service,
     )
     app.state.app_dependencies = deps
 
     config = get_config()
     logger.info("Starting up application in %s environment", config.app.environment)
     # Validate configuration so we fail fast on misconfiguration
-    # settings.validate_runtime()  # TODO: implement validation in new config
 
     # Verify JWKS endpoints so auth failures surface early
     if config.oidc.providers:

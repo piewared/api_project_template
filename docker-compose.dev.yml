@@ -1,0 +1,94 @@
+version: "3.8"
+
+services:
+  keycloak:
+    container_name: api-template-keycloak-dev
+    extends:
+      file: docker/dev/keycloak/docker-compose.yml
+      service: keycloak
+
+  keycloak-setup:
+    container_name: api-template-keycloak-setup-dev
+    image: python:3.11-slim
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      - KEYCLOAK_URL=http://keycloak:8080
+    volumes:
+      - ./src/dev:/app/src/dev
+      - ./docker/dev/keycloak/setup_script.py:/app/setup_script.py
+    working_dir: /app
+    command: >
+      sh -c "
+        pip install requests &&
+        python setup_script.py
+      "
+    networks:
+      - dev-network
+    restart: "no"
+
+  postgres:
+    container_name: api-template-postgres-dev
+    extends:
+      file: docker/dev/postgres/docker-compose.yml
+      service: postgres
+    environment:
+      POSTGRES_PASSWORD: devpass
+      APP_DB: ${APP_DB:-devdb}
+      APP_DB_USER: ${APP_DB_USER:-devuser}
+      APP_DB_USER_PW: devpass
+
+  redis:
+    container_name: api-template-redis-dev
+    extends:
+      file: docker/dev/redis/docker-compose.yml
+      service: redis
+
+  temporal:
+    container_name: api-template-temporal-dev
+    image: temporalio/auto-setup:1.28.1
+    depends_on:
+      - postgres
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=devpass
+      - POSTGRES_SEEDS=postgres
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+    networks:
+      - dev-network
+    ports:
+      - 7233:7233
+
+  temporal-web:
+    container_name: api-template-temporal-ui-dev
+    image: temporalio/ui:2.34.0
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    networks:
+      - dev-network
+    ports:
+      - 8081:8080
+
+volumes:
+  keycloak_data:
+    driver: local
+  postgres_data_dev:
+    driver: local
+  redis_data:
+    driver: local
+  temporal_postgres_data:
+    driver: local
+  temporal_data:
+    driver: local
+
+networks:
+  dev-network:
+    name: dev-network
+    driver: bridge

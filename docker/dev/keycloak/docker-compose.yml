@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  keycloak:
+    container_name: app_dev_keycloak_auth
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev --http-port=8080 --log-level=INFO
+    user: "1000:1000"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data/
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/8080'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - dev-network
+
+  keycloak-setup:
+    container_name: app_dev_keycloak_setup
+    image: python:3.11-slim
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      - KEYCLOAK_URL=http://keycloak:8080
+    volumes:
+      - ../../../src/dev:/app/src/dev
+      - ./setup_script.py:/app/setup_script.py
+    working_dir: /app
+    command: >
+      sh -c "
+        pip install requests &&
+        python setup_script.py
+      "
+    networks:
+      - dev-network
+    restart: "no"
+
+volumes:
+  keycloak_data:
+    driver: local
+
+networks:
+  dev-network:
+    name: dev-network
+    driver: bridge

@@ -8,10 +8,17 @@ config:
 
   database:
     url: "${DATABASE_URL:-postgresql+asyncpg://user:password@postgres:5432/app_db}"
+    app_db: "${APP_DB:-appdb}"
+    owner_user: "${APP_DB_OWNER:-appowner}"
+    user: "${APP_DB_USER:-user}"
+    ro_user: "${APP_DB_RO_USER:-backupuser}"
     pool_size: 20
     max_overflow: 10
     pool_timeout: 30
     pool_recycle: 1800
+    environment_mode: "${APP_ENVIRONMENT:-development}"
+    password_file_path: "${DATABASE_PASSWORD_FILE_PATH:-/run/secrets/postgres_password}"
+    password_environment_variable: "${DATABASE_PASSWORD_ENV_VAR:-DB_PASSWORD}"
   temporal:
     enabled: true
     url: "${TEMPORAL_ADDRESS:-temporal:7233}"
@@ -31,9 +38,14 @@ config:
   redis:
     enabled: true
     url: "${REDIS_URL:-redis://localhost:6379}"
+    password: "${REDIS_PASSWORD:-}"
+    max_connections: 10
+    decode_responses: true
   oidc:
     providers:
       google:
+        enabled: true
+        dev_only: false
         authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth"
         token_endpoint: "https://oauth2.googleapis.com/token"
         userinfo_endpoint: "https://openidconnect.googleapis.com/v1/userinfo"
@@ -44,10 +56,12 @@ config:
           - openid
           - profile
           - email
-        client_id: "${OIDC_GOOGLE_CLIENT_ID}"
+        client_id: your-google-client-id
         client_secret: "${OIDC_GOOGLE_CLIENT_SECRET}"
         redirect_uri: "${OIDC_GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/google/callback}"
       microsoft:
+        enabled: true
+        dev_only: false
         authorization_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
         token_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
         userinfo_endpoint: "https://graph.microsoft.com/oidc/userinfo"
@@ -58,14 +72,16 @@ config:
           - openid
           - profile
           - email
-        client_id: "${OIDC_MICROSOFT_CLIENT_ID}"
+        client_id: your-microsoft-client-id
         client_secret: "${OIDC_MICROSOFT_CLIENT_SECRET}"
         redirect_uri: "${OIDC_MICROSOFT_REDIRECT_URI:-http://localhost:8000/auth/microsoft/callback}"
       keycloak:
-        issuer: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/master}"
+        enabled: true
+        dev_only: true
+        issuer: "http://localhost:8080/realms/test-realm"
         openid_configuration_endpoint: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/master}/.well-known/openid-configuration"
-        client_id: "${OIDC_KEYCLOAK_CLIENT_ID}"
-        client_secret: "${OIDC_KEYCLOAK_CLIENT_SECRET}"
+        client_id: test-client
+        client_secret: test-client-secret
         scopes:
           - openid
           - profile

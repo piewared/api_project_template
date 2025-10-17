@@ -31,7 +31,7 @@ class TestRateLimiting:
             pytest.param(
                 "redis",
                 marks=pytest.mark.skipif(
-                    not get_config().redis.dev_url,
+                    not get_config().redis.url,
                     reason="Redis URL not configured for testing",
                 ),
             ),
@@ -75,7 +75,7 @@ class TestRateLimiting:
             # Initialize Redis connection for FastAPILimiter using async API
             import redis.asyncio as redis_async
 
-            redis_url = get_config().redis.dev_url
+            redis_url = get_config().redis.connection_string
             client = redis_async.from_url(
                 redis_url, encoding="utf-8", decode_responses=True
             )
@@ -247,10 +247,16 @@ class TestRateLimiting:
 
     @pytest.mark.asyncio
     async def test_rate_limiting_concurrent_requests(
-        self, get_limiter, mock_request, redis_setup
+        self, get_limiter, mock_request, redis_setup, rate_limiter_type
     ):
         """Test rate limiting handles concurrent requests correctly."""
         limiter = get_limiter(2, 60000)  # 2 requests per 60 seconds
+
+        if rate_limiter_type == "redis":
+            assert isinstance(limiter, RateLimiter)
+        elif rate_limiter_type == "local":
+            assert isinstance(limiter, DefaultLocalRateLimiter)
+
         response = Mock()
 
         # Simulate concurrent requests
@@ -274,6 +280,9 @@ class TestRateLimiting:
     ):
         """Should continue blocking requests until the full window expires."""
         limiter = get_limiter(2, 5000)  # 2 requests per 5 seconds
+
+
+
         response = Mock()
 
         # Exceed the limit

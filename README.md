@@ -239,7 +239,7 @@ For production IdPs (Google, Microsoft, Okta, etc.), set:
 ### ⚡️ Example `.env`
 
 ```bash
-ENVIRONMENT=development
+APP_ENVIRONMENT=development
 DATABASE_URL=postgresql://devuser:devpass@localhost:5432/devdb
 REDIS_URL=redis://localhost:6379/0
 BASE_URL=http://localhost:8000

@@ -1,311 +1,447 @@
-## 🗂️ **Working with Data Volumes**
+# 🗂️ Working with Data Volumes
 
-### **Volume Management Commands**
+> **Database Reset Script:**
+> Use `./reset_database.sh` for full cleanup of volumes, containers, and bind mounts.
+> This script safely handles the complexity of Docker named volumes and bind mounts.
 
-#### **List PostgreSQL Volumes**
+---
+
+## 🚀 Quick Start: Reset & Launch
+
 ```bash
-# List all project volumes
-docker volume ls | grep api_project_template3
+# Complete database cleanup (removes all data!)
+./reset_database.sh
 
-# Inspect specific volume
-docker volume inspect api_project_template3_postgres_data
-docker volume inspect api_project_template3_postgres_backups
+# Start fresh PostgreSQL
+docker-compose -f docker-compose.prod.yml up postgres
 
-# Check volume usage
+# Optional: also remove Docker images
+./reset_database.sh --remove-images
+```
+
+---
+
+## 📦 Volume Management
+
+<details>
+<summary><strong>🔍 List & Inspect Volumes</strong></summary>
+
+```bash
+# List PostgreSQL-related volumes
+docker volume ls | grep postgres
+
+# Inspect specific volumes
+docker volume inspect postgres_data
+docker volume inspect postgres_backups
+
+# Check volume disk usage
 docker system df -v | grep postgres
 ```
 
-#### **Volume Backup and Restore**
+</details>
+
+<details>
+<summary><strong>💾 Backup & Restore Volumes</strong></summary>
+
 ```bash
-# Backup volume to tar archive
-docker run --rm -v api_project_template3_postgres_data:/source -v $(pwd):/backup \
+# Backup volume to a tar archive
+docker run --rm \
+  -v postgres_data:/source \
+  -v $(pwd):/backup \
   alpine tar czf /backup/postgres_volume_backup_$(date +%Y%m%d_%H%M%S).tar.gz -C /source .
 
-# Restore volume from tar archive
-docker run --rm -v api_project_template3_postgres_data:/target -v $(pwd):/backup \
-  alpine tar xzf /backup/postgres_volume_backup_20241010_120000.tar.gz -C /target
+# Restore from backup
+docker run --rm \
+  -v postgres_data:/target \
+  -v $(pwd):/backup \
+  alpine tar xzf /backup/postgres_volume_backup_<timestamp>.tar.gz -C /target
 
-# Copy volume to another volume
-docker run --rm -v api_project_template3_postgres_data:/source -v new_postgres_data:/target \
+# Copy one volume to another
+docker run --rm \
+  -v postgres_data:/source \
+  -v new_postgres_data:/target \
   alpine sh -c "cd /source && cp -a . /target"
 ```
 
-### **Data Directory Operations**
+</details>
 
-#### **Accessing Data Files**
+<details>
+<summary><strong>🗃️ Database-Level Backups</strong></summary>
+
 ```bash
-# Browse data directory contents
-docker exec api_project_template3_postgres_1 ls -la /var/lib/postgresql/data/
+# SQL dump using backup user (recommended)
+BACKUP_PASSWORD=$(cat secrets/backup_password.txt)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  pg_dump -U backup -d appdb --schema=app > backup_$(date +%Y%m%d_%H%M%S).sql
 
-# Check database files
-docker exec api_project_template3_postgres_1 ls -la /var/lib/postgresql/data/base/
+# Full database dump using main user
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  pg_dump -U appuser -d appdb > full_backup_$(date +%Y%m%d_%H%M%S).sql
 
-# View configuration files
-docker exec api_project_template3_postgres_1 cat /var/lib/postgresql/data/postgresql.conf
-docker exec api_project_template3_postgres_1 cat /var/lib/postgresql/data/pg_hba.conf
-
-# Check log files
-docker exec api_project_template3_postgres_1 ls -la /var/lib/postgresql/data/log/
+# Restore from SQL dump
+docker exec -i app_data_postgres_db \
+  psql -U appuser -d appdb < backup_file.sql
 ```
 
-#### **Volume Size Monitoring**
+</details>
+
+---
+
+## 🗃️ Data Directory Operations
+
+<details>
+<summary><strong>📁 Accessing Data Files</strong></summary>
+
+```bash
+# Browse data directory
+docker exec app_data_postgres_db ls -la /var/lib/postgresql/data/
+
+# View configuration files
+docker exec app_data_postgres_db cat /var/lib/postgresql/data/postgresql.conf
+docker exec app_data_postgres_db cat /var/lib/postgresql/data/pg_hba.conf
+
+# View logs
+docker exec app_data_postgres_db ls -la /var/lib/postgresql/data/log/
+```
+
+</details>
+
+<details>
+<summary><strong>🧮 Volume Size Monitoring</strong></summary>
+
 ```bash
 # Check volume disk usage
-docker exec api_project_template3_postgres_1 df -h /var/lib/postgresql/data
+docker exec app_data_postgres_db df -h /var/lib/postgresql/data
 
-# Check database size from inside PostgreSQL
-docker exec api_project_template3_postgres_1 bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) psql -U appuser -d appdb -c "
+# Check database size from PostgreSQL
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "
 SELECT 
     pg_size_pretty(pg_database_size(current_database())) AS database_size,
-    pg_size_pretty(pg_total_relation_size('\''pg_stat_statements'\'')) AS stats_size;
-"'
+    pg_size_pretty(pg_total_relation_size('pg_stat_statements')) AS stats_size;"
+```
 
-# Check individual table sizes
-docker exec api_project_template3_postgres_1 bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) psql -U appuser -d appdb -c "
+</details>
+
+<details>
+<summary><strong>👤 Test Backup User Access</strong></summary>
+
+```bash
+# Test read access
+BACKUP_PASSWORD=$(cat secrets/backup_password.txt)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  psql -U backup -d appdb -c "SELECT current_user, current_database();"
+
+# Test write access (should fail)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  psql -U backup -d appdb -c "CREATE TABLE test_readonly (id SERIAL);"
+```
+
+</details>
+
+<details>
+<summary><strong>📊 Check Individual Table Sizes</strong></summary>
+
+```bash
+# Check table sizes in app schema
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "
 SELECT 
     schemaname,
     tablename,
-    pg_size_pretty(pg_total_relation_size(schemaname||'\''.'\'||tablename)) AS size
+    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
 FROM pg_tables 
-WHERE schemaname = '\''app'\''
-ORDER BY pg_total_relation_size(schemaname||'\''.'\'||tablename) DESC;
-"'
+WHERE schemaname = 'app'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
 ```
 
-### **Volume Migration and Cloning**
+</details>
 
-#### **Migrate to New Host**
+---
+
+## 🧳 Volume Migration & Cloning
+
+<details>
+<summary><strong>🚚 Migrate to New Host</strong></summary>
+
 ```bash
-# 1. Stop the PostgreSQL service
+# Stop PostgreSQL
 docker-compose -f docker-compose.prod.yml stop postgres
 
-# 2. Create volume backup
-docker run --rm -v api_project_template3_postgres_data:/source -v $(pwd):/backup \
+# Create volume backup
+docker run --rm -v postgres_data:/source -v $(pwd):/backup \
   alpine tar czf /backup/postgres_migration_$(date +%Y%m%d).tar.gz -C /source .
 
-# 3. Transfer backup to new host
-scp postgres_migration_20241010.tar.gz user@newhost:/path/to/project/
+# Transfer backup
+scp postgres_migration_*.tar.gz user@newhost:/path/to/project/
 
-# 4. On new host, restore volume
-docker run --rm -v api_project_template3_postgres_data:/target -v $(pwd):/backup \
-  alpine tar xzf /backup/postgres_migration_20241010.tar.gz -C /target
+# Restore on new host
+docker run --rm -v postgres_data:/target -v $(pwd):/backup \
+  alpine tar xzf /backup/postgres_migration_*.tar.gz -C /target
 
-# 5. Start PostgreSQL on new host
+# Start PostgreSQL
 docker-compose -f docker-compose.prod.yml up -d postgres
 ```
 
-#### **Create Development Copy**
+</details>
+
+<details>
+<summary><strong>🧩 Create Development Copy</strong></summary>
+
 ```bash
-# 1. Create new volume for development
+# Create new volume
 docker volume create dev_postgres_data
 
-# 2. Copy production data to development
+# Copy production data
 docker run --rm \
-  -v api_project_template3_postgres_data:/source \
+  -v postgres_data:/source \
   -v dev_postgres_data:/target \
   alpine sh -c "cd /source && cp -a . /target"
 
-# 3. Update docker-compose for development
-# Modify docker-compose.dev.yml to use dev_postgres_data
+# Update docker-compose.dev.yml to use dev_postgres_data
 ```
 
-### **Volume Cleanup and Maintenance**
+</details>
 
-#### **Clean Unused Volumes**
+---
+
+## 🧹 Cleanup & Maintenance
+
+<details>
+<summary><strong>⚙️ Automated Cleanup (Recommended)</strong></summary>
+
 ```bash
-# List unused volumes
-docker volume ls -f dangling=true
+./reset_database.sh                 # Basic cleanup
+./reset_database.sh --remove-images # With image cleanup
+./reset_database.sh --help          # Show all options
+```
 
-# Remove unused volumes (BE CAREFUL!)
+</details>
+
+<details>
+<summary><strong>🧰 Manual Cleanup (Advanced)</strong></summary>
+
+```bash
+docker-compose -f docker-compose.prod.yml down -v
+sudo rm -rf data/postgres data/postgres-backups
+mkdir -p data/postgres data/postgres-backups
 docker volume prune
-
-# Remove specific volume (only when service is stopped)
-docker-compose -f docker-compose.prod.yml down
-docker volume rm api_project_template3_postgres_data
 ```
 
-#### **Volume Space Management**
+</details>
+
+<details>
+<summary><strong>🔐 Access Control & Permissions</strong></summary>
+
 ```bash
-# Check volume usage across all containers
+sudo chmod 700 data/postgres/
+sudo chown -R 999:999 data/postgres/
+```
+
+</details>
+
+<details>
+<summary><strong>💡 Space Management</strong></summary>
+
+```bash
+# Check Docker system usage
 docker system df -v
 
 # Find large files in data directory
-docker exec api_project_template3_postgres_1 find /var/lib/postgresql/data -type f -size +100M -exec ls -lh {} \;
+docker exec app_data_postgres_db \
+  find /var/lib/postgresql/data -type f -size +100M -exec ls -lh {} \;
 
-# PostgreSQL vacuum to reclaim space
-docker exec api_project_template3_postgres_1 bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) psql -U appuser -d appdb -c "VACUUM FULL;"'
+# PostgreSQL maintenance (reclaim space)
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "VACUUM FULL;"
 
 # Analyze table bloat
-docker exec api_project_template3_postgres_1 bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) psql -U appuser -d appdb -c "
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "
 SELECT 
     schemaname, 
     tablename, 
     n_dead_tup, 
     n_live_tup,
-    round(n_dead_tup * 100.0 / (n_live_tup + n_dead_tup), 2) AS dead_ratio
+    CASE WHEN (n_live_tup + n_dead_tup) > 0 
+         THEN round(n_dead_tup * 100.0 / (n_live_tup + n_dead_tup), 2) 
+         ELSE 0 END AS dead_ratio
 FROM pg_stat_user_tables 
 WHERE n_dead_tup > 0
-ORDER BY dead_ratio DESC;
-"'
+ORDER BY dead_ratio DESC;"
 ```
 
-### **Bind Mount Management**
+</details>
 
-#### **Working with Host Directories**
+---
+
+## 🧱 Bind Mount Management
+
+<details>
+<summary><strong>📂 Host Directory Permissions</strong></summary>
+
 ```bash
-# Check host directory permissions
-ls -la data/postgres/
-ls -la data/postgres-backups/
-
-# Fix permissions if needed
-sudo chown -R 999:999 data/postgres/
-sudo chown -R 999:999 data/postgres-backups/
-
-# Set proper directory permissions
+ls -la data/postgres/ data/postgres-backups/
+sudo chown -R 999:999 data/postgres/ data/postgres-backups/
 sudo chmod 700 data/postgres/
 sudo chmod 755 data/postgres-backups/
 ```
 
-#### **Host-Level Backup**
+</details>
+
+<details>
+<summary><strong>🗄️ Host-Level Backups</strong></summary>
+
 ```bash
-# Stop PostgreSQL for consistent backup
 docker-compose -f docker-compose.prod.yml stop postgres
-
-# Create host-level backup
 sudo tar czf postgres_host_backup_$(date +%Y%m%d_%H%M%S).tar.gz data/postgres/
-
-# Sync to remote backup location
 rsync -av data/postgres/ backup-server:/backups/postgres/$(date +%Y%m%d)/
-
-# Restart PostgreSQL
 docker-compose -f docker-compose.prod.yml start postgres
 ```
 
-### **Volume Security**
+</details>
 
-#### **Encrypt Volume Data**
+---
+
+## 🔒 Volume Security
+
+<details>
+<summary><strong>🧱 Encrypt Volume Data</strong></summary>
+
 ```bash
-# For production environments, consider encrypting the host filesystem
-# Example with LUKS encryption:
-
-# 1. Create encrypted disk partition
 sudo cryptsetup luksFormat /dev/sdb1
-
-# 2. Open encrypted partition
 sudo cryptsetup luksOpen /dev/sdb1 postgres_encrypted
-
-# 3. Create filesystem
 sudo mkfs.ext4 /dev/mapper/postgres_encrypted
-
-# 4. Mount encrypted partition
 sudo mount /dev/mapper/postgres_encrypted /var/lib/docker/volumes/
-
-# 5. Update Docker to use encrypted storage
 ```
 
-#### **Volume Access Control**
-```bash
-# Restrict access to postgres data directories
-sudo chmod 700 data/postgres/
-sudo chown -R 999:999 data/postgres/
+</details>
 
-# Set immutable attributes on critical files (Linux only)
+<details>
+<summary><strong>🛡️ Lock Critical Files</strong></summary>
+
+```bash
 sudo chattr +i data/postgres/postgresql.conf
 sudo chattr +i data/postgres/pg_hba.conf
 
-# Remove immutable when updates needed
+# Remove immutability when updates are needed
 sudo chattr -i data/postgres/postgresql.conf
 ```
 
-### **Volume Monitoring and Alerts**
+</details>
 
-#### **Disk Space Monitoring**
+---
+
+## 📈 Monitoring & Alerts
+
+<details>
+<summary><strong>🧭 Disk Usage Monitoring Script</strong></summary>
+
 ```bash
-# Create monitoring script
 cat > monitor_postgres_volumes.sh << 'EOF'
 #!/bin/bash
-THRESHOLD=80  # Alert when 80% full
-
-# Check data volume usage
-USAGE=$(docker exec api_project_template3_postgres_1 df /var/lib/postgresql/data | awk 'NR==2 {print $5}' | sed 's/%//')
-
+THRESHOLD=80
+USAGE=$(docker exec app_data_postgres_db df /var/lib/postgresql/data | awk 'NR==2 {print $5}' | sed 's/%//')
 if [ "$USAGE" -gt "$THRESHOLD" ]; then
-    echo "WARNING: PostgreSQL data volume is ${USAGE}% full"
-    # Send alert (email, Slack, etc.)
-fi
-
-# Check backup volume usage
-BACKUP_USAGE=$(docker exec api_project_template3_postgres_1 df /var/lib/postgresql/backups | awk 'NR==2 {print $5}' | sed 's/%//')
-
-if [ "$BACKUP_USAGE" -gt "$THRESHOLD" ]; then
-    echo "WARNING: PostgreSQL backup volume is ${BACKUP_USAGE}% full"
+  echo "WARNING: PostgreSQL data volume is ${USAGE}% full"
 fi
 EOF
 
 chmod +x monitor_postgres_volumes.sh
-
-# Run via cron every hour
 echo "0 * * * * /path/to/monitor_postgres_volumes.sh" | crontab -
 ```
 
-#### **Volume Health Checks**
+</details>
+
+<details>
+<summary><strong>🩺 Volume Health Checks</strong></summary>
+
 ```bash
-# Check filesystem health
-docker exec api_project_template3_postgres_1 fsck -n /var/lib/postgresql/data
-
-# Check for file corruption
-docker exec api_project_template3_postgres_1 bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) psql -U appuser -d appdb -c "
-SELECT datname, pg_size_pretty(pg_database_size(datname)) 
-FROM pg_database 
-WHERE datistemplate = false;
-"'
-
-# PostgreSQL consistency check
-docker exec api_project_template3_postgres_1 bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) pg_dump -U appuser -d appdb --schema-only > /tmp/schema_check.sql && echo "Schema dump successful"'
+docker exec app_data_postgres_db fsck -n /var/lib/postgresql/data
 ```
 
-### **Disaster Recovery**
+</details>
 
-#### **Point-in-Time Recovery Setup**
+---
+
+## 🔧 Troubleshooting
+
+<details>
+<summary><strong>🚨 Common Volume Issues</strong></summary>
+
 ```bash
-# Enable continuous archiving (in postgresql.conf)
-archive_mode = on
-archive_command = 'cp %p /var/lib/postgresql/backups/wal/%f'
+# Volume permission issues
+sudo chown -R 999:999 data/postgres/
+sudo chmod 700 data/postgres/
+
+# Check if PostgreSQL is running
+docker-compose -f docker-compose.prod.yml ps postgres
+
+# Check container logs
+docker-compose -f docker-compose.prod.yml logs postgres
+
+# Test database connectivity
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  pg_isready -U appuser -d appdb
+
+# Check available disk space
+docker exec app_data_postgres_db df -h /var/lib/postgresql/data
+```
+
+</details>
+
+<details>
+<summary><strong>🔄 Reset When Things Go Wrong</strong></summary>
+
+```bash
+# Nuclear option: complete reset
+./reset_database.sh --remove-images
+
+# Then start fresh
+docker-compose -f docker-compose.prod.yml up postgres
+```
+
+</details>
+
+---
+
+## 🆘 Disaster Recovery
+
+<details>
+<summary><strong>🕒 Point-in-Time Recovery (PITR)</strong></summary>
+
+```bash
+# Enable continuous archiving (add to postgresql.conf)
+# archive_mode = on
+# archive_command = 'cp %p /var/lib/postgresql/backups/wal/%f'
 
 # Create WAL archive directory
-docker exec api_project_template3_postgres_1 mkdir -p /var/lib/postgresql/backups/wal
+docker exec app_data_postgres_db \
+  mkdir -p /var/lib/postgresql/backups/wal
 
-# Base backup for PITR
-docker exec api_project_template3_postgres_1 bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) pg_basebackup -U appuser -D /var/lib/postgresql/backups/base_$(date +%Y%m%d_%H%M%S) -Ft -z -P'
+# Create base backup for PITR
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  pg_basebackup -U appuser -D /var/lib/postgresql/backups/base_$(date +%Y%m%d_%H%M%S) -Ft -z -P
 ```
 
-#### **Emergency Volume Recovery**
+</details>
+
+<details>
+<summary><strong>🧯 Emergency Recovery</strong></summary>
+
 ```bash
-# If volume is corrupted, restore from backup
-# 1. Stop PostgreSQL
 docker-compose -f docker-compose.prod.yml stop postgres
-
-# 2. Remove corrupted volume
-docker volume rm api_project_template3_postgres_data
-
-# 3. Recreate volume
-docker volume create api_project_template3_postgres_data
-
-# 4. Restore from backup
-docker run --rm -v api_project_template3_postgres_data:/target -v $(pwd):/backup \
+docker volume rm postgres_data
+docker volume create postgres_data
+docker run --rm -v postgres_data:/target -v $(pwd):/backup \
   alpine tar xzf /backup/postgres_volume_backup_latest.tar.gz -C /target
-
-# 5. Start PostgreSQL
 docker-compose -f docker-compose.prod.yml up -d postgres
 ```
 
----
-
----
+</details>

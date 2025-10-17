@@ -54,11 +54,11 @@ class TestInfrastructureIntegration:
 
     def test_dependency_injection_chain(self):
         """Test that dependency injection works for complex chains."""
-        from src.app.api.http.deps import get_session
+        from src.app.api.http.deps import get_db_session
 
         # Should be able to get session factory
-        assert get_session is not None
-        assert callable(get_session)
+        assert get_db_session is not None
+        assert callable(get_db_session)
 
 
 

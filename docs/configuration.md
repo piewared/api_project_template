@@ -12,7 +12,7 @@ It builds on the [README’s Configuration section](../README.md#configuration),
    - Never committed to version control.
    - Example:  
      ```bash
-     ENVIRONMENT=production
+     APP_ENVIRONMENT=production
      DATABASE_URL=postgresql://user:pass@db:5432/app_db
      SESSION_SIGNING_SECRET=change-this-32-char-secret
      ```
@@ -206,7 +206,7 @@ logging:
 
 | Setting                  | Description                             | Example                                            |
 | ------------------------ | --------------------------------------- | -------------------------------------------------- |
-| `ENVIRONMENT`            | Environment mode                        | `production`                                       |
+| `APP_ENVIRONMENT`        | Environment mode                        | `production`                                       |
 | `BASE_URL`               | Public URL of the API                   | `https://api.example.com`                          |
 | `SESSION_SIGNING_SECRET` | Random 32+ char secret                  | Generated per environment                          |
 | `OIDC_*`                 | Managed IdP credentials                 | Azure AD, Okta, etc.                               |

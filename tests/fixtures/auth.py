@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from src.app.api.http.app import app
-from src.app.api.http.deps import get_jwks_service, get_session
+from src.app.api.http.deps import get_db_session, get_jwks_service
 from src.app.api.http.middleware.limiter import configure_rate_limiter
 from src.app.core.models.session import AuthSession, UserSession
 from src.app.core.services import (
@@ -300,7 +300,7 @@ def auth_test_client(auth_test_config: ConfigData, session: Session, jwks_servic
         limiter_factory=lambda *_a, **_k: _no_limit
     )  # use local no-op limiter
 
-    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_db_session] = override_get_session
     app.dependency_overrides[get_jwks_service] = override_get_jwks_service
 
     try:

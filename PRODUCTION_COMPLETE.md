@@ -213,9 +213,6 @@ curl https://localhost:8000/metrics
 - 🚀 [`docs/PRODUCTION_DEPLOYMENT.md`](./docs/PRODUCTION_DEPLOYMENT.md) - Deployment guide
 - 🔐 [`docs/TEMPORAL_AUTHENTICATION.md`](./docs/TEMPORAL_AUTHENTICATION.md) - Temporal auth guide
 - ⚙️ [`docs/configuration.md`](./docs/configuration.md) - Configuration reference
-- 🔑 [`OIDC_COMPLIANCE.md`](./OIDC_COMPLIANCE.md) - OIDC authentication
-- 📝 [`DEVELOPMENT.md`](./DEVELOPMENT.md) - Development setup
-- ✨ [`FEATURES.md`](./FEATURES.md) - Feature overview
 
 ---
 

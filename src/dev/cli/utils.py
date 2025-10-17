@@ -18,7 +18,7 @@ def get_project_root() -> Path:
 def get_dev_dir() -> Path:
     """Get the dev_env directory (infrastructure and Docker files)."""
     project_root = get_project_root()
-    return project_root / "dev_env"
+    return project_root / "docker" / "dev"
 
 
 def run_command(

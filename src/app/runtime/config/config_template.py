@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 
 import yaml
+from loguru import logger
 from pydantic_core import ValidationError
 
 from src.app.runtime.config.config_data import ConfigData
@@ -65,6 +66,23 @@ def load_templated_yaml(file_path: Path) -> ConfigData:
     with open(file_path) as f:
         content = f.read()
 
+    # Use correct variables based on environment
+
+    # Get environment mode
+    env_mode = os.getenv("APP_ENVIRONMENT", "development")
+    logger.info(f"Loading configuration for environment: {env_mode}")
+
+    # Iterate through all environment variables with the prefix matching the env_mode and return (name, value) pairs of all matching variables
+    env_variables = [(var, value) for var, value in os.environ.items() if var.startswith(f"{env_mode.upper()}_")]
+    logger.info(f"Applying environment-specific overrides: {env_variables}")
+
+    # Now create new environment variables from the matching variables above by removing the prefix
+    for var_name, var_value in env_variables:
+        new_var_name = var_name[len(f"{env_mode.upper()}_"):]
+
+        os.environ[new_var_name] = var_value
+        logger.debug(f"Set environment variable {new_var_name} from {var_name}")
+
     # Substitute environment variables
     substituted_content = substitute_env_vars(content)
 
@@ -83,6 +101,25 @@ def load_templated_yaml(file_path: Path) -> ConfigData:
         config = ConfigData(**config_data)
     except ValidationError as e:
         raise ValueError(f"Invalid configuration: {e}") from e
+
+
+    # Remove any OIDC providers that are disabled or use_in_production in non-development environments
+    if config.oidc and config.oidc.providers:
+        enabled_providers = {}
+        for name, provider in config.oidc.providers.items():
+            if provider.enabled:
+                if provider.dev_only and (env_mode != "development" and env_mode != "test"):
+                    logger.info(f"Skipping OIDC provider '{name}' in non-development environment")
+                    continue
+                enabled_providers[name] = provider
+            else:
+                logger.info(f"Skipping disabled OIDC provider '{name}'")
+        config.oidc.providers = enabled_providers
+
+        if not config.oidc.providers:
+            logger.warning("No OIDC providers are enabled after applying configuration filters")
+
+        config.oidc.providers = enabled_providers
 
     return config
 

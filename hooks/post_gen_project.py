@@ -103,7 +103,7 @@ def copy_infrastructure():
         # Additional validation: check for key files
         key_files = [
             "app/api/http/app.py",
-            "app/runtime/db.py",
+            "app/runtime/context.py",
             "app/entities/__init__.py",
         ]
 

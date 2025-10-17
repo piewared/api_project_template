@@ -1,731 +1,682 @@
 # Production PostgreSQL Documentation
 
-## 🐘 **PostgreSQL 16 Production Setup**
+> Hardened PostgreSQL 16 for containers: secure defaults, practical tuning, and operational workflows.
 
-This document provides comprehensive details about our production-ready PostgreSQL 16 deployment with enterprise-grade security, performance optimization, and operational best practices.
+## At a glance
 
----
+| Area           | Defaults / Highlights                                                                      |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| Auth           | SCRAM-SHA-256; secrets via Docker S### 7.4 Certificate renewal (Let's Encrypt on host/sidecar)
 
-## 🔐 **Security Features**
-
-### **Authentication & Access Control**
-```yaml
-Authentication Method: SCRAM-SHA-256
-Password Storage: Docker Secrets (file-based)
-SSL/TLS Encryption: TLSv1.3 with AES-256-GCM
-Connection Logging: Enabled
-Failed Login Tracking: Enabled
-```
-
-#### **Password Security**
-- **SCRAM-SHA-256**: Modern password hashing algorithm (replaces MD5)
-- **Docker Secrets**: Passwords stored in `/run/secrets/postgres_password`
-- **No Environment Variables**: Passwords never exposed in process lists
-- **Secure File Permissions**: Secret files are `600` (owner read/write only)
-
-#### **SSL/TLS Configuration**
-```sql
-ssl = on
-ssl_cert_file = 'server.crt'           -- Server certificate
-ssl_key_file = 'server.key'            -- Private key
-ssl_prefer_server_ciphers = on          -- Server chooses cipher
-ssl_ciphers = 'HIGH:!aNULL:!MD5'       -- Strong ciphers only
-```
-
-**Generated Certificates:**
-- **Self-signed server certificate** for development/testing
-- **TLS 1.3 support** with modern cipher suites
-- **Automatic certificate generation** on first startup
-- **Proper file permissions** (600 for keys, 644 for certificates)
-
-> ⚠️ **Production Certificate Warning**: Self-signed certificates are **NOT recommended for production** environments. They provide encryption but do not provide identity verification and will cause certificate warnings in client applications.
-
-> **Exception for Managed Providers**: When deploying PostgreSQL behind a VPN or within managed container providers like **fly.io**, **Railway**, or **Render** where:
-> - Database traffic stays **within the provider's private network**
-> - **No external client connections** are made directly to PostgreSQL
-> - Applications connect via **internal networking** (e.g., Docker networks, private DNS)
-> - The **provider handles TLS termination** at the load balancer/proxy level
-> 
-> In these scenarios, self-signed certificates may be acceptable since:
-> - ✅ Traffic is **encrypted within the private network**
-> - ✅ **No certificate warnings** shown to end users
-> - ✅ **Identity verification** handled at the application layer
-> - ✅ **Reduced operational complexity** for internal services
->
-> However, even in private networks, consider using proper certificates for:
-> - **Regulatory compliance** (HIPAA, SOC2, PCI-DSS)
-> - **Zero-trust security** architectures  
-> - **Service mesh** deployments with mutual TLS
-> - **Multi-tenant** environments with strict isolation
-
-#### **Production Certificate Setup**
-
-For production deployments, use proper SSL certificates from a trusted Certificate Authority (CA):
-
-##### **Option 1: Let's Encrypt (Recommended for Public Deployments)**
 ```bash
-# Install certbot
-apt-get update && apt-get install certbot
-
-# Generate certificate for your domain
-certbot certonly --standalone -d yourdomain.com
-
-# Copy certificates to PostgreSQL directory
-cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem /path/to/postgres/certs/server.crt
-cp /etc/letsencrypt/live/yourdomain.com/privkey.pem /path/to/postgres/certs/server.key
-
-# Set proper permissions
-chmod 600 /path/to/postgres/certs/server.key
-chmod 644 /path/to/postgres/certs/server.crt
-chown 999:999 /path/to/postgres/certs/server.*
-
-# Update docker-compose.yml to mount certificates
-volumes:
-  - /path/to/postgres/certs:/var/lib/postgresql/certs:ro
-
-# Update postgresql.conf
-ssl_cert_file = '/var/lib/postgresql/certs/server.crt'
-ssl_key_file = '/var/lib/postgresql/certs/server.key'
-```
-
-##### **Option 2: Corporate/Internal CA**
-```bash
-# If using internal CA, add CA certificate for client verification
-ssl_ca_file = '/var/lib/postgresql/certs/ca.crt'
-ssl_crl_file = '/var/lib/postgresql/certs/server.crl'  # Optional
-
-# For client certificate authentication
-hostssl all appuser 0.0.0.0/0 cert clientcert=verify-ca
-
-# Mount CA certificate
-volumes:
-  - /path/to/corporate/ca.crt:/var/lib/postgresql/certs/ca.crt:ro
-```
-
-##### **Option 3: AWS Certificate Manager (for RDS)**
-```bash
-# For AWS deployments, use RDS with ACM certificates
-# PostgreSQL will automatically use AWS-managed certificates
-rds_force_ssl = 1
-```
-
-##### **Option 4: Managed Container Providers**
-
-**For fly.io, Railway, Render, and similar platforms:**
-
-```yaml
-# fly.toml example
-[env]
-  POSTGRES_SSL_MODE = "require"      # Still enforce SSL
-  POSTGRES_SSL_CERT_VALIDATION = "none"  # Accept self-signed for internal
-
-# For fly.io private networking
-[[services]]
-  internal_port = 5432
-  protocol = "tcp"
-  
-  [[services.ports]]
-    port = 5432
-    handlers = ["pg_tls"]  # fly.io handles TLS termination
-```
-
-**Railway/Render deployment:**
-```dockerfile
-# Keep self-signed certificates for internal networking
-ENV POSTGRES_SSL_MODE=require
-ENV POSTGRES_SSL_CERT_VALIDATION=none
-
-# Provider handles external TLS at load balancer level
-```
-
-**When to upgrade to proper certificates on managed platforms:**
-- **External database connections** (mobile apps, third-party integrations)
-- **Compliance requirements** (HIPAA, SOC2, PCI-DSS)  
-- **Multi-region deployments** with cross-provider communication
-- **Hybrid cloud** architectures connecting to on-premises systems
-
-**Security considerations for managed providers:**
-```bash
-# Even with self-signed certs, enforce strong security
-# 1. Network isolation
-networks:
-  app-network:
-    driver: bridge
-    internal: true  # No external internet access
-
-# 2. Connection string security
-postgresql://appuser:${POSTGRES_PASSWORD}@postgres:5432/appdb?sslmode=require&sslcert=client.crt
-
-# 3. Application-level encryption for sensitive data
-# Use pgcrypto for column-level encryption
-CREATE EXTENSION pgcrypto;
-INSERT INTO users (email, encrypted_ssn) VALUES 
-  ('user@example.com', pgp_sym_encrypt('123-45-6789', '${ENCRYPTION_KEY}'));
-```
-
-##### **Certificate Renewal Automation**
-```bash
-# Create renewal script for Let's Encrypt
-cat > /usr/local/bin/renew-postgres-certs.sh << 'EOF'
-#!/bin/bash
-# Renew Let's Encrypt certificates and update PostgreSQL
-
+# Renew certificates
 certbot renew --quiet
 
-# Copy new certificates
-cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem /path/to/postgres/certs/server.crt
-cp /etc/letsencrypt/live/yourdomain.com/privkey.pem /path/to/postgres/certs/server.key
+# Copy new certificates to Docker volume mount location
+cp /etc/letsencrypt/live/yourdomain/fullchain.pem ./certs/server.crt
+cp /etc/letsencrypt/live/yourdomain/privkey.pem ./certs/server.key
 
-# Set permissions
-chmod 600 /path/to/postgres/certs/server.key
-chmod 644 /path/to/postgres/certs/server.crt
-chown 999:999 /path/to/postgres/certs/server.*
+# Set proper permissions
+chmod 600 ./certs/server.key
+chmod 644 ./certs/server.crt
+sudo chown 999:999 ./certs/server.*
 
-# Reload PostgreSQL configuration (no restart needed)
-docker exec postgres_container pg_ctl reload -D /var/lib/postgresql/data
+# Reload PostgreSQL configuration
+docker exec app_data_postgres_db \
+  pg_ctl reload -D /var/lib/postgresql/data
 
-# Log renewal
-echo "$(date): PostgreSQL certificates renewed" >> /var/log/cert-renewal.log
-EOF
+# Verify new certificates are loaded
+docker exec app_data_postgres_db \
+  psql -U appuser -d appdb -c "SELECT * FROM pg_stat_ssl LIMIT 1;"
+```e-based)                                     |
+| TLS            | `ssl=on`, TLS 1.2+ (1.3 supported), strong ciphers/ciphersuites                            |
+| Networking     | `listen_addresses='*'` (container network), `pg_hba.conf` locked to private CIDRs over TLS |
+| Performance    | sane buffers, WAL/checkpoints tuned, planner I/O hints                                     |
+| Observability  | slow-query logging, `pg_stat_statements`                                                   |
+| Ops            | healthchecks, backups, init scripts, least-privilege user                                  |
+| Images         | `postgres:16-alpine` base, lean extra packages                                             |
+| Deploy targets | Docker/Compose, fly.io, Railway, Render (examples included)                                |
 
-chmod +x /usr/local/bin/renew-postgres-certs.sh
+---
 
-# Add to crontab (check daily, renew if needed)
-echo "0 2 * * * /usr/local/bin/renew-postgres-certs.sh" | crontab -
-```
+## 1) Security
 
-##### **Certificate Validation**
-```bash
-# Verify certificate details
-openssl x509 -in /path/to/postgres/certs/server.crt -text -noout
+> **Security Enhancements Applied**: This configuration includes explicit TLS version constraints (TLS 1.2+), enhanced logging with detailed error reporting, row-level security enablement, and streamlined container image without unnecessary extensions.
 
-# Check certificate expiry
-openssl x509 -in /path/to/postgres/certs/server.crt -noout -enddate
+### 1.1 Authentication & Secrets
 
-# Test SSL connection with proper certificate
-openssl s_client -connect yourdomain.com:5432 -starttls postgres
+* **Password hashing**: SCRAM-SHA-256 (no MD5).
+* **Secret storage**: Docker secrets via files (`postgres_password`, `backup_password`).
+* **Custom entrypoint**: Reads secrets as root, then chains to PostgreSQL entrypoint.
+* **Permissions**: secret files `600`.
 
-# Verify from PostgreSQL client
-psql "host=yourdomain.com port=5432 dbname=appdb user=appuser sslmode=require sslcert=client.crt sslkey=client.key"
-```
-
-#### **Network Security**
 ```yaml
-Listen Address: '*' (within Docker network only)
-Port: 5432 (internal Docker network)
-Host-based Authentication: Configured via pg_hba.conf
-Connection Limits: 100 max connections
-Superuser Reserved: 3 connections
+# docker-compose (example excerpt)
+services:
+  postgres:
+    image: your-app-postgres:latest
+    secrets:
+      - postgres_password
+      - backup_password
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  backup_password:
+    file: ./secrets/backup_password.txt
 ```
 
-#### **Database Permissions**
-```sql
-Database: appdb
-Application User: appuser (limited privileges)
-Schema: app (application-specific)
-Extensions: pgcrypto, uuid-ossp, btree_gin
-Default Privileges: Read/write on app schema only
+### 1.2 TLS / SSL
+
+> Use real certificates for anything public or regulated. Self-signed is acceptable only for fully private, internal traffic where you knowingly disable verification in clients.
+
+**PostgreSQL settings (excerpt):**
+
+```conf
+ssl = on
+ssl_min_protocol_version = 'TLSv1.2'
+ssl_max_protocol_version = 'TLSv1.3'
+ssl_prefer_server_ciphers = on
+ssl_ciphers = 'HIGH:!aNULL:!MD5'         # TLS ≤ 1.2
+ssl_cert_file = 'server.crt'             # absolute path if outside PGDATA
+ssl_key_file  = 'server.key'
+password_encryption = scram-sha-256
+row_security = on                        # Enable row-level security
+```
+
+**File ownership & perms**
+
+* `server.key`: `600`, owner `postgres` (UID/GID 999)
+* `server.crt`: `644`, owner `postgres`
+
+**Production certificate options**
+
+* **Let’s Encrypt** (public endpoints): obtain on host/sidecar, mount into DB container R/O, set absolute paths in `postgresql.conf`, `pg_ctl reload` after renewals.
+* **Internal/Corporate CA**: mount `ca.crt` and optionally require client certs (`clientcert=verify-ca`) for specific roles.
+* **AWS RDS**: RDS manages server certs; clients trust the RDS CA bundle. (If using RDS, most of this repository’s TLS setup won’t apply.)
+
+### 1.3 Network policy (pg_hba.conf)
+
+Recommend allowing only local and private ranges, and requiring TLS (`hostssl`) for networked access:
+
+```
+# Local sockets
+local   all             postgres                                peer
+local   all             all                                     scram-sha-256
+
+# Loopback
+host    all             all             127.0.0.1/32            scram-sha-256
+host    all             all             ::1/128                 scram-sha-256
+
+# Private networks over TLS
+hostssl all             all             10.0.0.0/8              scram-sha-256
+hostssl all             all             172.16.0.0/12           scram-sha-256
+hostssl all             all             192.168.0.0/16          scram-sha-256
+
+# Deny everything else
+host    all             all             0.0.0.0/0               reject
+```
+
+### 1.4 Roles & privileges
+
+* **DB**: `appdb`
+* **Main Role**: `appuser` (full app privileges)
+* **Backup Role**: `backup` (read-only access for backups)
+* **Schema**: `app`
+* **Extensions**: `pgcrypto`, `uuid-ossp`, `pg_stat_statements`
+
+**Backup User Setup:**
+- System user: Created in container for backup operations
+- Database user: Read-only access to `app` schema
+- Password: Managed via Docker secrets (`backup_password`)
+
+Restrict default privileges to the `app` schema.
+
+---
+
+## 2) Performance
+
+### 2.1 Memory
+
+```conf
+shared_buffers = 256MB
+work_mem = 4MB
+maintenance_work_mem = 64MB
+effective_cache_size = 1GB
+```
+
+### 2.2 WAL & checkpoints
+
+```conf
+wal_level = replica
+max_wal_size = 1GB
+min_wal_size = 80MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+```
+
+### 2.3 Planner & I/O
+
+```conf
+random_page_cost = 1.1
+effective_io_concurrency = 200
+```
+
+### 2.4 Connections & logging
+
+```conf
+max_connections = 100
+superuser_reserved_connections = 3
+
+shared_preload_libraries = 'pg_stat_statements'
+log_min_duration_statement = 1000      # >1s
+log_line_prefix = '%t [%p-%l] %q%u@%d '  # Improved log formatting
+log_statement = 'ddl'                   # Log DDL statements
+log_min_error_statement = error         # Log error statements
+log_checkpoints = on
+log_lock_waits = on
+log_temp_files = 0
+log_connections = on
+log_disconnections = on
 ```
 
 ---
 
-## ⚡ **Performance Considerations**
+## 3) Container Image & Layout
 
-### **Memory Configuration**
-```sql
-shared_buffers = 256MB              -- 25% of available RAM (adjust for production)
-work_mem = 4MB                      -- Per-operation memory
-maintenance_work_mem = 64MB         -- Vacuum, reindex operations
-effective_cache_size = 1GB          -- OS cache estimate
-```
+### 3.1 Dockerfile (alpine)
 
-### **Write-Ahead Logging (WAL)**
-```sql
-wal_level = replica                 -- Supports streaming replication
-max_wal_size = 1GB                  -- Maximum WAL size before checkpoint
-min_wal_size = 80MB                 -- Minimum WAL files to keep
-checkpoint_completion_target = 0.9   -- Spread checkpoints over time
-wal_buffers = 16MB                  -- WAL write buffering
-```
-
-### **Query Optimization**
-```sql
-random_page_cost = 1.1              -- SSD-optimized (default: 4.0)
-effective_io_concurrency = 200      -- Concurrent I/O operations
-```
-
-### **Connection Management**
-```sql
-max_connections = 100               -- Maximum concurrent connections
-superuser_reserved_connections = 3  -- Reserved for admin tasks
-```
-
-### **Performance Monitoring**
-```sql
-log_min_duration_statement = 1000  -- Log slow queries (>1 second)
-log_checkpoints = on                -- Log checkpoint activity
-log_lock_waits = on                 -- Log lock contention
-log_temp_files = 0                  -- Log all temp file usage
-```
-
----
-
-## 🏗️ **Dockerfile Architecture**
-
-### **Base Image**
 ```dockerfile
 FROM postgres:16-alpine
-```
-- **Alpine Linux**: Minimal attack surface (~5MB base)
-- **PostgreSQL 16**: Latest stable with security updates
-- **Official Image**: Maintained by PostgreSQL team
 
-### **Additional Packages**
-```dockerfile
-RUN apk add --no-cache \
-    bash \           # Advanced shell scripting
-    curl \           # Health checks and monitoring
-    openssl \        # SSL certificate generation
-    postgresql-contrib  # Additional extensions
-```
+# Security: Install only essential packages
+RUN apk add --no-cache bash curl openssl && rm -rf /var/cache/apk/*
 
-### **Security Hardening**
-```dockerfile
-# Create backup user with limited privileges
-RUN adduser -D -s /bin/bash backup && \
-    mkdir -p /var/lib/postgresql/backups && \
-    chown backup:backup /var/lib/postgresql/backups
-```
+# Create backup directories
+RUN mkdir -p /var/lib/postgresql/backups && \
+    chown postgres:postgres /var/lib/postgresql/backups
 
-### **Configuration Management**
-```dockerfile
-# Copy production configurations
+# Copy configurations and scripts
 COPY postgresql.conf /tmp/postgresql.conf
 COPY pg_hba.conf /tmp/pg_hba.conf
-
-# Copy initialization scripts
 COPY init-scripts/ /docker-entrypoint-initdb.d/
 COPY backup-scripts/ /usr/local/bin/
-```
+COPY docker-entrypoint-wrapper.sh /usr/local/bin/docker-entrypoint-wrapper.sh
 
-### **Environment Variables**
-```dockerfile
+# Set permissions
+RUN chmod +x /docker-entrypoint-initdb.d/*.sh && \
+    chmod +x /usr/local/bin/*.sh
+
 ENV POSTGRES_DB=appdb \
     POSTGRES_USER=appuser \
     POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password \
     POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256 --data-checksums" \
     POSTGRES_HOST_AUTH_METHOD=scram-sha-256
-```
 
-### **Health Checks**
-```dockerfile
+# Use custom entrypoint wrapper for Docker secrets
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-wrapper.sh"]
+CMD ["postgres"]
+
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD pg_isready -U $POSTGRES_USER -d $POSTGRES_DB || exit 1
+  CMD pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" || exit 1
+```
+
+**Key Features:**
+- **Custom entrypoint wrapper**: Reads Docker secrets as root before user switch
+- **Security hardened**: Minimal packages, no postgresql-contrib
+- **Backup user**: Created during initialization for read-only database access
+
+### 3.2 Volumes & permissions
+
+* **Data**: `/var/lib/postgresql/data` (PGDATA)
+* **Backups**: `/var/lib/postgresql/backups`
+
+```bash
+# Host directories (handled automatically by docker-compose)
+mkdir -p ./data/postgres ./data/postgres-backups
+
+# Permissions are managed automatically by Docker
+# If manual adjustment needed:
+# sudo chown -R 999:999 ./data/postgres
 ```
 
 ---
 
-## 💾 **Data Volumes**
+## 4) Build & Deploy
 
-For more information about managing data volumes, see [Managing Postgres Data Volumes](./postgress-data-volumes.md).
+### 4.1 Build
 
-### **Primary Data Volume**
-```yaml
-Volume Name: postgres_data
-Mount Point: /var/lib/postgresql/data
-Purpose: Database files, WAL, configuration
-Backup: Critical - contains all database data
-```
-
-### **Backup Volume**
-```yaml
-Volume Name: postgres_backups  
-Mount Point: /var/lib/postgresql/backups
-Purpose: Automated backup storage
-Retention: Configurable via backup scripts
-```
-
-### **Host Bind Mounts**
-```yaml
-Host Path: ./data/postgres
-Container Path: /var/lib/postgresql/data
-Purpose: Data persistence across container restarts
-```
-```yaml
-Host Path: ./data/postgres-backups
-Container Path: /var/lib/postgresql/backups  
-Purpose: Backup file access from host
-```
-
-### **Volume Permissions**
 ```bash
-# Data directory ownership
-chown -R 999:999 ./data/postgres      # postgres user (UID 999)
-
-# Backup directory permissions
-chown -R backup:backup /var/lib/postgresql/backups
-chmod 750 /var/lib/postgresql/backups
-```
-
----
-
-## 🔨 **Building the Image**
-
-### **Prerequisites**
-```bash
-# Ensure Docker is installed and running
+# Check Docker version
 docker --version
 
-# Navigate to project directory
-cd /path/to/your/project
-```
-
-### **Build Command**
-```bash
-# Build PostgreSQL image
+# Build using docker-compose (recommended)
 docker-compose -f docker-compose.prod.yml build postgres
 
 # Or build directly with Docker
-docker build -t your-app-postgres:latest ./docker/postgres/
+docker build -t app_data_postgres_image .
+docker images | grep app_data_postgres_image
 ```
 
-### **Build Process Steps**
-1. **Base Image Download**: Pulls postgres:16-alpine
-2. **Package Installation**: Installs bash, curl, openssl, postgresql-contrib
-3. **User Creation**: Creates backup user with limited privileges
-4. **File Copying**: Copies configuration files and scripts
-5. **Permission Setting**: Makes scripts executable
-6. **Environment Setup**: Configures production environment variables
+### 4.2 Deploy (Compose)
 
-### **Build Verification**
 ```bash
-# Verify image was built successfully
-docker images | grep postgres
+# Create required directories and secrets
+mkdir -p data/postgres data/postgres-backups secrets
+echo "SuperSecurePassword" > secrets/postgres_password.txt
+echo "BackupUserPassword" > secrets/backup_password.txt
+chmod 600 secrets/*
 
-# Check image layers
-docker history your-app-postgres:latest
+# Start PostgreSQL service
+docker-compose -f docker-compose.prod.yml up -d postgres
+docker-compose -f docker-compose.prod.yml logs -f postgres
+docker-compose -f docker-compose.prod.yml ps postgres
+```
+
+**Database Reset Script:**
+```bash
+# Complete database cleanup (removes all data!)
+./reset_database.sh
+
+# Start fresh after reset
+docker-compose -f docker-compose.prod.yml up postgres
+```
+
+### 4.3 Verify
+
+```bash
+# Service readiness
+docker exec app_data_postgres_db pg_isready -U appuser -d appdb
+
+# SSL enabled?
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "SHOW ssl;"
+
+# Test main application user
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "SELECT current_user, current_database();"
+
+# Test backup user (read-only)
+BACKUP_PASSWORD=$(cat secrets/backup_password.txt)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  psql -U backup -d appdb -c "SELECT current_user, current_database();"
+
+# Verify extensions installed
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c \
+  "SELECT name, installed_version FROM pg_available_extensions WHERE installed_version IS NOT NULL ORDER BY name;"
+
+# Test backup user cannot write (should fail)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  psql -U backup -d appdb -c "CREATE TABLE test_readonly_check (id SERIAL);" 2>/dev/null && echo "ERROR: Backup user can write!" || echo "✓ Backup user is read-only"
 ```
 
 ---
 
-## 🚀 **Deployment Steps**
+## 5) Provider-Specific Examples
 
-### **1. Prerequisites Setup**
-```bash
-# Create required directories
-mkdir -p data/postgres data/postgres-backups secrets
+> These examples assume **internal-only** DB traffic inside the provider’s private network. For public access or compliance, use real certificates and strict client validation.
 
-# Create secrets files
-echo "YourSecurePassword123!" > secrets/postgres_password.txt
-echo "BackupPassword456!" > secrets/backup_password.txt
+### 5.1 fly.io
 
-# Set secure permissions
-chmod 600 secrets/*
+**TLS handled by fly proxy; internal app connects over private network.**
+
+```toml
+# fly.toml
+[env]
+  POSTGRES_SSL_MODE = "require"                 # enforce encryption
+  POSTGRES_SSL_CERT_VALIDATION = "none"        # internal-only, self-signed OK
+
+[[services]]
+  internal_port = 5432
+  protocol = "tcp"
+  # If exposing externally, fly proxy can terminate TLS:
+  [[services.ports]]
+    port = 5432
+    handlers = ["pg_tls"]       # fly handles TLS termination
 ```
 
-### **2. Deploy PostgreSQL**
-```bash
-# Start PostgreSQL service
-docker-compose -f docker-compose.prod.yml up -d postgres
+**Client connection string (internal):**
 
-# Monitor startup logs
-docker-compose -f docker-compose.prod.yml logs -f postgres
+```
+postgresql://appuser:${POSTGRES_PASSWORD}@postgres:5432/appdb?sslmode=require
 ```
 
-### **3. Verify Deployment**
+* For public access, replace with real certs and `sslmode=verify-full`.
+
+### 5.2 Railway
+
+**Railway typically provides service-to-service private networking.**
+
+```dockerfile
+# Accept self-signed inside private network; still require TLS on the wire
+ENV POSTGRES_SSL_MODE=require
+ENV POSTGRES_SSL_CERT_VALIDATION=none
+```
+
+**Node/pg example (internal-only):**
+
+```js
+ssl: { require: true, rejectUnauthorized: false }
+```
+
+### 5.3 Render
+
+**Private services can talk over Render’s internal network; public endpoints should use managed TLS and verified certs.**
+
+```dockerfile
+ENV POSTGRES_SSL_MODE=require
+ENV POSTGRES_SSL_CERT_VALIDATION=none
+```
+
+> **When to upgrade to proper certs** on these platforms:
+>
+> * External clients (mobile/3rd-party), cross-region/provider,
+> * Regulated workloads (HIPAA, SOC2, PCI-DSS),
+> * Zero-trust/service mesh with mTLS,
+> * Multi-tenant isolation requirements.
+
+---
+
+## 6) Configuration Files (in this repo)
+
+* `postgresql.conf` – core tuning, TLS, logging.
+* `pg_hba.conf` – network policy (prefer `hostssl` for private ranges).
+* `docker-entrypoint-wrapper.sh` – custom entrypoint for Docker secrets handling.
+* `init-scripts/`
+  * `01-apply-configs.sh` – copies configs into PGDATA on first init.
+  * `01-init-db.sh` – creates DB, roles, schema, extensions, and backup user.
+* `reset_database.sh` – comprehensive cleanup script for development/testing.
+
+---
+
+## 7) Operations
+
+### 7.1 Health & status
+
 ```bash
 # Check service status
 docker-compose -f docker-compose.prod.yml ps postgres
 
-# Test database connectivity
-docker exec postgres_container pg_isready -U appuser -d appdb
+# Check PostgreSQL readiness
+docker exec app_data_postgres_db pg_isready -U appuser -d appdb
 
-# Verify SSL is enabled
-docker exec postgres_container psql -U appuser -d appdb -c "SHOW ssl;"
+# View recent logs
+docker-compose -f docker-compose.prod.yml logs --tail=50 postgres
+
+# Check resource usage
+docker stats app_data_postgres_db --no-stream
 ```
 
-### **4. Initial Database Setup**
-```bash
-# Connect to database (will prompt for password)
-docker exec -it postgres_container psql -U appuser -d appdb
+### 7.2 Monitoring
 
-# Or use environment variable
-docker exec postgres_container bash -c \
-  'PGPASSWORD=$(cat /run/secrets/postgres_password) psql -U appuser -d appdb'
-```
-
----
-
-## 🔧 **Configuration Files**
-
-### **postgresql.conf**
-**Location**: `/docker/postgres/postgresql.conf`
 ```sql
-# Key production settings
-listen_addresses = '*'                    # Accept connections from Docker network
-shared_buffers = 256MB                   # Shared memory for caching
-work_mem = 4MB                           # Per-query working memory
-ssl = on                                 # Enable SSL/TLS
-password_encryption = scram-sha-256      # Modern password hashing
-log_connections = on                     # Security logging
-log_disconnections = on                  # Security logging
-```
+-- Enable pg_stat_statements (if not already enabled)
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
-### **pg_hba.conf**
-**Location**: `/docker/postgres/pg_hba.conf`
-```
-# TYPE  DATABASE    USER        ADDRESS         METHOD
-local   all         postgres                    trust
-local   all         all                         scram-sha-256
-host    all         all         127.0.0.1/32    scram-sha-256
-host    all         all         ::1/128         scram-sha-256
-host    all         all         all             scram-sha-256
-```
+-- Top slow queries
+SELECT query, mean_exec_time, calls, total_exec_time
+FROM pg_stat_statements
+ORDER BY mean_exec_time DESC
+LIMIT 10;
 
-### **Initialization Scripts**
-**Location**: `/docker/postgres/init-scripts/`
-- `01-apply-configs.sh`: Applies custom configurations
-- `01-init-db.sh`: Creates application database and user
+-- Database sizes
+SELECT pg_size_pretty(pg_database_size('appdb')) AS database_size;
 
----
+-- Table sizes in app schema
+SELECT schemaname, tablename,
+       pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+FROM pg_tables 
+WHERE schemaname = 'app'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
 
-## 📊 **Monitoring & Maintenance**
-
-### **Health Monitoring**
-```bash
-# Container health status
-docker-compose -f docker-compose.prod.yml ps
-
-# Database availability
-docker exec postgres_container pg_isready
-
-# Connection count
-docker exec postgres_container psql -U appuser -d appdb -c \
-  "SELECT count(*) FROM pg_stat_activity;"
-
-# SSL connections
-docker exec postgres_container psql -U appuser -d appdb -c \
-  "SELECT pid, ssl, version, cipher FROM pg_stat_ssl WHERE ssl = true;"
-```
-
-### **Performance Monitoring**
-```sql
--- Slow queries
-SELECT query, mean_exec_time, calls 
-FROM pg_stat_statements 
-ORDER BY mean_exec_time DESC LIMIT 10;
-
--- Database size
-SELECT pg_size_pretty(pg_database_size('appdb'));
-
--- Table sizes
-SELECT schemaname, tablename, pg_size_pretty(pg_total_relation_size(tablename))
-FROM pg_tables WHERE schemaname = 'app';
-
--- Connection statistics
-SELECT state, count(*) FROM pg_stat_activity GROUP BY state;
-```
-
-### **Backup Operations**
-```bash
-# Manual backup
-docker exec postgres_container /usr/local/bin/backup-postgres.sh
-
-# Restore from backup
-docker exec postgres_container /usr/local/bin/restore-postgres.sh backup_file.sql
-
-# List available backups
-docker exec postgres_container ls -la /var/lib/postgresql/backups/
-```
-
----
-
-## 🔒 **Security Best Practices**
-
-### **1. Regular Updates**
-```bash
-# Update base image regularly
-docker pull postgres:16-alpine
-docker-compose build postgres
-```
-
-### **2. Secret Rotation**
-```bash
-# Update password (requires container restart)
-echo "NewSecurePassword789!" > secrets/postgres_password.txt
-docker-compose restart postgres
-```
-
-### **3. Access Control**
-```bash
-# Limit network access
-# Use Docker networks to isolate database
-# Never expose port 5432 to host in production
-```
-
-### **4. Audit Logging**
-```sql
--- Enable additional logging
-log_statement = 'all'                   # Log all statements (verbose)
-log_line_prefix = '%t [%p]: [%l-1] user=%u,db=%d '
-```
-
-### **5. Resource Limits**
-```yaml
-# In docker-compose.yml
-deploy:
-  resources:
-    limits:
-      cpus: '2.0'
-      memory: 2G
-    reservations:
-      cpus: '1.0'
-      memory: 1G
-```
-
----
-
-## 🚨 **Troubleshooting**
-
-### **Common Issues**
-
-#### **Connection Refused**
-```bash
-# Check if container is running
-docker-compose ps postgres
-
-# Check logs for startup errors
-docker-compose logs postgres
-
-# Verify network connectivity
-docker exec app_container ping postgres
-```
-
-#### **Authentication Failed**
-```bash
-# Verify password file exists
-docker exec postgres_container cat /run/secrets/postgres_password
-
-# Check pg_hba.conf settings
-docker exec postgres_container cat /var/lib/postgresql/data/pg_hba.conf
-
-# Test with correct password
-PGPASSWORD=your_password psql -h localhost -U appuser -d appdb
-```
-
-#### **SSL Issues**
-```bash
-# Check SSL certificates
-docker exec postgres_container ls -la /var/lib/postgresql/data/server.*
-
-# Verify SSL configuration
-docker exec postgres_container psql -U appuser -d appdb -c "SHOW ssl;"
-
-# Test SSL connection
-docker exec postgres_container psql -h localhost -U appuser -d appdb \
-  -c "SELECT * FROM pg_stat_ssl;"
-```
-
-#### **Performance Issues**
-```sql
--- Check for long-running queries
-SELECT pid, now() - pg_stat_activity.query_start AS duration, query 
+-- Connection counts by state
+SELECT state, count(*) AS connections
 FROM pg_stat_activity 
-WHERE (now() - pg_stat_activity.query_start) > interval '5 minutes';
+GROUP BY state
+ORDER BY connections DESC;
 
--- Check for lock contention
-SELECT blocked_locks.pid AS blocked_pid,
-       blocking_locks.pid AS blocking_pid,
-       blocked_activity.query AS blocked_statement
-FROM pg_catalog.pg_locks blocked_locks
-JOIN pg_catalog.pg_stat_activity blocked_activity ON blocked_activity.pid = blocked_locks.pid
-JOIN pg_catalog.pg_locks blocking_locks ON blocking_locks.locktype = blocked_locks.locktype;
+-- Active SSL connections
+SELECT pid, ssl, version, cipher 
+FROM pg_stat_ssl 
+WHERE ssl IS TRUE;
+
+-- Cache hit ratios (should be > 99%)
+SELECT 
+    schemaname,
+    tablename,
+    heap_blks_hit::float / (heap_blks_hit + heap_blks_read) * 100 AS cache_hit_ratio
+FROM pg_statio_user_tables
+WHERE heap_blks_hit + heap_blks_read > 0
+ORDER BY cache_hit_ratio ASC;
+```
+
+**Run monitoring queries:**
+```bash
+# Execute monitoring queries
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "SELECT query, mean_exec_time, calls FROM pg_stat_statements ORDER BY mean_exec_time DESC LIMIT 5;"
+```
+
+### 7.3 Backups
+
+```bash
+# Using backup user for database dumps (recommended)
+BACKUP_PASSWORD=$(cat secrets/backup_password.txt)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  pg_dump -U backup -d appdb --schema=app > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Full database dump using main user
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  pg_dump -U appuser -d appdb > full_backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Restore from SQL dump
+docker exec -i app_data_postgres_db \
+  bash -c "PGPASSWORD='$POSTGRES_PASSWORD' psql -U appuser -d appdb" < backup_file.sql
+
+# Traditional backup scripts (if available in container)
+docker exec app_data_postgres_db ls -la /usr/local/bin/backup-*.sh 2>/dev/null || echo "No backup scripts found"
+
+# Test backup user permissions (should fail for write operations)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  psql -U backup -d appdb -c "CREATE TABLE test_table (id SERIAL);" 2>&1 | grep -q "permission denied" && echo "✓ Backup user is read-only" || echo "⚠ Backup user has write access"
+```
+
+### 7.4 Certificate renewal (Let’s Encrypt on host/sidecar)
+
+```bash
+certbot renew --quiet
+cp /etc/letsencrypt/live/yourdomain/fullchain.pem /path/to/certs/server.crt
+cp /etc/letsencrypt/live/yourdomain/privkey.pem   /path/to/certs/server.key
+chmod 600 /path/to/certs/server.key
+chmod 644 /path/to/certs/server.crt
+chown 999:999 /path/to/certs/server.*
+docker exec postgres_container pg_ctl reload -D /var/lib/postgresql/data
 ```
 
 ---
 
-## 📋 **Production Checklist**
+## 8) Troubleshooting
 
-### **Pre-Deployment**
-- [ ] Secrets files created with secure passwords
-- [ ] Directory permissions set correctly (600 for secrets)
-- [ ] PostgreSQL configuration reviewed and tuned
-- [ ] SSL certificates configured properly
-- [ ] Backup strategy implemented
-- [ ] Monitoring setup completed
+**Connection refused**
 
-### **Post-Deployment**
-- [ ] Health checks passing
-- [ ] SSL connections working
-- [ ] Authentication working correctly
-- [ ] Performance metrics within acceptable ranges
-- [ ] Backup scripts tested
-- [ ] Log rotation configured
-- [ ] Security audit completed
+```bash
+# Check service status
+docker-compose -f docker-compose.prod.yml ps postgres
 
-### **Ongoing Maintenance**
-- [ ] Regular security updates
-- [ ] Password rotation schedule
-- [ ] Backup verification
-- [ ] Performance monitoring
-- [ ] Log analysis
-- [ ] Capacity planning
+# Check container logs
+docker-compose -f docker-compose.prod.yml logs postgres
+
+# Test network connectivity
+docker exec app_data_postgres_db netstat -ln | grep 5432
+
+# Test from another container on the same network
+docker run --rm --network app_data_app-network alpine \
+  sh -c "apk add --no-cache postgresql-client && pg_isready -h app_data_postgres_db -p 5432"
+```
+
+**Auth failed**
+
+```bash
+# Check secrets are present and readable
+docker exec app_data_postgres_db test -f /run/secrets/postgres_password && echo "✓ postgres secret present"
+docker exec app_data_postgres_db test -f /run/secrets/backup_password && echo "✓ backup secret present"
+
+# Verify local secret files exist
+ls -la secrets/ | grep -E "(postgres_password|backup_password)" && echo "✓ Local secret files found"
+
+# Test main user authentication
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "SELECT 'Main user auth successful' AS status;"
+
+# Test backup user authentication
+BACKUP_PASSWORD=$(cat secrets/backup_password.txt)
+docker exec -e PGPASSWORD="$BACKUP_PASSWORD" app_data_postgres_db \
+  psql -U backup -d appdb -c "SELECT 'Backup user auth successful' AS status;"
+
+# Check pg_hba.conf configuration
+docker exec app_data_postgres_db \
+  grep -E "(local|host)" /var/lib/postgresql/data/pg_hba.conf
+```
+
+**TLS issues**
+
+```bash
+# Check SSL certificate files exist and have correct permissions
+docker exec app_data_postgres_db ls -l /var/lib/postgresql/data/server.*
+
+# Verify SSL is enabled in PostgreSQL
+POSTGRES_PASSWORD=$(cat secrets/postgres_password.txt)
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "SHOW ssl; SELECT name, setting FROM pg_settings WHERE name LIKE 'ssl%';"
+
+# Check active SSL connections
+docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" app_data_postgres_db \
+  psql -U appuser -d appdb -c "SELECT pid, ssl, version, cipher FROM pg_stat_ssl WHERE ssl;"
+
+# Test SSL connection from external client (if accessible)
+# openssl s_client -connect yourdomain.com:5432 -starttls postgres
+```
+
+**Performance**
+
+```sql
+-- Long-running queries (run inside container)
+SELECT pid, now() - query_start AS duration, query
+FROM pg_stat_activity
+WHERE state <> 'idle' AND now() - query_start > interval '5 minutes';
+
+-- Lock contention
+SELECT bl.pid AS blocked_pid, wl.pid AS blocking_pid, a.query AS blocked_statement
+FROM pg_locks bl
+JOIN pg_stat_activity a ON a.pid = bl.pid
+JOIN pg_locks wl ON wl.locktype = bl.locktype
+                 AND coalesce(wl.relation,0)=coalesce(bl.relation,0)
+                 AND wl.pid <> bl.pid
+WHERE NOT bl.granted;
+```
+
+**Database reset issues**
+
+```bash
+# If reset script fails, try manual cleanup
+docker-compose -f docker-compose.prod.yml down -v
+sudo rm -rf data/postgres data/postgres-backups
+docker volume prune -f
+
+# Recreate directories
+mkdir -p data/postgres data/postgres-backups
+
+# Start fresh
+docker-compose -f docker-compose.prod.yml up postgres
+
+# Use reset script for automated cleanup
+./reset_database.sh --help
+./reset_database.sh
+```
 
 ---
 
-## 🔗 **Integration Examples**
+## 9) Checklists
 
-### **Python/FastAPI Connection**
+**Pre-deployment**
+
+* [ ] Secrets created (`postgres_password.txt`, `backup_password.txt`) with proper permissions (`600`)
+* [ ] `postgresql.conf` & `pg_hba.conf` reviewed
+* [ ] Custom entrypoint wrapper tested
+* [ ] TLS configured (real certs for public/regulated)
+* [ ] Backup user access verified (read-only)
+* [ ] Monitoring + slow query capture enabled
+
+**Post-deployment**
+
+* [ ] Healthchecks green
+* [ ] Auth & TLS verified (both appuser and backup user)
+* [ ] Backup user permissions tested (cannot write)
+* [ ] Extensions installed and functional
+* [ ] Baseline performance captured
+* [ ] Log rotation verified
+
+**Ongoing**
+
+* [ ] Regular image updates
+* [ ] Password rotation
+* [ ] Restore drills from backups
+* [ ] Slow query review
+* [ ] Capacity planning
+
+---
+
+## 10) Client Examples
+
+> The following disable hostname/cert verification and are **only** appropriate for internal networks with self-signed certs. For public production, use a trusted CA and `sslmode=verify-full` (or `rejectUnauthorized: true` with a CA bundle).
+
+**Python (asyncpg)**
+
 ```python
-import asyncpg
-import ssl
+import os, asyncpg, ssl
 
 async def get_db_connection():
-    # SSL context for secure connections
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-    
-    connection = await asyncpg.connect(
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return await asyncpg.connect(
         host="postgres",
         port=5432,
         user="appuser",
         password=os.getenv("POSTGRES_PASSWORD"),
         database="appdb",
-        ssl=ssl_context
+        ssl=ctx,
     )
-    return connection
 ```
 
-### **Node.js Connection**
-```javascript
-const { Pool } = require('pg');
+**Node.js (pg)**
 
+```js
+const { Pool } = require('pg');
 const pool = new Pool({
-    host: 'postgres',
-    port: 5432,
-    user: 'appuser',
-    password: process.env.POSTGRES_PASSWORD,
-    database: 'appdb',
-    ssl: {
-        require: true,
-        rejectUnauthorized: false  // For self-signed certificates
-    },
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
+  host: 'postgres',
+  port: 5432,
+  user: 'appuser',
+  password: process.env.POSTGRES_PASSWORD,
+  database: 'appdb',
+  ssl: { require: true, rejectUnauthorized: false }, // internal only
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 ```
 
 ---
 
-## 📚 **Additional Resources**
+## 11) Additional Resources
 
-- [PostgreSQL Official Documentation](https://www.postgresql.org/docs/16/)
-- [PostgreSQL Security Guidelines](https://www.postgresql.org/docs/16/security.html)
-- [Docker PostgreSQL Best Practices](https://docs.docker.com/samples/postgresql/)
-- [PostgreSQL Performance Tuning](https://wiki.postgresql.org/wiki/Performance_Optimization)
+* PostgreSQL 16 Docs: Security, SSL/TLS, Performance
+* Docker Official Postgres Image Docs
+* pg_stat_statements (monitoring)
 
 ---
 
-**Your PostgreSQL deployment is now production-ready with enterprise-grade security, performance optimization, and operational excellence! 🚀**

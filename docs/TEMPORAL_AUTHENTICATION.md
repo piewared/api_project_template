@@ -124,7 +124,7 @@ async def start_my_workflow():
 
 ```bash
 # First, get into the temporal container
-docker exec -it temporal_container bash
+docker exec -it app_data_temporal_server bash
 
 # Use system token for admin operations
 temporal workflow list \
@@ -176,7 +176,7 @@ Certificates are automatically generated on first startup:
 
 ```bash
 # Check certificate generation logs
-docker logs temporal_container | grep -i cert
+docker logs app_data_temporal_server | grep -i cert
 
 # Expected output:
 # Generating Temporal TLS certificates...
@@ -187,10 +187,10 @@ docker logs temporal_container | grep -i cert
 
 ```bash
 # Regenerate certificates (if needed)
-docker exec temporal_container /usr/local/bin/generate-certs.sh
+docker exec app_data_temporal_server /usr/local/bin/generate-certs.sh
 
 # Regenerate JWT tokens
-docker exec temporal_container /usr/local/bin/generate-jwt-tokens.sh
+docker exec app_data_temporal_server /usr/local/bin/generate-jwt-tokens.sh
 ```
 
 ### **Certificate Rotation**
@@ -199,7 +199,7 @@ For production certificate rotation:
 
 ```bash
 # 1. Generate new certificates
-docker exec temporal_container /usr/local/bin/generate-certs.sh
+docker exec app_data_temporal_server /usr/local/bin/generate-certs.sh
 
 # 2. Restart temporal service
 docker-compose -f docker-compose.prod.yml restart temporal
@@ -239,7 +239,7 @@ curl https://temporal:7233
 # Expected: SSL certificate problem
 
 # Should work with proper certificates
-docker exec app_container curl \
+docker exec app_data_fastapi_app curl \
   --cert /etc/temporal/certs/temporal-client.crt \
   --key /etc/temporal/certs/temporal-client.key \
   --cacert /etc/temporal/certs/ca.crt \
@@ -288,20 +288,20 @@ temporal namespace create test --auth-token-file /etc/temporal/certs/system-toke
 ```bash
 # Error: Certificate file not found
 # Solution: Check if certificates were generated
-docker exec temporal_container ls -la /etc/temporal/certs/
+docker exec app_data_temporal_server ls -la /etc/temporal/certs/
 
 # If empty, regenerate:
-docker exec temporal_container /usr/local/bin/generate-certs.sh
+docker exec app_data_temporal_server /usr/local/bin/generate-certs.sh
 ```
 
 #### **2. JWT Token Expired**
 ```bash
 # Error: Token is expired
 # Solution: Generate new tokens
-docker exec temporal_container /usr/local/bin/generate-jwt-tokens.sh
+docker exec app_data_temporal_server /usr/local/bin/generate-jwt-tokens.sh
 
 # Check token expiry:
-docker exec temporal_container bash -c '
+docker exec app_data_temporal_server bash -c '
   TOKEN=$(cat /etc/temporal/certs/client-token.jwt)
   echo $TOKEN | cut -d. -f2 | base64 -d | jq .exp
 '
@@ -311,7 +311,7 @@ docker exec temporal_container bash -c '
 ```bash
 # Error: TLS handshake failed
 # Solution: Verify certificate hostname matches
-docker exec temporal_container openssl x509 -in /etc/temporal/certs/temporal-server.crt -text -noout | grep -A3 "Subject Alternative Name"
+docker exec app_data_temporal_server openssl x509 -in /etc/temporal/certs/temporal-server.crt -text -noout | grep -A3 "Subject Alternative Name"
 # Should include: DNS:temporal, DNS:temporal-server
 ```
 
@@ -319,7 +319,7 @@ docker exec temporal_container openssl x509 -in /etc/temporal/certs/temporal-ser
 ```bash
 # Error: Insufficient permissions
 # Solution: Check JWT token scope
-docker exec temporal_container bash -c '
+docker exec app_data_temporal_server bash -c '
   TOKEN=$(cat /etc/temporal/certs/client-token.jwt)
   echo $TOKEN | cut -d. -f2 | base64 -d | jq .scope
 '

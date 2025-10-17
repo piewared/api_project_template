@@ -1,10 +1,15 @@
 from dataclasses import dataclass
 
-from src.app.core.services.jwt import JwtGeneratorService, JwtVerificationService
-from src.app.core.services.jwt.jwks import JWKSCacheInMemory, JwksService
-from src.app.core.services.oidc_client_service import OidcClientService
-from src.app.core.services.session.auth_session import AuthSessionService
-from src.app.core.services.session.user_session import UserSessionService
+from src.app.core.services import (
+    AuthSessionService,
+    DbSessionService,
+    JWKSCacheInMemory,
+    JwksService,
+    JwtGeneratorService,
+    JwtVerificationService,
+    OidcClientService,
+    UserSessionService,
+)
 
 
 @dataclass
@@ -16,3 +21,4 @@ class ApplicationDependencies:
     oidc_client_service: OidcClientService
     user_session_service: UserSessionService
     auth_session_service: AuthSessionService
+    database_service: DbSessionService

@@ -1,9 +1,11 @@
 """Development environment CLI commands."""
 
+import os
 import time
 
 import requests
 import typer
+from dotenv.main import load_dotenv
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -17,7 +19,7 @@ from ..dev_utils import (
     wait_for_keycloak,
 )
 from .user_commands import users_app
-from .utils import console, get_dev_dir, run_command
+from .utils import console, get_dev_dir, get_project_root, run_command
 
 # Create the dev command group
 dev_app = typer.Typer(help="🚀 Development environment commands")
@@ -119,10 +121,10 @@ def start_env(
     console.print("[green]✅ Docker is running[/green]")
 
     # Check if services are already running
-    keycloak_running = check_container_running("keycloak")
-    postgres_running = check_container_running("postgres")
-    redis_running = check_container_running("redis")
-    temporal_running = check_container_running("temporal-server")
+    keycloak_running = check_container_running("app_dev_keycloak_auth")
+    postgres_running = check_container_running("app_dev_postgres_db")
+    redis_running = check_container_running("app_dev_redis_cache")
+    temporal_running = check_container_running("api-template-temporal")
 
     if (
         keycloak_running or postgres_running or redis_running or temporal_running
@@ -132,7 +134,7 @@ def start_env(
         )
         return
 
-    dev_dir = get_dev_dir()
+    project_root_dir = get_project_root()
 
     with Progress(
         SpinnerColumn(),
@@ -147,9 +149,9 @@ def start_env(
             keycloak_running or postgres_running or redis_running or temporal_running
         ):
             console.print("[yellow]Stopping existing containers...[/yellow]")
-            run_command(["docker-compose", "down"], cwd=dev_dir)
+            run_command(["docker", "compose", "-f", "docker-compose.dev.yml", "down"], cwd=project_root_dir)
 
-        run_command(["docker-compose", "up", "-d"], cwd=dev_dir)
+        run_command(["docker", "compose", "-f", "docker-compose.dev.yml", "up", "-d"], cwd=project_root_dir)
         progress.update(task1, completed=1)
 
         if not no_wait:
@@ -230,21 +232,26 @@ def start_env(
             else:
                 console.print("[yellow]⚠️  Temporal may not be fully ready yet[/yellow]")
 
+    load_dotenv()
+
+    app_db = os.getenv("APP_DB", "devdb")
+    app_user = os.getenv("APP_DB_USER", "devuser")
+    app_password = os.getenv("APP_DB_USER_PW", "devpass")
+
     console.print("\n[bold green]🎉 Development environment is ready![/bold green]")
     console.print("\n[blue]Available services:[/blue]")
     console.print("  • Keycloak: http://localhost:8080")
     console.print("    - Admin console: http://localhost:8080/admin")
     console.print("    - Username: admin, Password: admin")
     console.print("    - Test realm: http://localhost:8080/realms/test-realm")
-    console.print("  • PostgreSQL: localhost:5432")
-    console.print("    - Database: devdb (devuser/devpass)")
-    console.print("    - Test DB: testdb (devuser/devpass)")
-    console.print("  • Redis: localhost:6379")
-    console.print("    - Connection: redis://localhost:6379")
+    console.print("  • PostgreSQL: localhost:5433")
+    console.print(f"    - Database: {app_db} ({app_user}/{app_password})")
+    console.print("  • Redis: localhost:6380")
+    console.print("    - Connection: redis://localhost:6380")
     console.print("    - Persistence: AOF enabled")
     console.print("  • Temporal: localhost:7233")
     console.print("    - gRPC API: localhost:7233")
-    console.print("    - Web UI: http://localhost:8088")
+    console.print("    - Web UI: http://localhost:8081")
 
     console.print("\n[dim]Use 'cli dev start-server' to start the API server[/dim]")
 
@@ -276,7 +283,7 @@ def status() -> None:
         return
 
     # Check Keycloak
-    keycloak_running = check_container_running("dev_env_keycloak_1")
+    keycloak_running = check_container_running("app_dev_keycloak_auth")
     keycloak_status = (
         "[green]✅ Running[/green]" if keycloak_running else "[red]❌ Not running[/red]"
     )
@@ -297,7 +304,7 @@ def status() -> None:
             console.print("  └─ Health: ⚠️  Cannot reach Keycloak")
 
     # Check PostgreSQL
-    postgres_running = check_container_running("dev_env_postgres_1")
+    postgres_running = check_container_running("app_dev_postgres_db")
     postgres_status = (
         "[green]✅ Running[/green]" if postgres_running else "[red]❌ Not running[/red]"
     )
@@ -310,12 +317,17 @@ def status() -> None:
                 "[green]✅ PostgreSQL is running and accepting connections[/green]"
             )
             console.print("  └─ Connection: ✅ Ready")
+            console.print("  └─ Server: localhost:5433")
+            console.print("  └─ Username: devuser")
+            console.print("  └─ Password: devpass")
             console.print("  └─ Databases: devdb, testdb")
+            console.print("  └─ Connection String (localhost): [cyan]postgresql://devuser:devpass@localhost:5433/devdb[/cyan]")
+            console.print("  └─ Connection String (container): [cyan]postgresql://devuser:devpass@app_dev_postgres_db:5432/devdb[/cyan]")
         else:
             console.print("  └─ Connection: ⚠️  Not ready")
 
     # Check Redis
-    redis_running = check_container_running("dev_env_redis_1")
+    redis_running = check_container_running("app_dev_redis_cache")
     redis_status = (
         "[green]✅ Running[/green]" if redis_running else "[red]❌ Not running[/red]"
     )
@@ -328,7 +340,7 @@ def status() -> None:
                 "[green]✅ Redis is running and accepting connections[/green]"
             )
             console.print("  └─ Connection: ✅ Ready")
-            console.print("  └─ Server: localhost:6379")
+            console.print("  └─ Server: localhost:6380")
         else:
             console.print("  └─ Connection: ⚠️  Not ready")
 
@@ -370,10 +382,10 @@ def stop() -> None:
         )
     )
 
-    dev_dir = get_dev_dir()
+    project_root = get_project_root()
 
     with console.status("[bold red]Stopping containers..."):
-        run_command(["docker-compose", "down"], cwd=dev_dir)
+        run_command(["docker", "compose", "-f", "docker-compose.dev.yml", "down"], cwd=project_root)
 
     console.print("[green]✅ All development services stopped[/green]")
 

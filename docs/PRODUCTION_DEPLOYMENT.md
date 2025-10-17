@@ -66,7 +66,7 @@ docker-compose -f docker-compose.prod.yml logs -f
 
 #### Application Configuration
 ```env
-ENVIRONMENT=production
+APP_ENVIRONMENT=production
 BASE_URL=https://yourdomain.com
 APP_PORT=8000
 DATA_PATH=/opt/app/data
@@ -120,6 +120,12 @@ All sensitive data is stored in `/opt/app/secrets/` with restricted permissions:
 - **Minimal images**: Alpine Linux base images with only necessary packages
 - **Security scanning**: Regular vulnerability scans recommended
 - **Resource limits**: Memory and CPU limits configured in docker-compose
+- **Consistent naming**: Hardcoded container names ensure portability across deployments:
+  - `app_data_postgres_db` - PostgreSQL database
+  - `app_data_redis_cache` - Redis cache/session store
+  - `app_data_temporal_server` - Temporal workflow engine
+  - `app_data_fastapi_app` - FastAPI application
+  - `app_data_nginx_proxy` - Nginx reverse proxy
 
 ### Network Security
 - **Internal networking**: Services communicate on internal Docker networks

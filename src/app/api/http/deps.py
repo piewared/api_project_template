@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from functools import lru_cache
 from urllib.parse import urlparse
 
@@ -24,21 +23,12 @@ from src.app.entities.core.user import User, UserRepository
 from src.app.entities.core.user_identity.entity import UserIdentity
 from src.app.entities.core.user_identity.repository import UserIdentityRepository
 from src.app.runtime.context import get_config
-from src.app.runtime.db import session
 
 
-def get_session() -> Iterator[Session]:
-    """Yield a database session tied to the current request lifecycle."""
-
-    db = session()
-    try:
-        yield db
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+def get_db_session(request: Request) -> Session:
+    """Get the database session instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.database_service.get_session()
 
 
 def get_jwks_cache(request: Request) -> JWKSCache:
@@ -76,7 +66,7 @@ def get_oidc_client_service(request: Request) -> OidcClientService:
 
 def get_user_management_service(request: Request, user_session_service: UserSessionService = Depends(get_user_session_service),
                                 jwt_verify_service: JwtVerificationService = Depends(get_jwt_verify_service),
-                                db_session: Session = Depends(get_session)
+                                db_session: Session = Depends(get_db_session)
                                 ) -> UserManagementService:
     """Get the User Management service instance."""
     user_mgmt_service = UserManagementService(user_session_service, jwt_verify_service, db_session)
@@ -84,7 +74,7 @@ def get_user_management_service(request: Request, user_session_service: UserSess
 
 # Add your application-specific repository dependencies here
 # Example:
-# def get_your_repo(db: Session = Depends(get_session)) -> YourRepository:
+# def get_your_repo(db: Session = Depends(get_db_session)) -> YourRepository:
 #     return YourRepository(db)
 
 
@@ -98,7 +88,7 @@ _DEV_USER = User(
 
 async def get_current_user(
     request: Request,
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_db_session),
     jwt_verify: JwtVerificationService = Depends(get_jwt_verify_service),
 ) -> User:
     """Authenticate the request using a Bearer token, with JIT user provisioning."""
@@ -296,7 +286,7 @@ async def _authenticate_with_session(
 
 async def get_authenticated_user(
     request: Request,
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_db_session),
     jwt_verify: JwtVerificationService = Depends(get_jwt_verify_service),
     user_session_service: UserSessionService = Depends(get_user_session_service),
 ) -> User:
@@ -417,7 +407,7 @@ async def get_authenticated_user(
 
 async def get_session_only_user(
     request: Request,
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_db_session),
     user_session_service: UserSessionService = Depends(get_user_session_service),
 ) -> User | None:
     """
@@ -431,7 +421,7 @@ async def get_session_only_user(
 
 async def get_optional_session_user(
     request: Request,
-    db: Session = Depends(get_session),
+    db: Session = Depends(get_db_session),
     user_session_service: UserSessionService = Depends(get_user_session_service),
 ) -> User | None:
     """

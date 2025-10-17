@@ -45,14 +45,14 @@ docker compose down
 
 | Type                               | Connection                                  |
 | ---------------------------------- | ------------------------------------------- |
-| **From Host**                      | `redis://localhost:6379`                    |
+| **From Host**                      | `redis://localhost:6380`                    |
 | **From Containers (same network)** | `redis://redis:6379`                        |
-| **CLI (inside container)**         | `docker exec -it dev_env_redis_1 redis-cli` |
+| **CLI (inside container)**         | `docker exec -it app_dev_redis_cache redis-cli` |
 
 Example check:
 
 ```bash
-redis-cli -h localhost ping
+redis-cli -h localhost -p 6380 ping
 # PONG
 ```
 
@@ -112,7 +112,7 @@ PONG
 | ------------------------------------ | ----------------------------------------------------------------------- |
 | **Port 6379 already in use**         | Run `lsof -i :6379` to identify and stop conflicting services.          |
 | **Permission denied / volume error** | Ensure Docker is running and volumes are not locked by another process. |
-| **CLI container not found**          | Verify service name: `docker compose ps` should list `dev_env_redis_1`. |
+| **CLI container not found**          | Verify service name: `docker compose ps` should list `app_dev_redis_cache`. |
 | **Redis not persisting data**        | Check AOF config (`appendonly yes` is set in the image).                |
 
 ---

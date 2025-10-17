@@ -134,7 +134,7 @@ Key configuration options (see `.env` for complete list):
 
 ```bash
 # Application
-ENVIRONMENT=development          # development|production|test
+APP_ENVIRONMENT=development          # development|production|test
 LOG_LEVEL=INFO
 DATABASE_URL=sqlite:///./database.db
 
@@ -268,12 +268,12 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from {{cookiecutter.package_name}}.api.http.schemas.product import ProductCreate, ProductRead
 from {{cookiecutter.package_name}}.application.repositories.product_repo import SqlProductRepository
-from {{cookiecutter.package_name}}.api.http.deps import get_session, require_scope
+from {{cookiecutter.package_name}}.api.http.deps import get_db_session, require_scope
 from {{cookiecutter.package_name}}.api.http.middleware.limiter import rate_limit
 
 router = APIRouter()
 
-def get_product_repo(db: Session = Depends(get_session)) -> SqlProductRepository:
+def get_product_repo(db: Session = Depends(get_db_session)) -> SqlProductRepository:
     return SqlProductRepository(db)
 
 @router.get("/", response_model=List[ProductRead])
@@ -341,7 +341,7 @@ class TestProductEntity:
 ### Production Deployment
 
 1. **Environment Configuration**:
-   - Set `ENVIRONMENT=production`
+   - Set `APP_ENVIRONMENT=production`
    - Configure proper JWT issuer JWKS endpoints
    - Use strong database credentials
    - Enable Redis for rate limiting

@@ -63,7 +63,11 @@ src/app/api/http/routers/service/
 # =============================================================================
 
 # Secrets and credentials (CRITICAL - NEVER COMMIT)
-secrets/
+# Ignore all files in secrets/ directory
+secrets/*
+# But allow the README and generation script
+!secrets/README.md
+!secrets/generate_secrets.sh
 *.secret
 *.key
 *.pem
@@ -112,7 +116,6 @@ temp/
 
 # Development Docker overrides
 docker-compose.override.yml
-docker-compose.dev.yml
 docker-compose.local.yml
 
 # Build artifacts and images

@@ -237,9 +237,7 @@ class DatabaseConfig(BaseModel):
         default="postgresql+asyncpg://user:password@postgres:5432/app_db",
         description="Database connection URL",
     )
-    owner_user: str = Field(
-        default="appowner", description="Database owner username"
-    )
+    owner_user: str = Field(default="appowner", description="Database owner username")
     user: str = Field(default="user", description="Database username")
     ro_user: str = Field(
         default="backupuser", description="Database read-only username"
@@ -346,14 +344,24 @@ class DatabaseConfig(BaseModel):
 
             return str(base_url)
 
-        # Otherwise, use the resolved password from the computed field
+        # Otherwise, use the resolved password from the computed field and
+        # the resolved user and database from the URL or config
         resolved_password = self.password
+        # If the user or database is not set in the config, fall back to the URL
+        resolved_user = self.user or base_url.username
+        resolved_db = self.app_db or base_url.database
+
+        if resolved_user != base_url.username and self.user:
+            base_url = base_url.set(username=resolved_user)
+        if resolved_db != base_url.database and self.app_db:
+            base_url = base_url.set(database=resolved_db)
+
         if resolved_password:
             url_with_password = base_url.set(password=resolved_password)
             # Build the connection string manually to avoid SQLAlchemy's password masking
             return f"postgresql://{url_with_password.username}:{url_with_password.password}@{url_with_password.host}:{url_with_password.port}/{url_with_password.database}"
         else:
-            return str(base_url)  # No password available; return URL as-is
+            return f"postgresql://{base_url.username}@{base_url.host}:{base_url.port}/{base_url.database}"  # No password available; return URL as-is
 
 
 class AppConfig(BaseModel):

@@ -342,7 +342,7 @@ class DatabaseConfig(BaseModel):
                 )
                 base_url = base_url.set(username=self.user)
 
-            return str(base_url)
+            return f"postgresql://{base_url.username}:{base_url.password}@{base_url.host}:{base_url.port}/{base_url.database}"
 
         # Otherwise, use the resolved password from the computed field and
         # the resolved user and database from the URL or config

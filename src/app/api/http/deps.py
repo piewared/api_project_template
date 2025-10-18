@@ -78,29 +78,12 @@ def get_user_management_service(request: Request, user_session_service: UserSess
 #     return YourRepository(db)
 
 
-_DEV_USER = User(
-    id="93743658555595339",
-    first_name="Development",
-    last_name="User",
-    email="dev@example.com",
-)
-
-
 async def get_current_user(
     request: Request,
     db: Session = Depends(get_db_session),
     jwt_verify: JwtVerificationService = Depends(get_jwt_verify_service),
 ) -> User:
     """Authenticate the request using a Bearer token, with JIT user provisioning."""
-
-    if get_config().app.environment == "development":
-        request.state.claims = getattr(
-            request.state, "claims", {"iss": "local-dev", "sub": "dev-user"}
-        )
-        request.state.scopes = getattr(request.state, "scopes", set()) or {"read:all"}
-        request.state.roles = getattr(request.state, "roles", set()) or {"admin"}
-        request.state.uid = getattr(request.state, "uid", "dev-user")
-        return _DEV_USER
 
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -225,16 +208,6 @@ async def _authenticate_with_session(
     Raises:
         HTTPException: If required=True and authentication fails
     """
-    # Development mode bypass
-    if get_config().app.environment == "development":
-        request.state.claims = getattr(
-            request.state, "claims", {"iss": "local-dev", "sub": "dev-user"}
-        )
-        request.state.scopes = getattr(request.state, "scopes", set()) or {"read:all"}
-        request.state.roles = getattr(request.state, "roles", set()) or {"admin"}
-        request.state.uid = getattr(request.state, "uid", "dev-user")
-        request.state.auth_method = "development"
-        return _DEV_USER
 
     # Try session-based authentication
     session_id = request.cookies.get("user_session_id")

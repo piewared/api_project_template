@@ -179,7 +179,7 @@ config:
                     assert config.app.port == 9000
                     assert (
                         config.database.url
-                        == "postgresql://devuser:devpass@localhost:5433/devdb"
+                        == "postgresql://appuser:devpass@localhost:5433/appdb"
                     )  # default value used
                     assert config.oidc.providers["keycloak"].client_id == "test-client"
                     assert (
@@ -378,7 +378,7 @@ config:
                     assert config.app.port == 9000  # env var used
                     assert (
                         config.database.url
-                        == "postgresql://devuser:devpass@localhost:5433/devdb"
+                        == "postgresql://appuser:devpass@localhost:5433/appdb"
                     )  # default value used
                     assert (
                         config.oidc.providers["keycloak"].client_id

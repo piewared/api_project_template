@@ -35,8 +35,8 @@ services:
       service: postgres
     environment:
       POSTGRES_PASSWORD: devpass
-      APP_DB: ${APP_DB:-devdb}
-      APP_DB_USER: ${APP_DB_USER:-devuser}
+      APP_DB: ${APP_DB:-appdb}
+      APP_DB_USER: ${APP_DB_USER:-appuser}
       APP_DB_USER_PW: devpass
 
   redis:

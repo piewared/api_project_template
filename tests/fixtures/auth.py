@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from src.app.api.http.app import app
-from src.app.api.http.deps import get_db_session, get_jwks_service
+from src.app.api.http.deps import (
+    get_authenticated_user,
+    get_db_session,
+    get_jwks_service,
+)
 from src.app.api.http.middleware.limiter import configure_rate_limiter
 from src.app.core.models.session import AuthSession, UserSession
 from src.app.core.services import (
@@ -203,32 +207,6 @@ def auth_test_config(secret_for_jwt_generation, base_oidc_provider: OIDCProvider
     return config
 
 
-# Database Fixtures with Test Data
-@pytest.fixture
-def populated_session(session: Session) -> Session:
-    """Session populated with test user and identity data."""
-    user_repo = UserRepository(session)
-    identity_repo = UserIdentityRepository(session)
-
-    # Create test user
-    test_user = User(
-        first_name="Test",
-        last_name="User",
-        email="test@example.com",
-    )
-    user_repo.create(test_user)
-
-    # Create test identity
-    test_identity = UserIdentity(
-        issuer="https://test.example.com",
-        subject="test-subject-123",
-        uid_claim="test.example.com|test-subject-123",
-        user_id=test_user.id,
-    )
-    identity_repo.create(test_identity)
-
-    return session
-
 
 # Service Mocks
 @pytest.fixture
@@ -260,28 +238,9 @@ def mock_oidc_client_service():
     return mock_service
 
 
-@pytest.fixture
-def mock_session_service(
-    test_user: User, test_auth_session: AuthSession, test_user_session: UserSession
-):
-    """Mock session service with standard responses."""
-    mock_service = AsyncMock()
-    mock_service.create_auth_session.return_value = test_auth_session.id
-    mock_service.get_auth_session.return_value = test_auth_session
-    mock_service.delete_auth_session.return_value = None
-    mock_service.provision_user_from_claims.return_value = test_user
-    mock_service.create_user_session.return_value = test_user_session.id
-    mock_service.get_user_session.return_value = test_user_session
-    mock_service.delete_user_session.return_value = None
-    mock_service.refresh_user_session.return_value = "new-user-session-789"
-    mock_service.generate_csrf_token.return_value = "csrf-token-123"
-    mock_service.validate_csrf_token.return_value = True
-    return mock_service
-
-
 # HTTP Client Fixtures
 @pytest.fixture
-def auth_test_client(auth_test_config: ConfigData, session: Session, jwks_service_fake: JwksService) -> Generator[TestClient]:
+def auth_test_client(auth_test_config: ConfigData, session: Session, jwks_service_fake: JwksService, test_user: User) -> Generator[TestClient]:
     """Test client configured with authentication setup."""
     from src.app.runtime.context import with_context
 
@@ -296,10 +255,17 @@ def auth_test_client(auth_test_config: ConfigData, session: Session, jwks_servic
         return jwks_service_fake
 
 
+    def override_get_authenticated_user(request: Request) -> User:
+        request.state.scopes = ['test1', 'test2']
+        request.state.roles = ['admin']
+        request.state.claims = {"email": test_user.email, "sub": "dev-user", "iss": "local-dev"}
+        return test_user
+
     configure_rate_limiter(
         limiter_factory=lambda *_a, **_k: _no_limit
     )  # use local no-op limiter
 
+    app.dependency_overrides[get_authenticated_user] = override_get_authenticated_user
     app.dependency_overrides[get_db_session] = override_get_session
     app.dependency_overrides[get_jwks_service] = override_get_jwks_service
 

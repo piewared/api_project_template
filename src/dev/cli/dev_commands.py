@@ -121,10 +121,10 @@ def start_env(
     console.print("[green]✅ Docker is running[/green]")
 
     # Check if services are already running
-    keycloak_running = check_container_running("app_dev_keycloak_auth")
-    postgres_running = check_container_running("app_dev_postgres_db")
-    redis_running = check_container_running("app_dev_redis_cache")
-    temporal_running = check_container_running("api-template-temporal")
+    keycloak_running = check_container_running("api-template-keycloak-dev")
+    postgres_running = check_container_running("api-template-postgres-dev")
+    redis_running = check_container_running("api-template-redis-dev")
+    temporal_running = check_container_running("api-template-temporal-dev")
 
     if (
         keycloak_running or postgres_running or redis_running or temporal_running
@@ -234,8 +234,8 @@ def start_env(
 
     load_dotenv()
 
-    app_db = os.getenv("APP_DB", "devdb")
-    app_user = os.getenv("APP_DB_USER", "devuser")
+    app_db = os.getenv("APP_DB", "appdb")
+    app_user = os.getenv("APP_DB_USER", "appuser")
     app_password = os.getenv("APP_DB_USER_PW", "devpass")
 
     console.print("\n[bold green]🎉 Development environment is ready![/bold green]")
@@ -283,7 +283,7 @@ def status() -> None:
         return
 
     # Check Keycloak
-    keycloak_running = check_container_running("app_dev_keycloak_auth")
+    keycloak_running = check_container_running("api-template-keycloak-dev")
     keycloak_status = (
         "[green]✅ Running[/green]" if keycloak_running else "[red]❌ Not running[/red]"
     )
@@ -304,7 +304,7 @@ def status() -> None:
             console.print("  └─ Health: ⚠️  Cannot reach Keycloak")
 
     # Check PostgreSQL
-    postgres_running = check_container_running("app_dev_postgres_db")
+    postgres_running = check_container_running("api-template-postgres-dev")
     postgres_status = (
         "[green]✅ Running[/green]" if postgres_running else "[red]❌ Not running[/red]"
     )
@@ -318,16 +318,16 @@ def status() -> None:
             )
             console.print("  └─ Connection: ✅ Ready")
             console.print("  └─ Server: localhost:5433")
-            console.print("  └─ Username: devuser")
+            console.print("  └─ Username: appuser")
             console.print("  └─ Password: devpass")
-            console.print("  └─ Databases: devdb, testdb")
-            console.print("  └─ Connection String (localhost): [cyan]postgresql://devuser:devpass@localhost:5433/devdb[/cyan]")
-            console.print("  └─ Connection String (container): [cyan]postgresql://devuser:devpass@app_dev_postgres_db:5432/devdb[/cyan]")
+            console.print("  └─ Database: appdb")
+            console.print("  └─ Connection String (localhost): [cyan]postgresql://appuser:devpass@localhost:5433/appdb[/cyan]")
+            console.print("  └─ Connection String (container): [cyan]postgresql://appuser:devpass@app_dev_postgres_db:5432/appdb[/cyan]")
         else:
             console.print("  └─ Connection: ⚠️  Not ready")
 
     # Check Redis
-    redis_running = check_container_running("app_dev_redis_cache")
+    redis_running = check_container_running("api-template-redis-dev")
     redis_status = (
         "[green]✅ Running[/green]" if redis_running else "[red]❌ Not running[/red]"
     )
@@ -345,8 +345,8 @@ def status() -> None:
             console.print("  └─ Connection: ⚠️  Not ready")
 
     # Check Temporal
-    temporal_server_running = check_container_running("api-template-temporal")
-    temporal_web_running = check_container_running("api-template-temporal-ui")
+    temporal_server_running = check_container_running("api-template-temporal-dev")
+    temporal_web_running = check_container_running("api-template-temporal-ui-dev")
     temporal_status = (
         "[green]✅ Running[/green]"
         if temporal_server_running

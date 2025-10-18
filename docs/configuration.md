@@ -31,7 +31,7 @@ It builds on the [README’s Configuration section](../README.md#configuration),
 
 ```yaml
 database:
-  url: "${DATABASE_URL:-postgresql+asyncpg://devuser:devpass@postgres:5432/app_db}"
+  url: "${DATABASE_URL:-postgresql+asyncpg://appuser:devpass@postgres:5432/app_db}"
   pool_size: 20
   max_overflow: 10
   pool_timeout: 30

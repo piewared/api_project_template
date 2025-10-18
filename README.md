@@ -240,7 +240,7 @@ For production IdPs (Google, Microsoft, Okta, etc.), set:
 
 ```bash
 APP_ENVIRONMENT=development
-DATABASE_URL=postgresql://devuser:devpass@localhost:5432/devdb
+DATABASE_URL=postgresql://appuser:devpass@localhost:5432/appdb
 REDIS_URL=redis://localhost:6379/0
 BASE_URL=http://localhost:8000
 SESSION_SIGNING_SECRET=change-this-32-char-secret

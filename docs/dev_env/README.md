@@ -108,10 +108,10 @@ Production should use an external IdP (Auth0, Okta, Azure AD, or managed Keycloa
 
 Primary relational database for development and tests.
 
-* Databases: `devdb`, `testdb`
-* Credentials: `devuser / devpass`
+* Databases: `appdb`
+* Credentials: `appuser / devpass`
 * Connection:
-  `postgresql://devuser:devpass@localhost:5433/devdb`
+  `postgresql://appuser:devpass@localhost:5433/appdb`
 
 ---
 
@@ -168,37 +168,6 @@ Reset all volumes:
 
 ---
 
-## 🔧 Environment Configuration
-
-Example `.env` file:
-
-```bash
-# Database
-DATABASE_URL=postgresql://devuser:devpass@localhost:5433/devdb
-TEST_DATABASE_URL=postgresql://devuser:devpass@localhost:5433/testdb
-
-# Redis
-REDIS_URL=redis://localhost:6380/0
-
-# Temporal
-TEMPORAL_URL=localhost:7233
-
-# OIDC (Local Keycloak)
-OIDC_KEYCLOAK_ISSUER=http://localhost:8080/realms/test-realm
-OIDC_KEYCLOAK_CLIENT_ID=test-client
-OIDC_KEYCLOAK_CLIENT_SECRET=test-client-secret
-OIDC_KEYCLOAK_REDIRECT_URI=http://localhost:8000/auth/web/callback
-```
-
-### When running inside Docker
-
-```bash
-REDIS_URL=redis://redis:6379/0
-TEMPORAL_URL=temporal-server:7233
-OIDC_KEYCLOAK_ISSUER=http://keycloak:8080/realms/test-realm
-```
-
----
 
 ## 🧠 How It Works
 

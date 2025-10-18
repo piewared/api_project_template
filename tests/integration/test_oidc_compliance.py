@@ -3,7 +3,7 @@
 from unittest.mock import patch
 
 import pytest
-from fastapi.testclient import TestClient
+from starlette.testclient import TestClient
 
 from src.app.api.http.app import app
 from src.app.runtime.config.config_data import ConfigData
@@ -20,9 +20,9 @@ def client():
 class TestOIDCRelyingParty:
     """Test OIDC Relying Party (client) functionality."""
 
-    def test_me_endpoint_returns_user_auth_state(self, client):
+    def test_me_endpoint_returns_user_auth_state(self, auth_test_client, test_user):
         """Test that /me endpoint returns current user's authentication state."""
-        response = client.get("/auth/jit/me")
+        response = auth_test_client.get("/auth/jit/me")
 
         assert response.status_code == 200
         result = response.json()
@@ -35,24 +35,24 @@ class TestOIDCRelyingParty:
         assert "claims" in result
 
         # In development mode, should have mock data
-        assert result["email"] == "dev@example.com"
-        assert "read:all" in result["scopes"]
+        assert result["email"] == test_user.email
+        assert "test1" in result["scopes"]
         assert "admin" in result["roles"]
 
-    def test_scope_based_authorization(self, client):
+    def test_scope_based_authorization(self, auth_test_client):
         """Test that scope-based authorization works correctly."""
         # This endpoint requires 'read:protected' scope but dev user has 'read:all'
-        response = client.get("/auth/jit/protected-scope")
+        response = auth_test_client.get("/auth/jit/protected-scope")
 
         # Should return 403 since dev user doesn't have the specific 'read:protected' scope
         assert response.status_code == 403
         result = response.json()
         assert "Missing required scope" in result["detail"]
 
-    def test_role_based_authorization(self, client):
+    def test_role_based_authorization(self, auth_test_client):
         """Test that role-based authorization works correctly."""
         # This endpoint requires 'admin' role and dev user has 'admin' role
-        response = client.get("/auth/jit/protected-role")
+        response = auth_test_client.get("/auth/jit/protected-role")
 
         assert response.status_code == 200
         result = response.json()
@@ -77,25 +77,10 @@ class TestOIDCRelyingParty:
             )
         assert response.status_code == 401
 
-    def test_development_mode_provides_mock_authentication(self, client):
-        """Test that development mode provides mock authentication for easier testing."""
-        response = client.get("/auth/jit/me")
 
-        assert response.status_code == 200
-        result = response.json()
-
-        # Should have development user data
-        assert result["user_id"] == "93743658555595339"
-        assert result["email"] == "dev@example.com"
-
-        # Should have mock claims
-        claims = result["claims"]
-        assert claims["iss"] == "local-dev"
-        assert claims["sub"] == "dev-user"
-
-    def test_authentication_state_structure(self, client):
+    def test_authentication_state_structure(self, auth_test_client):
         """Test that authentication state has proper structure for OIDC client."""
-        response = client.get("/auth/jit/me")
+        response = auth_test_client.get("/auth/jit/me")
 
         assert response.status_code == 200
         result = response.json()
@@ -112,22 +97,24 @@ class TestOIDCRelyingParty:
         assert "iss" in claims  # Issuer
         assert "sub" in claims  # Subject
 
-    def test_authorization_dependencies_work_correctly(self, client):
+    def test_authorization_dependencies_work_correctly(self, auth_test_client, test_user):
         """Test that authorization dependencies properly extract and validate claims."""
         # Test scope requirement
-        scope_response = client.get("/auth/jit/protected-scope")
+        scope_response = auth_test_client.get("/auth/jit/protected-scope")
         assert scope_response.status_code == 403  # Missing required scope
 
         # Test role requirement
-        role_response = client.get("/auth/jit/protected-role")
+        role_response = auth_test_client.get("/auth/jit/protected-role")
         assert role_response.status_code == 200  # Has required role
 
         role_result = role_response.json()
         assert "user_id" in role_result
-        assert role_result["user_id"] == "93743658555595339"  # Dev user ID
+        assert role_result["user_id"] == test_user.id
 
     def test_bearer_token_extraction_in_production(self, client):
-        """Test Bearer token extraction logic."""
+        """
+        Test Bearer token extraction logic.
+        """
         mock_config = ConfigData()
         mock_config.app.environment = "production"
         with with_context(config_override=mock_config):
@@ -145,18 +132,18 @@ class TestOIDCRelyingParty:
             response = client.get("/auth/jit/me", headers={"Authorization": "Bearer"})
             assert response.status_code == 401
 
-    def test_endpoints_accessible_without_oidc_provider_functionality(self, client):
+    def test_endpoints_accessible_without_oidc_provider_functionality(self, auth_test_client):
         """Test that client endpoints don't expose OIDC provider functionality."""
         # These endpoints should NOT exist (were incorrectly implemented as provider endpoints)
 
         # Discovery endpoint should not exist
-        response = client.get("/auth/jit/.well-known/openid-configuration")
+        response = auth_test_client.get("/auth/jit/.well-known/openid-configuration")
         assert response.status_code == 404
 
         # UserInfo endpoint should not exist
-        response = client.get("/auth/jit/userinfo")
+        response = auth_test_client.get("/auth/jit/userinfo")
         assert response.status_code == 404
 
         # Token introspection should not exist
-        response = client.post("/auth/jit/introspect")
+        response = auth_test_client.post("/auth/jit/introspect")
         assert response.status_code == 404

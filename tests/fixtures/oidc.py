@@ -183,24 +183,3 @@ def oidc_test_config():
 
     return config
 
-
-@pytest.fixture
-def mock_session_service(
-    test_user: User, test_auth_session: AuthSession, test_user_session: UserSession
-):
-    """Mock session service for testing."""
-    mock_service = AsyncMock()
-
-    # Configure default return values
-    mock_service.create_auth_session.return_value = "auth-session-123"
-    mock_service.get_auth_session.return_value = test_auth_session
-    mock_service.delete_auth_session.return_value = None
-    mock_service.provision_user_from_claims.return_value = test_user
-    mock_service.create_user_session.return_value = "user-session-456"
-    mock_service.get_user_session.return_value = test_user_session
-    mock_service.delete_user_session.return_value = None
-    mock_service.refresh_user_session.return_value = "new-user-session-789"
-    mock_service.generate_csrf_token.return_value = "csrf-token-123"
-    mock_service.validate_csrf_token.return_value = True
-
-    return mock_service

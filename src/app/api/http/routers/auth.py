@@ -32,8 +32,6 @@ async def get_me(
     Works with both JWT and session-based authentication.
     """
     # Include auth method in response for debugging
-    print(f"Request state: {request.state}")
-    print(f"user: {user}")
     auth_method = getattr(request.state, "auth_method", "unknown")
 
     return {

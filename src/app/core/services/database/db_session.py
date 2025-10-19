@@ -61,29 +61,18 @@ class DbSessionService:
 
         if "postgresql" in config.database.url:
             # PostgreSQL-specific optimizations
+            # Note: psycopg2 doesn't support 'server_settings' in connect_args.
+            # Use 'options' parameter instead for server-side settings.
             connect_args.update(
                 {
-                    # Connection-level optimizations
-                    "server_settings": {
-                        # Reduce memory usage for small queries
-                        "jit": "off",
-                        # Optimize for application workloads
-                        "application_name": f"{config.app.environment}_api",
-                    },
+                    # Application name for connection tracking
+                    "application_name": f"{config.app.environment}_api",
                     # Statement timeout for long-running queries (30 seconds)
-                    "command_timeout": 30,
+                    "connect_timeout": 30,
+                    # Use options parameter for PostgreSQL server settings
+                    "options": "-c jit=off",  # Reduce memory usage for small queries
                 }
             )
-
-            # Production-specific PostgreSQL settings
-            if config.app.environment == "production":
-                connect_args["server_settings"].update(
-                    {
-                        # Production query optimization
-                        "random_page_cost": "1.1",  # SSD optimization
-                        "effective_cache_size": "1GB",  # Adjust based on available RAM
-                    }
-                )
 
         elif "sqlite" in config.database.url:
             # SQLite-specific optimizations

@@ -35,6 +35,10 @@ from src.app.runtime.context import get_config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Reduce SQLAlchemy logging verbosity
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+
 # --- Rate limiter dependencies ---
 try:
     import redis.asyncio as redis_async
@@ -321,3 +325,10 @@ async def health() -> dict[str, str]:
 async def readiness() -> dict[str, str]:
     """Readiness check endpoint."""
     return {"status": "ready"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    """Readiness check endpoint."""

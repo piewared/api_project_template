@@ -79,7 +79,7 @@ config:
         enabled: true
         dev_only: true
         issuer: "http://localhost:8080/realms/test-realm"
-        openid_configuration_endpoint: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/master}/.well-known/openid-configuration"
+        openid_configuration_endpoint: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/test-realm}/.well-known/openid-configuration"
         client_id: test-client
         client_secret: test-client-secret
         scopes:
@@ -87,11 +87,11 @@ config:
           - profile
           - email
         redirect_uri: "${OIDC_KEYCLOAK_REDIRECT_URI:-http://localhost:8000/auth/web/callback}"
-        jwks_uri: "${OIDC_KEYCLOAK_JWKS_URI:-http://localhost:8080/realms/master/protocol/openid-connect/certs}"
-        end_session_endpoint: "${OIDC_KEYCLOAK_END_SESSION_ENDPOINT:-http://localhost:8080/realms/master/protocol/openid-connect/logout}"
-        userinfo_endpoint: "${OIDC_KEYCLOAK_USERINFO_ENDPOINT:-http://localhost:8080/realms/master/protocol/openid-connect/userinfo}"
-        authorization_endpoint: "${OIDC_KEYCLOAK_AUTHORIZATION_ENDPOINT:-http://localhost:8080/realms/master/protocol/openid-connect/auth}"
-        token_endpoint: "${OIDC_KEYCLOAK_TOKEN_ENDPOINT:-http://localhost:8080/realms/master/protocol/openid-connect/token}"
+        jwks_uri: "${OIDC_KEYCLOAK_JWKS_URI:-http://localhost:8080/realms/test-realm/protocol/openid-connect/certs}"
+        end_session_endpoint: "${OIDC_KEYCLOAK_END_SESSION_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/logout}"
+        userinfo_endpoint: "${OIDC_KEYCLOAK_USERINFO_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/userinfo}"
+        authorization_endpoint: "${OIDC_KEYCLOAK_AUTHORIZATION_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/auth}"
+        token_endpoint: "${OIDC_KEYCLOAK_TOKEN_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/token}"
     default_provider: "keycloak"
     global_redirect_uri: "${OIDC_REDIRECT_URI:-http://localhost:8000/auth/callback}"
     allowed_redirect_hosts: []

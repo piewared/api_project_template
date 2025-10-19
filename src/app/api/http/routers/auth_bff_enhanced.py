@@ -49,12 +49,30 @@ class AuthState(BaseModel):
 
 
 def _get_secure_cookie_settings() -> dict[str, Any]:
-    """Get secure cookie configuration."""
+    """Get secure cookie configuration for OAuth authentication.
+
+    For BFF pattern where the session cookie is first-party to your domain,
+    SameSite=Lax is sufficient and preferred. OAuth callbacks are top-level
+    GET navigations, which Lax allows.
+
+    SameSite=None is only needed if:
+    - Your frontend is on a different domain than your API (cross-site subrequests)
+    - You use iframes or embedded contexts
+    - You need silent token refresh in background requests
+
+    Security is maintained through multiple layers:
+    - httponly=True: Prevents JavaScript access (XSS protection)
+    - secure=True: HTTPS only (with localhost exception for dev)
+    - samesite=Lax: Allows top-level navigations (OAuth callbacks) but blocks CSRF
+    - State parameter validation: Prevents CSRF attacks
+    - PKCE flow: Prevents authorization code interception
+    - Nonce validation: Prevents token replay attacks
+    """
     config = get_config()
     return {
         "httponly": True,
         "secure": config.app.environment == "production",
-        "samesite": "lax",
+        "samesite": "lax",  # Sufficient for OAuth redirect flows
         "path": "/",
     }
 

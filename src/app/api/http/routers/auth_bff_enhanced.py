@@ -39,7 +39,6 @@ from src.app.runtime.context import get_config
 router_bff = APIRouter(prefix="/web", tags=["auth-bff"])
 
 
-
 class AuthState(BaseModel):
     """Current authentication state for web clients."""
 
@@ -80,7 +79,7 @@ def _get_secure_cookie_settings() -> dict[str, Any]:
 @router_bff.get("/login")
 async def initiate_login(
     request: Request,
-    provider: str = "default",
+    provider: str | None = None,
     return_to: str | None = None,  # post-login navigation (NOT IdP redirect_uri)
     auth_session_service: AuthSessionService = Depends(get_auth_session_service),
 ) -> RedirectResponse:
@@ -90,6 +89,9 @@ async def initiate_login(
     Redirects to the identity provider's authorization endpoint.
     """
     config = get_config()
+
+    if not provider:
+        provider = config.oidc.default_provider
 
     if provider not in config.oidc.providers:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
@@ -104,7 +106,7 @@ async def initiate_login(
 
     # Sanitize post-login return destination. Prefer relative paths; allowlist absolute if configured.
     safe_return_uri = sanitize_return_url(
-        return_to or "/",
+        return_to or "/auth/web/debug",
         allowed_hosts=getattr(config.oidc, "allowed_redirect_hosts", None),
     )
 
@@ -292,7 +294,9 @@ async def handle_callback(
         return response
 
 
-@router_bff.post("/logout", dependencies=[Depends(enforce_origin), Depends(require_csrf)])
+@router_bff.post(
+    "/logout", dependencies=[Depends(enforce_origin), Depends(require_csrf)]
+)
 async def logout(
     request: Request,
     response: Response,
@@ -324,7 +328,7 @@ async def logout(
         ):
             provider_config = get_config().oidc.providers[user_session.provider]
             logout_params = {
-                "post_logout_redirect_uri": get_config().app.base_url,
+                "post_logout_redirect_uri": "auth/web/debug",
                 "client_id": provider_config.client_id,
             }
             logout_url = (
@@ -361,7 +365,9 @@ async def get_auth_state(
     )
 
 
-@router_bff.post("/refresh", dependencies=[Depends(enforce_origin), Depends(require_csrf)])
+@router_bff.post(
+    "/refresh", dependencies=[Depends(enforce_origin), Depends(require_csrf)]
+)
 async def refresh_session(
     request: Request,
     response: Response,
@@ -414,3 +420,68 @@ async def refresh_session(
         response.delete_cookie("user_session_id", path="/")
         logger.exception("Session refresh failed")
         raise HTTPException(status_code=401, detail="Session refresh failed") from None
+
+
+# Debugging endpoint to serve as a default return_to for OIDC callbacks. Displays auth state and renders a simple interface with a logout button.
+@router_bff.get("/debug")
+async def debug_page(
+    request: Request,
+    auth_state: AuthState = Depends(get_auth_state),
+) -> Response:
+    """Simple debug page to display auth state and provide logout button."""
+    import json
+
+    csrf_token = auth_state.csrf_token or ""
+    # Use Pydantic v2 method: model_dump() returns dict, then json.dumps() formats it
+    auth_json = json.dumps(auth_state.model_dump(), indent=2)
+
+    # Build logout button with JavaScript to send CSRF token as header
+    logout_button = ""
+    if auth_state.authenticated:
+        logout_button = f"""
+            <form id="logoutForm" method="POST" action="/auth/web/logout">
+                <button type="submit">Logout</button>
+            </form>
+            <script>
+                document.getElementById('logoutForm').addEventListener('submit', async function(e) {{
+                    e.preventDefault();
+                    try {{
+                        const response = await fetch('/auth/web/logout', {{
+                            method: 'POST',
+                            headers: {{
+                                'X-CSRF-Token': '{csrf_token}',
+                                'Content-Type': 'application/json'
+                            }},
+                            credentials: 'same-origin'
+                        }});
+
+                        if (response.ok) {{
+                            const data = await response.json();
+                            // If provider logout URL is provided, redirect to it
+                            if (data.provider_logout_url) {{
+                                window.location.href = data.provider_logout_url;
+                            }} else {{
+                                // Otherwise just reload the page to show logged-out state
+                                window.location.reload();
+                            }}
+                        }} else {{
+                            alert('Logout failed: ' + response.statusText);
+                        }}
+                    }} catch (error) {{
+                        alert('Logout error: ' + error.message);
+                    }}
+                }});
+            </script>
+        """
+
+    html_content = f"""
+    <html>
+        <head><title>Auth Debug Page</title></head>
+        <body>
+            <h1>Authentication State</h1>
+            <pre>{auth_json}</pre>
+            {logout_button}
+        </body>
+    </html>
+    """
+    return Response(content=html_content, media_type="text/html")

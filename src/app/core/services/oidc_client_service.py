@@ -97,7 +97,7 @@ class OidcClientService:
                 # Validate ID token and extract claims
                 return await self._jwt_verify.verify_jwt(id_token)
             except Exception as e:
-                logger.debug(f"ID token validation failed: {e}")
+                logger.warning(f"ID token validation failed: {e}")
                 # Fall back to userinfo endpoint if ID token validation fails
                 pass
 

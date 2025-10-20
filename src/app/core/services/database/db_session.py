@@ -25,9 +25,10 @@ class DbSessionService:
             # Performance optimizations
             "pool_pre_ping": True,  # Validate connections before use
             "pool_reset_on_return": "commit",  # Auto-commit on connection return
-            # Logging - disable echo in production for performance
-            "echo": main_config.app.environment != "production",
-            "echo_pool": main_config.app.environment == "development",
+            # Logging - disable SQL echo for cleaner logs
+            # Set to True only when debugging specific SQL issues
+            "echo": False,
+            "echo_pool": False,
             # Connection behavior
             "connect_args": self._get_connect_args(main_config),
         }

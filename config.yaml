@@ -131,7 +131,7 @@ config:
     level: "${LOG_LEVEL:-DEBUG}"
     format: "${LOG_FORMAT:-json}" # Options: "json", "plain"
     file: "${LOG_FILE:-logs/app.log}"
-    max_size_mb: 10
+    max_size_mb: 5
     backup_count: 5
   app:
     environment: "${APP_ENVIRONMENT:-development}" # Options: "development", "testing", "production"

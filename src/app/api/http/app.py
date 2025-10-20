@@ -1,14 +1,16 @@
 """FastAPI application factory and setup."""
 
 import asyncio
-import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException, RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from src.app.api.http.app_data import ApplicationDependencies, DbSessionService
 from src.app.api.http.middleware.limiter import (
@@ -17,6 +19,7 @@ from src.app.api.http.middleware.limiter import (
 )
 from src.app.api.http.routers.auth import router_jit
 from src.app.api.http.routers.auth_bff_enhanced import router_bff
+from src.app.api.utils.app_startup import configure_logging
 from src.app.core.services import (
     AuthSessionService,
     JWKSCacheInMemory,
@@ -29,15 +32,13 @@ from src.app.core.services import (
 from src.app.core.storage.session_storage import get_session_storage
 from src.app.runtime.context import get_config
 
-# main_config = get_config()
+# Load configuration
+main_config = get_config()
 
-# --- Logging ---
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# Reduce SQLAlchemy logging verbosity
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
+# Initialize logging
+configure_logging()
+
 
 # --- Rate limiter dependencies ---
 try:
@@ -113,28 +114,97 @@ app.add_middleware(
 
 # --- Request logging middleware ---
 @app.middleware("http")
+@app.middleware("http")
 async def log_requests(request: Request, call_next):
-    # Ensure every request is tagged with an ID for debugging and metrics
-    rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    # Correlation / tracing
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+
+    # Prefer proxy headers if you run behind a reverse proxy (set up trust chain!)
+    xff = request.headers.get("x-forwarded-for")
+    client_ip = (
+        xff.split(",")[0].strip()
+        if xff
+        else request.client.host
+        if request.client
+        else "unknown"
+    )
+
+    # query strings may contain secrets; omit or sanitize if needed
+    # query = request.url.query or ""
+
+    base_ctx = {
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        #"query": query,
+        "client_ip": client_ip,
+        "user_agent": request.headers.get("user-agent", "unknown"),
+        "http_version": request.scope.get("http_version", "1.1"),
+        "scheme": request.url.scheme,
+        "host": request.headers.get("host", request.url.hostname or "-"),
+        # route name can be handy for metrics/aggregation
+        "route_name": getattr(request.scope.get("route"), "name", None),
+    }
+
     start = time.perf_counter()
     response = None
-    try:
-        # Delegate to downstream handlers while tracking execution time
-        response = await call_next(request)
-        return response
-    finally:
-        duration_ms = (time.perf_counter() - start) * 1000
-        status_code = getattr(response, "status_code", "ERR")
-        logger.info(
-            "rid=%s %s %s -> %s in %.1fms",
-            rid,
-            request.method,
-            request.url.path,
-            status_code,
-            duration_ms,
-        )
-        if response is not None:
-            response.headers.setdefault("X-Request-ID", rid)
+
+    # Everything that logs within this block inherits base_ctx
+    with logger.contextualize(**base_ctx):
+        try:
+            logger.info("request.start")
+            response = await call_next(request)
+
+            duration_ms = (time.perf_counter() - start) * 1000
+            logger.bind(
+                status_code=response.status_code,
+                duration_ms=round(duration_ms, 1),
+            ).info("request.end")
+
+            # Attach correlation id
+            response.headers.setdefault("X-Request-ID", request_id)
+            return response
+
+        except HTTPException as exc:
+            # Let FastAPI semantics through, but log once with context.
+            duration_ms = (time.perf_counter() - start) * 1000
+            logger.bind(
+                status_code=exc.status_code,
+                duration_ms=round(duration_ms, 1),
+                error_type=type(exc).__name__,
+            ).exception("request.error")
+            # Avoid duplicate logs from ServerErrorMiddleware by returning here.
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail, "request_id": request_id},
+                headers={"X-Request-ID": request_id},
+            )
+
+        except RequestValidationError as exc:
+            duration_ms = (time.perf_counter() - start) * 1000
+            logger.bind(
+                status_code=422,
+                duration_ms=round(duration_ms, 1),
+                error_type=type(exc).__name__,
+            ).exception("request.validation_error")
+            return JSONResponse(
+                status_code=422,
+                content={"detail": exc.errors(), "request_id": request_id},
+                headers={"X-Request-ID": request_id},
+            )
+
+        except Exception as exc:
+            duration_ms = (time.perf_counter() - start) * 1000
+            logger.bind(
+                status_code=500,
+                duration_ms=round(duration_ms, 1),
+                error_type=type(exc).__name__,
+            ).exception("request.error")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal Server Error", "request_id": request_id},
+                headers={"X-Request-ID": request_id},
+            )
 
 
 # --- Router registration ---
@@ -174,7 +244,9 @@ async def _initialize_rate_limiter() -> None:
     try:
         logger.info("Initializing FastAPI limiter with Redis: %s", config.redis.url)
         client = redis_async.from_url(
-            config.redis.connection_string, encoding="utf-8", decode_responses=config.redis.decode_responses
+            config.redis.connection_string,
+            encoding="utf-8",
+            decode_responses=config.redis.decode_responses,
         )
         await FastAPILimiter.init(client)
         app.state.redis = client
@@ -218,9 +290,9 @@ async def startup() -> None:
                 secret_vars.append(f"{key}: {value}")
 
     if secret_vars:
-        #logger.info("Found secret environment variables:")
+        # logger.info("Found secret environment variables:")
         for var in sorted(secret_vars):
-            logger.info("  %s", var)
+            logger.info("  {}", var)
     else:
         logger.warning("No secret environment variables found!")
 
@@ -239,20 +311,28 @@ async def startup() -> None:
                         file_content = f.read()
                     matches = env_value == file_content
                     logger.info(
-                        "%s: ENV='%s...' FILE='%s...' MATCH=%s",
+                        "{}: ENV='{}...' FILE='{}...' MATCH={}",
                         base_name,
                         env_value[:5],
                         file_content[:5],
                         matches,
                     )
                 except Exception as e:
-                    logger.error("Failed to read %s: %s", value, e)
+                    logger.error("Failed to read {}: {}", value, e)
 
     # Specifically check for key passwords
     postgres_password = os.getenv("POSTGRES_PASSWORD", "")
     redis_password = os.getenv("REDIS_PASSWORD", "")
-    logger.info("POSTGRES_PASSWORD available: %s", "YES" if postgres_password else "NO")
-    logger.info("REDIS_PASSWORD available: %s", "YES" if redis_password else "NO")
+    if postgres_password:
+        logger.info("POSTGRES_PASSWORD available")
+    else:
+        logger.warning("POSTGRES_PASSWORD not set")
+
+    if redis_password:
+        logger.info("REDIS_PASSWORD available")
+    else:
+        logger.warning("REDIS_PASSWORD not set")
+
     logger.info("=== END DEBUG ===")
 
     jwks_cache = JWKSCacheInMemory()
@@ -279,7 +359,7 @@ async def startup() -> None:
     app.state.app_dependencies = deps
 
     config = get_config()
-    logger.info("Starting up application in %s environment", config.app.environment)
+    logger.info("Starting up application in {} environment", config.app.environment)
     # Validate configuration so we fail fast on misconfiguration
 
     # Verify JWKS endpoints so auth failures surface early
@@ -330,5 +410,13 @@ async def readiness() -> dict[str, str]:
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-    """Readiness check endpoint."""
+    # Let uvicorn use its default logging, but our InterceptHandler will:
+    # - Keep INFO/WARNING logs (startup, shutdown, connection issues)
+    # - Drop ERROR logs (duplicate exceptions)
+    # - Drop access logs (we handle in middleware)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        access_log=False,  # We handle access logging in middleware
+    )

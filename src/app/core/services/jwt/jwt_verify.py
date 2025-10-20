@@ -75,9 +75,8 @@ class JwtVerificationService:
             if provider_cfg is None:
                 raise HTTPException(status_code=401, detail=f"Unknown issuer: {pv.iss}")
 
-            # audience allowlist. If not explicitly given, use config audiences or client_id
-            aud = expected_audience or cfg.jwt.audiences or provider_cfg.client_id
-            aud_values = _as_list(aud)
+            # audience allowlist. Combine configured audiences with client_id
+            aud_values = _as_list(expected_audience) + _as_list(cfg.jwt.audiences) + _as_list(provider_cfg.client_id)
             if not aud_values:
                 raise HTTPException(
                     status_code=401, detail="No expected audience configured"

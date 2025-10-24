@@ -152,12 +152,43 @@ services:
     image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
     networks: [backend]
     environment:
-      TEMPORAL_CLI_ADDRESS: temporal:7233
+      TEMPORAL_ADDRESS: temporal:7233
 
+
+  temporal-namespace-init:
+    image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    entrypoint: []  # Override the default 'sleep infinity' entrypoint
+    command: >
+      sh -lc '
+        set -e
+        echo "[init] waiting for cluster health...";
+        for i in $(seq 1 60); do
+          temporal --command-timeout 2s operator cluster health && break || sleep 2
+        done
+        echo "[init] describing namespace...";
+        if temporal operator namespace describe -n default >/dev/null 2>&1; then
+          echo "[init] namespace already exists";
+        else
+          echo "[init] creating namespace...";
+          temporal operator namespace create -n default --retention 7d
+          echo "[init] created";
+        fi
+      '
+    restart: "no"
+    networks:
+      - backend
 
   # Temporal Workflow Engine
   temporal:
-    image: temporalio/server:1.29.0
+    build:
+      context: .
+      dockerfile: ./docker/prod/temporal/Dockerfile
+    image: my-temporal-server:1.29.0
     depends_on:
       postgres:
         condition: service_healthy
@@ -173,15 +204,22 @@ services:
       SQL_CA: /run/secrets/ca-bundle.crt
       SQL_HOST_VERIFICATION: "false"
       SQL_HOST_NAME: postgres
+      BIND_ON_IP: "0.0.0.0"
 
       #Performance Tuning (optional)
       NUM_HISTORY_SHARDS: 64
 
-
+      # Temporal DB settings
       DBNAME: ${TEMPORAL_DB:-temporal}
       VISIBILITY_DBNAME: ${TEMPORAL_VIS_DB:-temporal_visibility}
-
       DB_PORT: 5432
+    healthcheck:
+      # Probes Temporal's gRPC health endpoint on the frontend (7233)
+      test: ["CMD", "grpc_health_probe", "-addr=127.0.0.1:7233", "-service=temporal.api.workflowservice.v1.WorkflowService"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
 
     volumes:
       - temporal_certs:/etc/temporal/certs
@@ -193,8 +231,8 @@ services:
       - source: postgres_server_ca
         target: ca-bundle.crt
         mode: 0400
-
-
+    ports:
+      - 127.0.0.1:7233:7233
     entrypoint: ["/opt/entry/scripts/entrypoint.sh"]
     networks:
       - backend
@@ -213,8 +251,6 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
-
-
 
 # Volume Configuration
 volumes:

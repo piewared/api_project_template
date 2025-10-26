@@ -60,7 +60,7 @@ async def _run_workers(
             timeout=drain_timeout,
         )
         logger.info("Workers drained cleanly.")
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning("Drain timed out after {}s; cancelling run loops.", drain_timeout)
         for t in run_tasks:
             t.cancel()

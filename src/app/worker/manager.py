@@ -241,7 +241,7 @@ class TemporalWorkerManager:
                 timeout=drain_timeout,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Drain took too long — cancel run loops so process can exit
             for t in run_tasks:
                 t.cancel()

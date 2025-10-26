@@ -1,7 +1,5 @@
 import asyncio
 import uuid
-from datetime import timedelta
-from time import sleep
 
 from loguru import logger
 from temporalio.client import Client

@@ -8,6 +8,7 @@ x-entrypoint-common-vars: &entrypoint-common-vars
 
 services:
   postgres:
+    container_name: api-template-postgres-prod
     image: app_data_postgres_image
     build:
       context: ./docker/prod
@@ -88,6 +89,7 @@ services:
   
   # Redis Cache/Session Store
   redis:
+    container_name: api-template-redis-prod
     image: app_data_redis_image
     build:
       context: ./docker/prod/redis
@@ -118,6 +120,7 @@ services:
           memory: 128M
 
   temporal-schema-setup:
+    container_name: api-template-temporal-schema-setup-prod
     image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
     depends_on:
       postgres:
@@ -156,6 +159,7 @@ services:
 
 
   temporal-namespace-init:
+    container_name: api-template-temporal-namespace-init-prod
     image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
     depends_on:
       temporal:
@@ -185,6 +189,7 @@ services:
 
   # Temporal Workflow Engine
   temporal:
+    container_name: api-template-temporal-prod
     build:
       context: .
       dockerfile: ./docker/prod/temporal/Dockerfile
@@ -251,6 +256,19 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+
+  temporal-web:
+    container_name: api-template-temporal-ui-prod
+    image: temporalio/ui:2.34.0
+    depends_on:
+      - temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      #- TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    networks:
+      - backend
+    ports:
+      - 8081:8080
 
 # Volume Configuration
 volumes:

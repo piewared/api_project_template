@@ -28,7 +28,7 @@ services:
     networks:
       - dev-network
     ports:
-      - 7233:7233
+      - 7234:7233
   temporal-ui:
     container_name: api-template-temporal-ui
     depends_on:

@@ -21,7 +21,7 @@ config:
     password_environment_variable: "${DATABASE_PASSWORD_ENV_VAR:-DB_PASSWORD}"
   temporal:
     enabled: true
-    url: "${TEMPORAL_ADDRESS:-temporal:7233}"
+    url: "${TEMPORAL_URL:-temporal:7233}"
     namespace: "default"
     task_queue: "default"
     worker:

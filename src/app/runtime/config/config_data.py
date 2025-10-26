@@ -86,6 +86,7 @@ class TemporalWorkerConfig(BaseModel):
 class TemporalConfig(BaseModel):
     """Temporal configuration model."""
 
+    tls: bool = Field(default=False, description="Enable TLS for Temporal connection")
     enabled: bool = Field(default=True, description="Enable temporal service")
     url: str = Field(default="temporal:7233", description="Temporal server url")
     namespace: str = Field(default="default", description="Temporal namespace")

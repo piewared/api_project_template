@@ -1,4 +1,5 @@
 # worker/workflows/order_workflow.py
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -56,6 +57,7 @@ class OrderProcessingWorkflow(BaseWorkflow[OrderInput, OrderOutput]):
         Note: Return type is strongly typed with Pydantic model.
         """
         self._status = "processing"
+        await asyncio.sleep(1)  # yield control to event loop
 
         try:
             # Check if cancelled before starting

@@ -24,6 +24,19 @@ config:
     url: "${TEMPORAL_URL:-temporal:7233}"
     namespace: "default"
     task_queue: "default"
+    workflows:
+      execution_timeout_s: 86400  # 24 hours. Maximum time a workflow execution can run. Includes retries and continue as new.
+      run_timeout_s: 7200  # 2 hours. Maximum time for a single run of a workflow (before retries).
+      task_timeout_s: 10  # 10 seconds. Maximum time to complete a workflow task.
+    activities:
+      start_to_close_timeout_s: 1200  # 20 minutes. Limits the maximum execution time of a single execution of an activity.
+      schedule_to_close_timeout_s: 3600  # 1 hour. Limits the total time allotted for an activity from scheduling to completion. Includes retries.
+      heartbeat_timeout_s: 300  # 5 minutes. If an activity does not report progress within this time, it is considered failed.
+      retry:
+        maximum_attempts: 5
+        initial_interval_seconds: 5
+        backoff_coefficient: 2.0
+        maximum_interval_seconds: 60
     worker:
       enabled: true
       activities_per_second: 10

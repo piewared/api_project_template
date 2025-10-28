@@ -48,3 +48,21 @@ async def send_notification(email: str, message: str) -> bool:
     await asyncio.sleep(0.5)
     print(f"Sending email to {email}: {message}")
     return True
+
+
+@activity_defn(queue="example")
+async def long_running_activity(duration_seconds: int) -> str:
+    """
+    A long-running activity for testing cancellation.
+
+    This activity sleeps for the specified duration, making it easy to
+    test activity cancellation by sending a cancel signal during execution.
+
+    Args:
+        duration_seconds: How long the activity should run
+
+    Returns:
+        A completion message
+    """
+    await asyncio.sleep(duration_seconds)
+    return f"Completed after {duration_seconds} seconds"

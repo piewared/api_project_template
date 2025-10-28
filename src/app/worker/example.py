@@ -3,6 +3,7 @@ import uuid
 
 from loguru import logger
 from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.service import TLSConfig
 
 from src.app.runtime.context import get_config
@@ -41,6 +42,7 @@ async def example_1_execute_workflow_blocking() -> None:
         temporal_config.url,
         namespace=temporal_config.namespace,
         tls=tls or False,
+        data_converter=pydantic_data_converter,
     )
 
     # Create input with strong typing

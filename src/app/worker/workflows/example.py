@@ -42,9 +42,11 @@ class OrderProcessingWorkflow(BaseWorkflow[OrderInput, OrderOutput]):
     - Strongly typed workflow method
     - Signal handlers for external events
     - Query handlers for state inspection
+    - Activity tracking and cancellation
     """
 
     def __init__(self) -> None:
+        super().__init__()  # Initialize BaseWorkflow tracking
         self._status: str = "initialized"
         self._cancelled: bool = False
         self._cancel_reason: str | None = None
@@ -70,8 +72,8 @@ class OrderProcessingWorkflow(BaseWorkflow[OrderInput, OrderOutput]):
                     message=f"Order cancelled: {self._cancel_reason}",
                 )
 
-            # Execute payment activity with strong typing
-            payment_result = await workflow.execute_activity(
+            # Execute payment activity with strong typing - using BaseWorkflow method
+            payment_result = await self.execute_activity(
                 process_payment,
                 PaymentInput(order_id=input.order_id, amount=input.amount),
                 start_to_close_timeout=timedelta(seconds=30),
@@ -95,8 +97,8 @@ class OrderProcessingWorkflow(BaseWorkflow[OrderInput, OrderOutput]):
 
             self._status = "payment_completed"
 
-            # Send notification
-            await workflow.execute_activity(
+            # Send notification - using BaseWorkflow method
+            await self.execute_activity(
                 send_notification,
                 args=[
                     input.customer_email,
@@ -129,10 +131,13 @@ class OrderProcessingWorkflow(BaseWorkflow[OrderInput, OrderOutput]):
         Signal handler to cancel the order.
 
         Note: Signals can be sent while workflow is running.
+        This will cancel all in-flight activities via BaseWorkflow.
         """
         self._cancelled = True
         self._cancel_reason = reason
         self._status = f"cancelling: {reason}"
+        # Call parent's cancel to cancel all tracked activities
+        super().cancel()
 
     @workflow.signal(name="update_status")
     async def update_status(self, new_status: str) -> None:

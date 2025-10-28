@@ -9,6 +9,7 @@ from collections.abc import Sequence
 import typer
 from loguru import logger
 from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 try:
@@ -140,6 +141,7 @@ def serve(
             temporal_config.url,
             namespace=temporal_config.namespace,
             tls=tls or False,
+            data_converter=pydantic_data_converter,
         )
         try:
             await _run_workers(manager, client, queues, drain_timeout)

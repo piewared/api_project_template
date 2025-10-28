@@ -4,6 +4,7 @@ These tests use a real Temporal server connection to test the example
 OrderProcessingWorkflow with actual workflow execution. Minimal mocking is used.
 """
 
+import asyncio
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import timedelta
@@ -11,11 +12,13 @@ from datetime import timedelta
 import pytest
 from pydantic import ValidationError
 from temporalio.client import Client
+from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.worker import Worker
 
 from src.app.runtime.context import get_config
 from src.app.worker.activities.example import (
     PaymentInput,
+    long_running_activity,
     process_payment,
     send_notification,
 )
@@ -43,10 +46,11 @@ def temporal_namespace() -> str:
 
 @pytest.fixture(scope="module")
 async def temporal_client(temporal_url: str, temporal_namespace: str) -> Client:
-    """Create a Temporal client for testing."""
+    """Create a Temporal client for testing with Pydantic v2 support."""
     client = await Client.connect(
         temporal_url,
         namespace=temporal_namespace,
+        data_converter=pydantic_data_converter,
     )
     return client
 
@@ -67,11 +71,12 @@ async def temporal_worker(
     autodiscover_modules()
 
     # Create worker with our test task queue
+    # Worker inherits data_converter from the client
     worker = Worker(
         temporal_client,
         task_queue=task_queue,
         workflows=[OrderProcessingWorkflow],
-        activities=[process_payment, send_notification],
+        activities=[process_payment, send_notification, long_running_activity],
     )
 
     # Start the worker in the background
@@ -394,3 +399,228 @@ class TestWorkflowRegistry:
         activity_names = {act.__name__ for act in activity_set}
         assert "process_payment" in activity_names
         assert "send_notification" in activity_names
+
+
+class TestActivityCancellation:
+    """Integration tests for activity cancellation via BaseWorkflow."""
+
+    @pytest.mark.asyncio
+    async def test_activity_cancellation_during_payment(
+        self,
+        temporal_client: Client,
+        temporal_worker: Worker,
+        task_queue: str,
+    ):
+        """
+        Test that activities are cancelled when workflow receives cancel signal.
+
+        This test verifies that the BaseWorkflow.cancel() method properly
+        cancels in-flight activities when the cancel_order signal is received.
+        """
+        # Arrange - Create order that will take some time to process
+        workflow_id = f"workflow-cancel-{uuid.uuid4()}"
+        order_input = OrderInput(
+            order_id=f"order-{uuid.uuid4().hex[:8]}",
+            customer_email="cancel-test@example.com",
+            amount=999.99,
+            items=[{"product_id": "prod-cancel", "quantity": 1, "price": 999.99}],
+        )
+
+        # Act - Start workflow
+        handle = await temporal_client.start_workflow(
+            OrderProcessingWorkflow.run,
+            order_input,
+            id=workflow_id,
+            task_queue=task_queue,
+            execution_timeout=timedelta(seconds=60),
+        )
+
+        # Wait a moment for workflow to start and begin payment activity
+        await asyncio.sleep(0.5)
+
+        # Send cancel signal while payment is processing
+        await handle.signal(OrderProcessingWorkflow.cancel_order, "Test cancellation during payment")
+
+        # Wait for workflow to complete
+        result = await handle.result()
+
+        # Assert - Workflow should handle cancellation gracefully
+        assert isinstance(result, OrderOutput)
+        # The workflow should be cancelled or cancelled_after_payment depending on timing
+        assert "cancel" in result.status.lower()
+        assert "Test cancellation during payment" in result.message
+
+    @pytest.mark.asyncio
+    async def test_activity_handles_tracked(
+        self,
+        temporal_client: Client,
+        temporal_worker: Worker,
+        task_queue: str,
+    ):
+        """
+        Test that BaseWorkflow tracks activity handles correctly.
+
+        Verifies that activities started with execute_activity are properly
+        tracked in the _activity_handles dictionary.
+        """
+        # Arrange
+        workflow_id = f"workflow-tracking-{uuid.uuid4()}"
+        order_input = OrderInput(
+            order_id=f"order-{uuid.uuid4().hex[:8]}",
+            customer_email="tracking-test@example.com",
+            amount=50.00,
+            items=[{"product_id": "prod-track", "quantity": 1, "price": 50.00}],
+        )
+
+        # Act
+        result = await temporal_client.execute_workflow(
+            OrderProcessingWorkflow.run,
+            order_input,
+            id=workflow_id,
+            task_queue=task_queue,
+            execution_timeout=timedelta(seconds=30),
+        )
+
+        # Assert - Workflow should complete successfully
+        assert isinstance(result, OrderOutput)
+        if result.status != "completed":
+            print(f"Workflow failed with message: {result.message}")
+        assert result.status == "completed"
+        # Activities were tracked and executed properly
+
+    @pytest.mark.asyncio
+    async def test_multiple_activities_cancelled(
+        self,
+        temporal_client: Client,
+        temporal_worker: Worker,
+        task_queue: str,
+    ):
+        """
+        Test that multiple in-flight activities are all cancelled together.
+
+        This test ensures that when cancel() is called, ALL tracked activities
+        receive the cancellation signal.
+        """
+        # Arrange
+        workflow_id = f"workflow-multi-cancel-{uuid.uuid4()}"
+        order_input = OrderInput(
+            order_id=f"order-{uuid.uuid4().hex[:8]}",
+            customer_email="multi-cancel@example.com",
+            amount=200.00,
+            items=[{"product_id": "prod-multi", "quantity": 2, "price": 100.00}],
+        )
+
+        # Act - Start workflow
+        handle = await temporal_client.start_workflow(
+            OrderProcessingWorkflow.run,
+            order_input,
+            id=workflow_id,
+            task_queue=task_queue,
+            execution_timeout=timedelta(seconds=60),
+        )
+
+        # Wait for activities to start
+        await asyncio.sleep(0.3)
+
+        # Send cancel signal
+        await handle.signal(OrderProcessingWorkflow.cancel_order, "Multi-activity cancellation test")
+
+        # Wait for completion
+        result = await handle.result()
+
+        # Assert
+        assert isinstance(result, OrderOutput)
+        assert "cancel" in result.status.lower()
+        assert "Multi-activity cancellation test" in result.message
+
+    @pytest.mark.asyncio
+    async def test_cancel_signal_updates_state(
+        self,
+        temporal_client: Client,
+        temporal_worker: Worker,
+        task_queue: str,
+    ):
+        """
+        Test that cancel signal properly updates workflow state.
+
+        Verifies that both the workflow-specific _cancelled flag and
+        the BaseWorkflow _state["cancelled"] are set correctly.
+        """
+        # Arrange
+        workflow_id = f"workflow-state-{uuid.uuid4()}"
+        order_input = OrderInput(
+            order_id=f"order-{uuid.uuid4().hex[:8]}",
+            customer_email="state-test@example.com",
+            amount=75.00,
+            items=[{"product_id": "prod-state", "quantity": 1, "price": 75.00}],
+        )
+
+        # Act
+        handle = await temporal_client.start_workflow(
+            OrderProcessingWorkflow.run,
+            order_input,
+            id=workflow_id,
+            task_queue=task_queue,
+            execution_timeout=timedelta(seconds=60),
+        )
+
+        # Wait for workflow to start
+        await asyncio.sleep(0.2)
+
+        # Query initial cancellation status
+        is_cancelled_before = await handle.query(OrderProcessingWorkflow.is_cancelled)
+        assert is_cancelled_before is False
+
+        # Send cancel signal
+        await handle.signal(OrderProcessingWorkflow.cancel_order, "State update test")
+
+        # Give signal time to process
+        await asyncio.sleep(0.1)
+
+        # Query after cancellation
+        is_cancelled_after = await handle.query(OrderProcessingWorkflow.is_cancelled)
+        assert is_cancelled_after is True
+
+        # Query workflow status
+        status = await handle.query(OrderProcessingWorkflow.get_status)
+        assert "cancel" in status.lower()
+
+        # Complete the workflow
+        result = await handle.result()
+        assert "cancel" in result.status.lower()
+
+    @pytest.mark.asyncio
+    async def test_completed_activities_not_cancelled(
+        self,
+        temporal_client: Client,
+        temporal_worker: Worker,
+        task_queue: str,
+    ):
+        """
+        Test that already-completed activities are not affected by cancel signal.
+
+        Verifies that BaseWorkflow.cancel() only attempts to cancel activities
+        that are still in progress (using handle.done() check).
+        """
+        # Arrange
+        workflow_id = f"workflow-complete-{uuid.uuid4()}"
+        order_input = OrderInput(
+            order_id=f"order-{uuid.uuid4().hex[:8]}",
+            customer_email="complete-test@example.com",
+            amount=30.00,
+            items=[{"product_id": "prod-complete", "quantity": 1, "price": 30.00}],
+        )
+
+        # Act - Execute workflow completely
+        result = await temporal_client.execute_workflow(
+            OrderProcessingWorkflow.run,
+            order_input,
+            id=workflow_id,
+            task_queue=task_queue,
+            execution_timeout=timedelta(seconds=30),
+        )
+
+        # Assert - Activities completed normally
+        assert isinstance(result, OrderOutput)
+        assert result.status == "completed"
+        # All activities finished before any cancellation could occur

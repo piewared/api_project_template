@@ -83,9 +83,72 @@ class TemporalWorkerConfig(BaseModel):
     worker_build_id: str = Field(default="api-worker-1", description="Worker build ID")
 
 
+class TemporalyRetryConfig(BaseModel):
+    """Temporal activity retry policy configuration model."""
+
+    maximum_attempts: int = Field(
+        default=5,
+        description="Maximum number of retry attempts for activities",
+    )
+    initial_interval_seconds: int = Field(
+        default=5,
+        description="Initial interval in seconds between retries",
+    )
+    backoff_coefficient: float = Field(
+        default=2.0,
+        description="Backoff coefficient for retry intervals",
+    )
+    maximum_interval_seconds: int = Field(
+        default=60,
+        description="Maximum interval in seconds between retries",
+    )
+
+
+class TemporalActivitiesConfig(BaseModel):
+    """Temporal activities configuration model."""
+
+    start_to_close_timeout_s: int = Field(
+        default=1200,
+        description="Start to close timeout in seconds for activities",
+    )
+    schedule_to_close_timeout_s: int = Field(
+        default=3600,
+        description="Schedule to close timeout in seconds for activities. Includes retries",
+    )
+    heartbeat_timeout_s: int = Field(
+        default=300,
+        description="Heartbeat timeout in seconds for activities",
+    )
+    retry: TemporalyRetryConfig = Field(
+        default_factory=lambda: TemporalyRetryConfig(),
+        description="Retry policy for activities",
+    )
+
+
+class TemporalWorkflowsConfig(BaseModel):
+    """Temporal workflows configuration model."""
+
+    execution_timeout_s: int = Field(
+        default=86400,
+        description="Total workflow execution timeout including retries and continue as new",
+    )
+    run_timeout_s: int = Field(
+        default=7200,
+        description="Timeout of a single workflow run.",
+    )
+    task_timeout_s: int = Field(
+        default=10,
+        description="Timeout of a single workflow task.",
+    )
+    retry: TemporalyRetryConfig = Field(
+        default_factory=lambda: TemporalyRetryConfig(),
+        description="Retry policy for workflows",
+    )
+
 class TemporalConfig(BaseModel):
     """Temporal configuration model."""
 
+    tls: bool = Field(default=False, description="Enable TLS for Temporal connection")
     enabled: bool = Field(default=True, description="Enable temporal service")
     url: str = Field(default="temporal:7233", description="Temporal server url")
     namespace: str = Field(default="default", description="Temporal namespace")
@@ -93,6 +156,14 @@ class TemporalConfig(BaseModel):
     worker: TemporalWorkerConfig = Field(
         default_factory=TemporalWorkerConfig, description="Worker configuration"
     )
+    activities: TemporalActivitiesConfig = Field(
+        default_factory=TemporalActivitiesConfig, description="Activities configuration"
+    )
+    workflows: TemporalWorkflowsConfig = Field(
+        default_factory=TemporalWorkflowsConfig, description="Workflows configuration"
+    )
+
+
 
 
 class RedisConfig(BaseModel):

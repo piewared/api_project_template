@@ -2,10 +2,10 @@
 
 import typer
 from rich.console import Console
-from rich.table import Table
 from rich.prompt import Confirm
+from rich.table import Table
 
-from ..keycloak_client import KeycloakClient
+from src.dev.keycloak_client import KeycloakClient
 
 console = Console()
 

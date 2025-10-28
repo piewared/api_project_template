@@ -9,7 +9,7 @@ from dotenv.main import load_dotenv
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from ..dev_utils import (
+from src.dev.dev_utils import (
     check_container_running,
     check_docker_running,
     check_postgres_status,
@@ -18,6 +18,7 @@ from ..dev_utils import (
     run_keycloak_setup,
     wait_for_keycloak,
 )
+
 from .user_commands import users_app
 from .utils import console, get_dev_dir, get_project_root, run_command
 
@@ -149,9 +150,15 @@ def start_env(
             keycloak_running or postgres_running or redis_running or temporal_running
         ):
             console.print("[yellow]Stopping existing containers...[/yellow]")
-            run_command(["docker", "compose", "-f", "docker-compose.dev.yml", "down"], cwd=project_root_dir)
+            run_command(
+                ["docker", "compose", "-f", "docker-compose.dev.yml", "down"],
+                cwd=project_root_dir,
+            )
 
-        run_command(["docker", "compose", "-f", "docker-compose.dev.yml", "up", "-d"], cwd=project_root_dir)
+        run_command(
+            ["docker", "compose", "-f", "docker-compose.dev.yml", "up", "-d"],
+            cwd=project_root_dir,
+        )
         progress.update(task1, completed=1)
 
         if not no_wait:
@@ -232,28 +239,131 @@ def start_env(
             else:
                 console.print("[yellow]⚠️  Temporal may not be fully ready yet[/yellow]")
 
-    load_dotenv()
-
-    app_db = os.getenv("APP_DB", "appdb")
-    app_user = os.getenv("APP_DB_USER", "appuser")
-    app_password = os.getenv("APP_DB_USER_PW", "devpass")
-
     console.print("\n[bold green]🎉 Development environment is ready![/bold green]")
-    console.print("\n[blue]Available services:[/blue]")
-    console.print("  • Keycloak: http://localhost:8080")
-    console.print("    - Admin console: http://localhost:8080/admin")
-    console.print("    - Username: admin, Password: admin")
-    console.print("    - Test realm: http://localhost:8080/realms/test-realm")
-    console.print("  • PostgreSQL: localhost:5433")
-    console.print(f"    - Database: {app_db} ({app_user}/{app_password})")
-    console.print("  • Redis: localhost:6380")
-    console.print("    - Connection: redis://localhost:6380")
-    console.print("    - Persistence: AOF enabled")
-    console.print("  • Temporal: localhost:7233")
-    console.print("    - gRPC API: localhost:7233")
-    console.print("    - Web UI: http://localhost:8081")
-
+    status()
     console.print("\n[dim]Use 'cli dev start-server' to start the API server[/dim]")
+
+
+def _check_docker_status() -> bool:
+    """Check Docker daemon status."""
+    docker_running = check_docker_running()
+    status_text = (
+        "[green]✅ Running[/green]" if docker_running else "[red]❌ Not running[/red]"
+    )
+    console.print(f"Docker: {status_text}")
+
+    if not docker_running:
+        console.print(
+            "[yellow]⚠️  Docker is not running. Please start Docker first.[/yellow]"
+        )
+
+    return docker_running
+
+
+def _check_keycloak_status() -> None:
+    """Check Keycloak container and health status."""
+    keycloak_running = check_container_running("api-template-keycloak-dev")
+    status_text = (
+        "[green]✅ Running[/green]" if keycloak_running else "[red]❌ Not running[/red]"
+    )
+    console.print(f"Keycloak: {status_text}")
+
+    if not keycloak_running:
+        return
+
+    # Check Keycloak health using master realm endpoint
+    try:
+        response = requests.get("http://localhost:8080/realms/master", timeout=5)
+        if response.status_code == 200:
+            console.print("  └─ Health: ✅ Ready")
+            console.print("  └─ Server: http://localhost:8080")
+            console.print("  └─ Admin UI: http://localhost:8080/admin/master/console/")
+        else:
+            console.print("  └─ Health: ⚠️  Not ready")
+            console.print("  └─ Server: http://localhost:8080")
+    except requests.exceptions.RequestException:
+        console.print("  └─ Health: ⚠️  Cannot connect")
+        console.print("  └─ Server: http://localhost:8080")
+
+
+def _check_postgres_status(
+    app_db: str, app_user: str, app_password: str, app_db_url: str
+) -> None:
+    """Check PostgreSQL container and connection status."""
+    postgres_running = check_container_running("api-template-postgres-dev")
+    status_text = (
+        "[green]✅ Running[/green]" if postgres_running else "[red]❌ Not running[/red]"
+    )
+    console.print(f"PostgreSQL: {status_text}")
+
+    if not postgres_running:
+        return
+
+    if check_postgres_status():
+        console.print("  └─ Health: ✅ Ready")
+        console.print(f"  └─ Server: {app_db_url}")
+        console.print(f"  └─ Database: {app_db}")
+        console.print(f"  └─ Username: {app_user}")
+        console.print(f"  └─ Password: {app_password}")
+        console.print(
+            f"  └─ Connection (localhost): "
+            f"[cyan]postgresql://{app_user}:{app_password}@localhost:5433/{app_db}[/cyan]"
+        )
+        console.print(
+            f"  └─ Connection (container): "
+            f"[cyan]postgresql://{app_user}:{app_password}@app_dev_postgres_db:5432/{app_db}[/cyan]"
+        )
+    else:
+        console.print("  └─ Health: ⚠️  Not ready")
+        console.print(f"  └─ Server: {app_db_url}")
+
+
+def _check_redis_status(redis_url: str) -> None:
+    """Check Redis container and connection status."""
+    redis_running = check_container_running("api-template-redis-dev")
+    status_text = (
+        "[green]✅ Running[/green]" if redis_running else "[red]❌ Not running[/red]"
+    )
+    console.print(f"Redis: {status_text}")
+
+    if not redis_running:
+        return
+
+    if check_redis_status():
+        console.print("  └─ Health: ✅ Ready")
+        console.print(f"  └─ Server: {redis_url}")
+    else:
+        console.print("  └─ Health: ⚠️  Not ready")
+        console.print(f"  └─ Server: {redis_url}")
+
+
+def _check_temporal_status(temporal_url: str) -> None:
+    """Check Temporal server and UI status."""
+    temporal_server_running = check_container_running("api-template-temporal-dev")
+    temporal_web_running = check_container_running("api-template-temporal-ui-dev")
+
+    status_text = (
+        "[green]✅ Running[/green]"
+        if temporal_server_running
+        else "[red]❌ Not running[/red]"
+    )
+    console.print(f"Temporal: {status_text}")
+
+    if not temporal_server_running:
+        return
+
+    if check_temporal_status():
+        console.print("  └─ Health: ✅ Ready")
+        console.print(f"  └─ Server: {temporal_url}")
+        console.print("  └─ Protocol: gRPC")
+    else:
+        console.print("  └─ Health: ⚠️  Not ready")
+        console.print(f"  └─ Server: {temporal_url}")
+
+    if temporal_web_running:
+        console.print("  └─ Web UI: ✅ http://localhost:8081")
+    else:
+        console.print("  └─ Web UI: ⚠️  Not running")
 
 
 @dev_app.command()
@@ -269,104 +379,25 @@ def status() -> None:
         )
     )
 
-    # Check Docker
-    docker_running = check_docker_running()
-    docker_status = (
-        "[green]✅ Running[/green]" if docker_running else "[red]❌ Not running[/red]"
-    )
-    console.print(f"Docker: {docker_status}")
+    load_dotenv()
 
-    if not docker_running:
-        console.print(
-            "[yellow]⚠️  Docker is not running. Please start Docker first.[/yellow]"
-        )
+    # Load environment configuration
+    app_db = os.getenv("APP_DB", "appdb")
+    app_user = os.getenv("APP_DB_USER", "appuser")
+    app_password = os.getenv("APP_DB_USER_PW", "devpass")
+    app_db_url = os.getenv("DEVELOPMENT_DATABASE_URL", "localhost:5433")
+    redis_url = os.getenv("DEVELOPMENT_REDIS_URL", "redis://localhost:6380")
+    temporal_url = os.getenv("DEVELOPMENT_TEMPORAL_URL", "localhost:7234")
+
+    # Check Docker first - exit early if not running
+    if not _check_docker_status():
         return
 
-    # Check Keycloak
-    keycloak_running = check_container_running("api-template-keycloak-dev")
-    keycloak_status = (
-        "[green]✅ Running[/green]" if keycloak_running else "[red]❌ Not running[/red]"
-    )
-    console.print(f"Keycloak: {keycloak_status}")
-
-    if keycloak_running:
-        # Check Keycloak health using master realm endpoint
-        try:
-            response = requests.get("http://localhost:8080/realms/master", timeout=5)
-            if response.status_code == 200:
-                console.print("  └─ Health: ✅ Ready")
-                console.print(
-                    "  └─ Admin UI: http://localhost:8080/admin/master/console/"
-                )
-            else:
-                console.print("  └─ Health: ⚠️  Not ready")
-        except requests.exceptions.RequestException:
-            console.print("  └─ Health: ⚠️  Cannot reach Keycloak")
-
-    # Check PostgreSQL
-    postgres_running = check_container_running("api-template-postgres-dev")
-    postgres_status = (
-        "[green]✅ Running[/green]" if postgres_running else "[red]❌ Not running[/red]"
-    )
-    console.print(f"PostgreSQL: {postgres_status}")
-
-    if postgres_running:
-        # Check PostgreSQL connection using utility function
-        if check_postgres_status():
-            console.print(
-                "[green]✅ PostgreSQL is running and accepting connections[/green]"
-            )
-            console.print("  └─ Connection: ✅ Ready")
-            console.print("  └─ Server: localhost:5433")
-            console.print("  └─ Username: appuser")
-            console.print("  └─ Password: devpass")
-            console.print("  └─ Database: appdb")
-            console.print("  └─ Connection String (localhost): [cyan]postgresql://appuser:devpass@localhost:5433/appdb[/cyan]")
-            console.print("  └─ Connection String (container): [cyan]postgresql://appuser:devpass@app_dev_postgres_db:5432/appdb[/cyan]")
-        else:
-            console.print("  └─ Connection: ⚠️  Not ready")
-
-    # Check Redis
-    redis_running = check_container_running("api-template-redis-dev")
-    redis_status = (
-        "[green]✅ Running[/green]" if redis_running else "[red]❌ Not running[/red]"
-    )
-    console.print(f"Redis: {redis_status}")
-
-    if redis_running:
-        # Check Redis connection using utility function
-        if check_redis_status():
-            console.print(
-                "[green]✅ Redis is running and accepting connections[/green]"
-            )
-            console.print("  └─ Connection: ✅ Ready")
-            console.print("  └─ Server: localhost:6380")
-        else:
-            console.print("  └─ Connection: ⚠️  Not ready")
-
-    # Check Temporal
-    temporal_server_running = check_container_running("api-template-temporal-dev")
-    temporal_web_running = check_container_running("api-template-temporal-ui-dev")
-    temporal_status = (
-        "[green]✅ Running[/green]"
-        if temporal_server_running
-        else "[red]❌ Not running[/red]"
-    )
-    console.print(f"Temporal: {temporal_status}")
-
-    if temporal_server_running:
-        # Check Temporal health using the utility function
-        if check_temporal_status():
-            console.print("[green]✅ Temporal server is running and healthy[/green]")
-            console.print("  └─ Server: ✅ Healthy")
-            console.print("  └─ gRPC API: localhost:7233")
-        else:
-            console.print("  └─ Server: ⚠️  Not ready")
-
-        if temporal_web_running:
-            console.print("  └─ Web UI: ✅ Running (http://localhost:8081)")
-        else:
-            console.print("  └─ Web UI: ⚠️  Not running")
+    # Check all services
+    _check_keycloak_status()
+    _check_postgres_status(app_db, app_user, app_password, app_db_url)
+    _check_redis_status(redis_url)
+    _check_temporal_status(temporal_url)
 
 
 @dev_app.command()
@@ -385,7 +416,10 @@ def stop() -> None:
     project_root = get_project_root()
 
     with console.status("[bold red]Stopping containers..."):
-        run_command(["docker", "compose", "-f", "docker-compose.dev.yml", "down"], cwd=project_root)
+        run_command(
+            ["docker", "compose", "-f", "docker-compose.dev.yml", "down"],
+            cwd=project_root,
+        )
 
     console.print("[green]✅ All development services stopped[/green]")
 

@@ -14,13 +14,13 @@ Use the automated `generate_secrets.sh` script to create all required secrets an
 
 ```bash
 # Generate all secrets and PKI certificates
-./secrets/generate_secrets.sh
+./infra/secrets/generate_secrets.sh
 
 # Verify all secrets and certificates
-./secrets/generate_secrets.sh -v
+./infra/secrets/generate_secrets.sh -v
 
 # List all generated files
-./secrets/generate_secrets.sh -l
+./infra/secrets/generate_secrets.sh -l
 ```
 
 ## 🔧 **Secret Generation Script**
@@ -74,22 +74,22 @@ See [Secrets Management Guide](../docs/prod/secrets/SECRETS_MANAGEMENT.md) for c
 
 ```bash
 # First-time setup - generate everything
-./secrets/generate_secrets.sh
+./infra/secrets/generate_secrets.sh
 
 # Check status of all secrets and certificates
-./secrets/generate_secrets.sh -v
+./infra/secrets/generate_secrets.sh -v
 
 # View all generated files with details
-./secrets/generate_secrets.sh -l
+./infra/secrets/generate_secrets.sh -l
 
 # Regenerate only passwords (skip PKI)
-./secrets/generate_secrets.sh -s
+./infra/secrets/generate_secrets.sh -s
 
 # Force regeneration (careful!)
-./secrets/generate_secrets.sh -f
+./infra/secrets/generate_secrets.sh -f
 
 # Backup existing secrets without generating new ones
-./secrets/generate_secrets.sh -b
+./infra/secrets/generate_secrets.sh -b
 ```
 
 ## 🔐 **Testing TLS Connections**
@@ -98,17 +98,17 @@ After generating certificates, test PostgreSQL TLS connectivity:
 
 ```bash
 # Test basic TLS connection
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
 psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 -c "SELECT version();"
 
 # Test with full certificate verification
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
-psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-full&sslrootcert=./secrets/certs/ca-bundle.crt" \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
+psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-full&sslrootcert=./infra/secrets/certs/ca-bundle.crt" \
 -c "SELECT version();"
 
 # Check TLS protocol and cipher
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
 psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 -c "SELECT ssl, version, cipher, bits FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
 ```
@@ -145,11 +145,11 @@ If you need to create specific secrets manually:
 
 ```bash
 # Database passwords
-echo "your-secure-password-here" > secrets/keys/postgres_password.txt
+echo "your-secure-password-here" > infra/secrets/keys/postgres_password.txt
 chmod 600 secrets/keys/postgres_password.txt
 
 # Session secrets (use base64 encoded values)
-openssl rand -base64 32 > secrets/keys/session_signing_secret.txt
+openssl rand -base64 32 > infra/secrets/keys/session_signing_secret.txt
 chmod 600 secrets/keys/session_signing_secret.txt
 ```
 
@@ -194,9 +194,9 @@ chmod 644 secrets/certs/*/*.crt
 
 Before deploying to production:
 
-- [ ] Run `./secrets/generate_secrets.sh` to generate all secrets and certificates
-- [ ] Verify with `./secrets/generate_secrets.sh -v` (all checks should pass)
-- [ ] Confirm file permissions with `./secrets/generate_secrets.sh -l`
+- [ ] Run `./infra/secrets/generate_secrets.sh` to generate all secrets and certificates
+- [ ] Verify with `./infra/secrets/generate_secrets.sh -v` (all checks should pass)
+- [ ] Confirm file permissions with `./infra/secrets/generate_secrets.sh -l`
 - [ ] Test TLS connectivity (see [TLS Verification Guide](../docs/prod/secrets/TLS_VERIFICATION.md))
 - [ ] Backup secrets securely outside the repository
 - [ ] Use different credentials per environment (dev/staging/prod)
@@ -210,10 +210,10 @@ Before deploying to production:
 
 ```bash
 # 1. Backup current secrets
-./secrets/generate_secrets.sh -b
+./infra/secrets/generate_secrets.sh -b
 
 # 2. Generate new secrets (keeps PKI certificates)
-./secrets/generate_secrets.sh -s
+./infra/secrets/generate_secrets.sh -s
 
 # 3. Restart services with new credentials
 docker compose -f docker-compose.prod.yml restart
@@ -226,13 +226,13 @@ docker compose -f docker-compose.prod.yml ps
 
 ```bash
 # 1. Check certificate expiration
-./secrets/generate_secrets.sh -v | grep "expires"
+./infra/secrets/generate_secrets.sh -v | grep "expires"
 
 # 2. Backup everything
-./secrets/generate_secrets.sh -b
+./infra/secrets/generate_secrets.sh -b
 
 # 3. Regenerate all (passwords + PKI)
-./secrets/generate_secrets.sh
+./infra/secrets/generate_secrets.sh
 
 # 4. Restart all services
 docker compose -f docker-compose.prod.yml down
@@ -249,7 +249,7 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml down
 
 # 2. Force regenerate everything
-./secrets/generate_secrets.sh -f
+./infra/secrets/generate_secrets.sh -f
 
 # 3. Restart with new secrets
 docker compose -f docker-compose.prod.yml up -d
@@ -290,7 +290,7 @@ openssl crl2pkcs7 -nocrl -certfile secrets/certs/ca-bundle.crt | openssl pkcs7 -
 openssl verify -CAfile secrets/certs/ca-bundle.crt secrets/certs/postgres/server-chain-no-root.crt
 
 # Regenerate if needed
-./secrets/generate_secrets.sh
+./infra/secrets/generate_secrets.sh
 ```
 
 ### **TLS connection fails**

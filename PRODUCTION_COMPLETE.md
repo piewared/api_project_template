@@ -85,13 +85,13 @@ Your **production-ready Docker infrastructure** is complete with enterprise-grad
 ### **1. Quick Start**
 ```bash
 # 1. Create secrets (see deploy/deploy-local.txt)
-./scripts/create-secrets.sh
+./infra/scripts/create-secrets.sh
 
 # 2. Deploy all services
 docker-compose -f docker-compose.prod.yml up -d
 
 # 3. Test authentication
-./scripts/test-temporal-auth.sh
+./infra/scripts/test-temporal-auth.sh
 
 # 4. Access your application
 curl https://localhost:8000/health
@@ -182,14 +182,14 @@ cd /opt/your-app
 ### **Automated Tests**
 ```bash
 # Security testing
-./scripts/test-temporal-auth.sh     # Temporal authentication
-./scripts/test-ssl-certs.sh        # SSL certificate validation
-./scripts/test-secrets.sh          # Secrets management
+./infra/scripts/test-temporal-auth.sh     # Temporal authentication
+./infra/scripts/test-ssl-certs.sh        # SSL certificate validation
+./infra/scripts/test-secrets.sh          # Secrets management
 
 # Performance testing
-./scripts/load-test.sh              # Application load testing
-./scripts/db-performance.sh        # Database performance
-./scripts/redis-benchmark.sh       # Redis performance
+./infra/scripts/load-test.sh              # Application load testing
+./infra/scripts/db-performance.sh        # Database performance
+./infra/scripts/redis-benchmark.sh       # Redis performance
 ```
 
 ### **Manual Validation**

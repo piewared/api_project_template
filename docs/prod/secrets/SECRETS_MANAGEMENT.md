@@ -17,7 +17,7 @@ This document provides comprehensive guidance on managing secrets in the applica
 
 The application uses a centralized secrets management system based on:
 
-- **File-based secrets**: Stored in `./secrets/` directory
+- **File-based secrets**: Stored in `./infra/secrets/` directory
 - **Docker Compose secrets**: Mounted as files in containers
 - **PKI infrastructure**: Internal certificate authority for TLS
 - **Universal entrypoint**: Secure secret handling in containers
@@ -39,38 +39,38 @@ The `secrets/generate_secrets.sh` script is the central tool for managing all ap
 
 ```bash
 # Generate all secrets (passwords and OIDC client secrets)
-./secrets/generate_secrets.sh
+./infra/secrets/generate_secrets.sh
 
 # Generate PKI certificates only
-./secrets/generate_secrets.sh --generate-pki
+./infra/secrets/generate_secrets.sh --generate-pki
 
 # Generate everything (secrets + PKI)
-./secrets/generate_secrets.sh --generate-pki
+./infra/secrets/generate_secrets.sh --generate-pki
 
 # List all generated files
-./secrets/generate_secrets.sh --list
+./infra/secrets/generate_secrets.sh --list
 
 # Verify existing secrets
-./secrets/generate_secrets.sh --verify
+./infra/secrets/generate_secrets.sh --verify
 
 # Show help
-./secrets/generate_secrets.sh --help
+./infra/secrets/generate_secrets.sh --help
 ```
 
 ### Advanced Options
 
 ```bash
 # Force overwrite without backup
-./secrets/generate_secrets.sh --force
+./infra/secrets/generate_secrets.sh --force
 
 # Force regenerate CA certificates (dangerous!)
-./secrets/generate_secrets.sh --generate-pki --force-ca
+./infra/secrets/generate_secrets.sh --generate-pki --force-ca
 
 # Backup existing secrets only
-./secrets/generate_secrets.sh --backup-only
+./infra/secrets/generate_secrets.sh --backup-only
 
 # Verify secrets meet security requirements
-./secrets/generate_secrets.sh --verify
+./infra/secrets/generate_secrets.sh --verify
 ```
 
 ## File Structure and Purposes
@@ -78,7 +78,7 @@ The `secrets/generate_secrets.sh` script is the central tool for managing all ap
 ### Directory Structure
 
 ```
-secrets/
+infra/secrets/
 ├── keys/                           # Application passwords and secrets
 ├── certs/                          # PKI certificates and keys
 │   ├── root-ca.crt                # Root Certificate Authority (public)
@@ -199,11 +199,11 @@ services:
 
 secrets:
   postgres_password:
-    file: ./secrets/keys/postgres_password.txt
+    file: ./infra/secrets/keys/postgres_password.txt
   postgres_tls_cert:
-    file: ./secrets/certs/postgres/server.crt
+    file: ./infra/secrets/certs/postgres/server.crt
   postgres_tls_key:
-    file: ./secrets/certs/postgres/server.key
+    file: ./infra/secrets/certs/postgres/server.key
 ```
 
 #### Universal Entrypoint Integration
@@ -358,17 +358,17 @@ Service certificates expire after 1 year and should be renewed:
 
 ```bash
 # Regenerate all service certificates (keeps existing CAs)
-./secrets/generate_secrets.sh --generate-pki
+./infra/secrets/generate_secrets.sh --generate-pki
 
 # Force regenerate everything including CAs (use with caution)
-./secrets/generate_secrets.sh --generate-pki --force-ca
+./infra/secrets/generate_secrets.sh --generate-pki --force-ca
 ```
 
 ### Certificate Verification
 
 ```bash
 # Verify all secrets and certificates
-./secrets/generate_secrets.sh --verify
+./infra/secrets/generate_secrets.sh --verify
 
 # Manual certificate verification
 openssl x509 -in certs/postgres/server.crt -text -noout
@@ -414,7 +414,7 @@ openssl verify -CAfile certs/root-ca.crt -untrusted certs/intermediate-ca.crt ce
 
 ```bash
 # Generate all secrets for development
-./secrets/generate_secrets.sh --generate-pki
+./infra/secrets/generate_secrets.sh --generate-pki
 
 # Start test environment
 docker-compose -f docker-compose.test.yml up
@@ -424,10 +424,10 @@ docker-compose -f docker-compose.test.yml up
 
 ```bash
 # Generate production secrets
-./secrets/generate_secrets.sh --generate-pki
+./infra/secrets/generate_secrets.sh --generate-pki
 
 # Verify security
-./secrets/generate_secrets.sh --verify
+./infra/secrets/generate_secrets.sh --verify
 
 # Deploy to production
 docker-compose -f docker-compose.prod.yml up -d
@@ -466,7 +466,7 @@ kubectl create secret tls postgres-tls \
 
 ```bash
 # Fix file permissions
-./secrets/generate_secrets.sh --verify
+./infra/secrets/generate_secrets.sh --verify
 # or manually:
 chmod 600 secrets/keys/*.txt
 chmod 600 secrets/certs/*/*.key
@@ -483,7 +483,7 @@ openssl crl2pkcs7 -nocrl -certfile secrets/certs/postgres/server-chain.crt | \
 # Verify certificate against CA
 openssl verify -CAfile secrets/certs/root-ca.crt \
   -untrusted secrets/certs/intermediate-ca.crt \
-  secrets/certs/postgres/server.crt
+  infra/secrets/certs/postgres/server.crt
 ```
 
 #### Docker Secrets Not Found
@@ -520,10 +520,10 @@ docker-compose config
 
 ```bash
 # Backup existing secrets
-./secrets/generate_secrets.sh --backup-only
+./infra/secrets/generate_secrets.sh --backup-only
 
 # Force regenerate all secrets
-./secrets/generate_secrets.sh --force --generate-pki --force-ca
+./infra/secrets/generate_secrets.sh --force --generate-pki --force-ca
 
 # Restart services
 docker-compose down && docker-compose up -d
@@ -533,10 +533,10 @@ docker-compose down && docker-compose up -d
 
 ```bash
 # Check expiration dates
-./secrets/generate_secrets.sh --verify
+./infra/secrets/generate_secrets.sh --verify
 
 # Regenerate service certificates only (preserves CA)
-./secrets/generate_secrets.sh --generate-pki
+./infra/secrets/generate_secrets.sh --generate-pki
 
 # Restart affected services
 docker-compose restart postgres redis temporal
@@ -564,7 +564,7 @@ echo "$(printf '%040X' $((0x$(cat secrets/certs/root-ca.srl) + 100)))" > secrets
 
 ```bash
 # ⚠️  WARNING: This invalidates all existing certificates!
-./secrets/generate_secrets.sh --generate-pki --force-ca
+./infra/secrets/generate_secrets.sh --generate-pki --force-ca
 
 # All services must be restarted
 docker-compose down && docker-compose up -d
@@ -576,7 +576,7 @@ docker-compose down && docker-compose up -d
 
 1. **Weekly**: Verify secret integrity
    ```bash
-   ./secrets/generate_secrets.sh --verify
+   ./infra/secrets/generate_secrets.sh --verify
    ```
 
 2. **Monthly**: Check certificate expiration
@@ -586,7 +586,7 @@ docker-compose down && docker-compose up -d
 
 3. **Annually**: Rotate service certificates
    ```bash
-   ./secrets/generate_secrets.sh --generate-pki
+   ./infra/secrets/generate_secrets.sh --generate-pki
    ```
 
 4. **5 years**: Plan intermediate CA renewal
@@ -597,7 +597,7 @@ docker-compose down && docker-compose up -d
 ```bash
 # Test backup restoration
 cp -r secrets/backup_YYYYMMDD_HHMMSS/* secrets/
-./secrets/generate_secrets.sh --verify
+./infra/secrets/generate_secrets.sh --verify
 ```
 
 ---

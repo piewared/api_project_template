@@ -43,7 +43,7 @@ Before testing, ensure:
 
 2. Certificate files have been generated:
    ```bash
-   ./secrets/generate_secrets.sh
+   ./infra/secrets/generate_secrets.sh
    ```
 
 3. You have the required credentials:
@@ -105,7 +105,7 @@ Test that TLS is enabled and working:
 
 ```bash
 # From host machine
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
 psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 -c "SELECT version();"
 ```
@@ -120,7 +120,7 @@ psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 Confirm the TLS version and cipher suite in use:
 
 ```bash
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
 psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 -c "SELECT ssl, version, cipher, bits FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
 ```
@@ -143,8 +143,8 @@ psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 Test that the server's certificate is signed by a trusted CA:
 
 ```bash
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
-psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert=./secrets/certs/ca-bundle.crt" \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
+psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert=./infra/secrets/certs/ca-bundle.crt" \
 -c "SELECT version();"
 ```
 
@@ -158,8 +158,8 @@ psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert
 Test complete certificate verification including hostname matching:
 
 ```bash
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
-psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-full&sslrootcert=./secrets/certs/ca-bundle.crt" \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
+psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-full&sslrootcert=./infra/secrets/certs/ca-bundle.crt" \
 -c "SELECT ssl, version, cipher, bits FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
 ```
 
@@ -173,7 +173,7 @@ psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-full&sslrootce
 Verify that certificate verification is actually enforced:
 
 ```bash
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
 psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert=/dev/null" \
 -c "SELECT version();" 2>&1
 ```
@@ -210,8 +210,8 @@ psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 
 ```bash
 # Test with CA verification
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
-psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert=./secrets/certs/ca-bundle.crt" \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
+psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert=./infra/secrets/certs/ca-bundle.crt" \
 -c "SELECT version();"
 ```
 
@@ -323,7 +323,7 @@ SSL error: certificate verify failed
    ```
 3. Regenerate certificates if necessary:
    ```bash
-   ./secrets/generate_secrets.sh
+   ./infra/secrets/generate_secrets.sh
    ```
 
 ### Issue: TLS version mismatch
@@ -474,30 +474,30 @@ conn = psycopg2.connect(
 
 ```bash
 # List generated certificates
-./secrets/generate_secrets.sh -l
+./infra/secrets/generate_secrets.sh -l
 
 # Verify certificate chain
-openssl verify -CAfile ./secrets/certs/ca-bundle.crt ./secrets/certs/postgres/server-chain-no-root.crt
+openssl verify -CAfile ./infra/secrets/certs/ca-bundle.crt ./infra/secrets/certs/postgres/server-chain-no-root.crt
 
 # Test basic TLS connection
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
 psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" -c "SELECT version();"
 
 # Test with CA verification
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
-psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert=./secrets/certs/ca-bundle.crt" -c "SELECT version();"
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
+psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-ca&sslrootcert=./infra/secrets/certs/ca-bundle.crt" -c "SELECT version();"
 
 # Test with full verification
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
-psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-full&sslrootcert=./secrets/certs/ca-bundle.crt" -c "SELECT version();"
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
+psql "postgresql://appuser@localhost:5432/postgres?sslmode=verify-full&sslrootcert=./infra/secrets/certs/ca-bundle.crt" -c "SELECT version();"
 
 # Check TLS status
-PGPASSWORD=$(cat ./secrets/keys/postgres_app_user_pw.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_app_user_pw.txt) \
 psql "postgresql://appuser@localhost:5432/postgres?sslmode=require" \
 -c "SELECT ssl, version, cipher, bits FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
 
 # View all SSL connections
-PGPASSWORD=$(cat ./secrets/keys/postgres_password.txt) \
+PGPASSWORD=$(cat ./infra/secrets/keys/postgres_password.txt) \
 psql "postgresql://postgres@localhost:5432/postgres?sslmode=require" \
 -c "SELECT * FROM pg_stat_ssl;"
 ```

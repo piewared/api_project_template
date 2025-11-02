@@ -9,10 +9,10 @@ echo ""
 
 # Step 1: Generate secrets
 echo "📝 Step 1: Generating secrets..."
-if [ ! -f secrets/keys/session_signing_secret.txt ] || [ ! -f secrets/keys/csrf_signing_secret.txt ]; then
-    cd secrets
+if [ ! -f infra/secrets/keys/session_signing_secret.txt ] || [ ! -f infra/secrets/keys/csrf_signing_secret.txt ]; then
+    cd infra/secrets
     ./generate_secrets.sh
-    cd ..
+    cd ../..
     echo "✅ Secrets generated"
 else
     echo "✅ Secrets already exist"
@@ -49,8 +49,8 @@ echo ""
 echo "🔐 Step 4: Verifying required secrets..."
 MISSING_SECRETS=0
 for secret in postgres_app_user_pw redis_password session_signing_secret csrf_signing_secret; do
-    if [ ! -f "secrets/keys/${secret}.txt" ]; then
-        echo "❌ Missing: secrets/keys/${secret}.txt"
+    if [ ! -f "infra/secrets/keys/${secret}.txt" ]; then
+        echo "❌ Missing: infra/secrets/keys/${secret}.txt"
         MISSING_SECRETS=1
     else
         echo "✅ Found: ${secret}.txt"
@@ -59,7 +59,7 @@ done
 
 if [ $MISSING_SECRETS -eq 1 ]; then
     echo ""
-    echo "⚠️  Some secrets are missing. Run: cd secrets && ./generate_secrets.sh"
+    echo "⚠️  Some secrets are missing. Run: cd infra/secrets && ./generate_secrets.sh"
     exit 1
 fi
 echo ""

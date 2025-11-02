@@ -63,11 +63,11 @@ src/app/api/http/routers/service/
 # =============================================================================
 
 # Secrets and credentials (CRITICAL - NEVER COMMIT)
-# Ignore all files in secrets/ directory
-secrets/*
+# Ignore all files in infra/secrets/ directory
+infra/secrets/*
 # But allow the README and generation script
-!secrets/README.md
-!secrets/generate_secrets.sh
+!infra/secrets/README.md
+!infra/secrets/generate_secrets.sh
 *.secret
 *.key
 *.pem

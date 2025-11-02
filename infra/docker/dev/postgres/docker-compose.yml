@@ -5,7 +5,7 @@ services:
     container_name: app_dev_postgres_db
     image: postgres:16-alpine
     env_file:
-      - ../../../.env
+      - ../../../../.env
     environment:
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     ports:

@@ -64,7 +64,7 @@ COPY --chown=appuser:appgroup src_main.py ./
 COPY --chown=appuser:appgroup config.yaml ./
 
 # Copy universal entrypoint script
-COPY docker/prod/scripts/universal-entrypoint.sh /usr/local/bin/universal-entrypoint.sh
+COPY infra/docker/prod/scripts/universal-entrypoint.sh /usr/local/bin/universal-entrypoint.sh
 RUN chmod +x /usr/local/bin/universal-entrypoint.sh
 
 # Create necessary directories with proper permissions

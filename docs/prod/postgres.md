@@ -60,9 +60,9 @@ services:
       - backup_password
 secrets:
   postgres_password:
-    file: ./secrets/postgres_password.txt
+    file: ./infra/secrets/postgres_password.txt
   backup_password:
-    file: ./secrets/backup_password.txt
+    file: ./infra/secrets/backup_password.txt
 ```
 
 ### 1.2 TLS / SSL

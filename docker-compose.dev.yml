@@ -4,7 +4,7 @@ services:
   keycloak:
     container_name: api-template-keycloak-dev
     extends:
-      file: docker/dev/keycloak/docker-compose.yml
+      file: infra/docker/dev/keycloak/docker-compose.yml
       service: keycloak
 
   keycloak-setup:
@@ -17,7 +17,7 @@ services:
       - KEYCLOAK_URL=http://keycloak:8080
     volumes:
       - ./src/dev:/app/src/dev
-      - ./docker/dev/keycloak/setup_script.py:/app/setup_script.py
+      - ./infra/docker/dev/keycloak/setup_script.py:/app/setup_script.py
     working_dir: /app
     command: >
       sh -c "
@@ -31,7 +31,7 @@ services:
   postgres:
     container_name: api-template-postgres-dev
     extends:
-      file: docker/dev/postgres/docker-compose.yml
+      file: infra/docker/dev/postgres/docker-compose.yml
       service: postgres
     environment:
       POSTGRES_PASSWORD: devpass
@@ -42,7 +42,7 @@ services:
   redis:
     container_name: api-template-redis-dev
     extends:
-      file: docker/dev/redis/docker-compose.yml
+      file: infra/docker/dev/redis/docker-compose.yml
       service: redis
 
   temporal:

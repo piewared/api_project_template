@@ -373,9 +373,12 @@ your_project/
 │     │  └─ service/             # Domain services
 │     └─ dev/                    # Dev tooling
 ├─ tests/                        # Unit/integration/E2E
-├─ dev_env/                      # Dockerized infra + volumes
+├─ infra/                        # Infrastructure files
+│  ├─ docker/                    # Docker configurations (dev/prod)
+│  ├─ scripts/                   # Deployment & utility scripts
+│  └─ secrets/                   # Secrets management & generation
 ├─ docs/                         # Additional docs (clients, guides)
-└─ scripts/                      # Utilities
+└─ dev_env/                      # Dockerized infra + volumes
 ```
 
 > Deleting volumes will wipe local data (`dev_env/postgres-data/`, etc.).

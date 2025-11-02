@@ -270,6 +270,75 @@ services:
     ports:
       - 8081:8080
 
+  # FastAPI Application
+  app:
+    container_name: api-template-app-prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: api-template-app:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      temporal:
+        condition: service_healthy
+      temporal-namespace-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      <<: *entrypoint-common-vars
+      
+      # Application settings
+      APP_ENVIRONMENT: production
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_FORMAT: json
+      
+    secrets:
+      - postgres_app_user_pw
+      - redis_password
+      - session_signing_secret
+      - csrf_signing_secret
+    
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - app_logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    
+    ports:
+      - "8000:8000"
+    
+    networks:
+      - backend
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
 # Volume Configuration
 volumes:
   postgres_data:
@@ -313,6 +382,14 @@ volumes:
       o: bind
       device: ${DATA_PATH:-./data}/temporal-certs
 
+  # Application logs
+  app_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${DATA_PATH:-./data}/app-logs
+
 # Secrets Configuration
 secrets:
   postgres_password:
@@ -340,6 +417,12 @@ secrets:
   # Temporal Postgres user password
   postgres_temporal_pw:
     file: ./secrets/keys/postgres_temporal_pw.txt
+
+  # Application secrets
+  session_signing_secret:
+    file: ./secrets/keys/session_signing_secret.txt
+  csrf_signing_secret:
+    file: ./secrets/keys/csrf_signing_secret.txt
 
 networks:
   backend:

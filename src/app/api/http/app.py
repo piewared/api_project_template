@@ -321,12 +321,12 @@ async def startup() -> None:
                     logger.error("Failed to read {}: {}", value, e)
 
     # Specifically check for key passwords
-    postgres_password = os.getenv("POSTGRES_PASSWORD", "")
+    postgres_password = os.getenv("POSTGRES_APP_USER_PW", "")
     redis_password = os.getenv("REDIS_PASSWORD", "")
     if postgres_password:
-        logger.info("POSTGRES_PASSWORD available")
+        logger.info("POSTGRES_APP_USER_PW available")
     else:
-        logger.warning("POSTGRES_PASSWORD not set")
+        logger.warning("POSTGRES_APP_USER_PW not set")
 
     if redis_password:
         logger.info("REDIS_PASSWORD available")
@@ -335,29 +335,48 @@ async def startup() -> None:
 
     logger.info("=== END DEBUG ===")
 
-    jwks_cache = JWKSCacheInMemory()
-    jwks_service = JwksService(jwks_cache)
-    jwt_verify_service = JwtVerificationService(jwks_service)
-    jwt_generation_service = JwtGeneratorService()
+    logger.info("Starting application dependencies initialization")
+    try:
+        jwks_cache = JWKSCacheInMemory()
+        jwks_service = JwksService(jwks_cache)
+        jwt_verify_service = JwtVerificationService(jwks_service)
+        jwt_generation_service = JwtGeneratorService()
 
-    session_storage = await get_session_storage()
-    oidc_client_service = OidcClientService(jwt_verify_service)
-    user_session_service = UserSessionService(session_storage)
-    auth_session_service = AuthSessionService(session_storage)
-    database_service = DbSessionService()
+        logger.info("Setting up session storage and services")
+        session_storage = await get_session_storage()
 
-    deps = ApplicationDependencies(
-        jwks_cache=jwks_cache,
-        jwks_service=jwks_service,
-        jwt_verify_service=jwt_verify_service,
-        jwt_generation_service=jwt_generation_service,
-        oidc_client_service=oidc_client_service,
-        user_session_service=user_session_service,
-        auth_session_service=auth_session_service,
-        database_service=database_service,
-    )
+        logger.info("Creating OIDC client service")
+        oidc_client_service = OidcClientService(jwt_verify_service)
+
+        logger.info("Creating session services")
+        user_session_service = UserSessionService(session_storage)
+
+        logger.info("Creating authentication session service")
+        auth_session_service = AuthSessionService(session_storage)
+
+        logger.info("Creating database session service")
+        database_service = DbSessionService()
+
+        logger.info("Finalizing application dependencies")
+        deps = ApplicationDependencies(
+            jwks_cache=jwks_cache,
+            jwks_service=jwks_service,
+            jwt_verify_service=jwt_verify_service,
+            jwt_generation_service=jwt_generation_service,
+            oidc_client_service=oidc_client_service,
+            user_session_service=user_session_service,
+            auth_session_service=auth_session_service,
+            database_service=database_service,
+        )
+    except Exception as e:
+        logger.exception("Failed to initialize application dependencies: %s", e)
+        # Re-raise to avoid continuing startup with incomplete dependencies
+        raise
+
+
     app.state.app_dependencies = deps
 
+    logger.info("Getting configuration for startup")
     config = get_config()
     logger.info("Starting up application in {} environment", config.app.environment)
     # Validate configuration so we fail fast on misconfiguration

@@ -17,8 +17,8 @@ config:
     pool_timeout: 30
     pool_recycle: 1800
     environment_mode: "${APP_ENVIRONMENT:-development}"
-    password_file_path: "${DATABASE_PASSWORD_FILE_PATH:-/run/secrets/postgres_password}"
-    password_environment_variable: "${DATABASE_PASSWORD_ENV_VAR:-DB_PASSWORD}"
+    password_file_path: "${DATABASE_PASSWORD_FILE_PATH:-/run/secrets/postgres_app_user_pw}"
+    password_env_var: "${DATABASE_PASSWORD_ENV_VAR:-POSTGRES_APP_USER_PW}"
   temporal:
     enabled: true
     url: "${TEMPORAL_URL:-temporal:7233}"

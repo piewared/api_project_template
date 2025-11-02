@@ -326,7 +326,7 @@ class DatabaseConfig(BaseModel):
         description="Environment variable name containing database password",
     )
 
-    password_file: str | None = Field(
+    password_file_path: str | None = Field(
         default=None,
         description="Path to file containing database password",
     )
@@ -338,41 +338,48 @@ class DatabaseConfig(BaseModel):
         Get the database password from the appropriate source.
         1. If in development mode, try to parse from URL
         2. If in production mode, read from mounted secrets file specified
-            by `password_file_path` or environment variable specified by `password_environment_variable`
+            by `password_file_path` or environment variable specified by `password_env_var`
         """
+        password = None
         if self.environment_mode == "development" or self.environment_mode == "test":
             # In development mode, try to parse password from URL if present
             from sqlalchemy.engine import make_url
 
             url_obj = make_url(self.url)
             if url_obj.password:
-                return url_obj.password
-            else:
-                return None
+                password = url_obj.password
+
         elif self.environment_mode == "production":
             # In production mode, read from file or environment variable
-            if self.password_file:
-                try:
-                    with open(self.password_file, "r") as f:
-                        return f.read().strip()
-                except Exception as e:
-                    raise ValueError(
-                        "Failed to read database password from file."
-                    ) from e
-            elif self.password_env_var:
+
+            logger.debug("Attempting to read database password for production mode from environment variable {}", self.password_env_var)
+            if self.password_env_var:
                 import os
 
                 password = os.getenv(self.password_env_var)
                 if password:
                     return password
-                else:
-                    raise ValueError(
-                        f"Environment variable {self.password_env_var} not set"
+
+            if not password and self.password_file_path:
+                try:
+                    with open(self.password_file_path, "r", encoding="utf-8") as f:
+                        password = f.read().strip()
+                except Exception as e:
+                    logger.error(
+                        "Failed to read database password from file {}: {}",
+                        self.password_file_path,
+                        e,
                     )
-            else:
-                raise ValueError(
-                    "In production mode, either password_file or password_env_var must be set"
+                    raise
+            if not password:
+                logger.error(
+                    "Database password not found in environment variable {} or file {}",
+                    self.password_env_var,
+                    self.password_file_path,
                 )
+                raise ValueError("Database password not provided in production mode")
+            return password
+
         else:
             raise ValueError(
                 "Invalid environment_mode; must be 'development', 'production', or 'test'"

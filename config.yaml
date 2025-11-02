@@ -54,6 +54,8 @@ config:
     password: "${REDIS_PASSWORD:-}"
     max_connections: 10
     decode_responses: true
+    socket_timeout: 5
+    socket_connect_timeout: 5
   oidc:
     providers:
       google:

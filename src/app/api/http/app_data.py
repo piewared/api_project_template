@@ -8,6 +8,8 @@ from src.app.core.services import (
     JwtGeneratorService,
     JwtVerificationService,
     OidcClientService,
+    RedisService,
+    TemporalClientService,
     UserSessionService,
 )
 
@@ -22,3 +24,5 @@ class ApplicationDependencies:
     user_session_service: UserSessionService
     auth_session_service: AuthSessionService
     database_service: DbSessionService
+    redis_service: RedisService
+    temporal_service: TemporalClientService

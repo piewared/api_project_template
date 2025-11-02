@@ -16,6 +16,8 @@ from src.app.core.services import (
     JwksService,
     JwtVerificationService,
     OidcClientService,
+    RedisService,
+    TemporalClientService,
     UserManagementService,
     UserSessionService,
 )
@@ -54,23 +56,43 @@ def get_user_session_service(request: Request) -> UserSessionService:
     app_deps: ApplicationDependencies = request.app.state.app_dependencies
     return app_deps.user_session_service
 
+
 def get_auth_session_service(request: Request) -> AuthSessionService:
     """Get the Auth Session service instance."""
     app_deps: ApplicationDependencies = request.app.state.app_dependencies
     return app_deps.auth_session_service
+
 
 def get_oidc_client_service(request: Request) -> OidcClientService:
     """Get the OIDC Client service instance."""
     app_deps: ApplicationDependencies = request.app.state.app_dependencies
     return app_deps.oidc_client_service
 
-def get_user_management_service(request: Request, user_session_service: UserSessionService = Depends(get_user_session_service),
-                                jwt_verify_service: JwtVerificationService = Depends(get_jwt_verify_service),
-                                db_session: Session = Depends(get_db_session)
-                                ) -> UserManagementService:
+
+def get_temporal_service(request: Request) -> TemporalClientService:
+    """Get the Temporal Client service instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.temporal_service
+
+
+def get_redis_service(request: Request) -> RedisService:
+    """Get the Redis service instance."""
+    app_deps: ApplicationDependencies = request.app.state.app_dependencies
+    return app_deps.redis_service
+
+
+def get_user_management_service(
+    request: Request,
+    user_session_service: UserSessionService = Depends(get_user_session_service),
+    jwt_verify_service: JwtVerificationService = Depends(get_jwt_verify_service),
+    db_session: Session = Depends(get_db_session),
+) -> UserManagementService:
     """Get the User Management service instance."""
-    user_mgmt_service = UserManagementService(user_session_service, jwt_verify_service, db_session)
+    user_mgmt_service = UserManagementService(
+        user_session_service, jwt_verify_service, db_session
+    )
     return user_mgmt_service
+
 
 # Add your application-specific repository dependencies here
 # Example:
@@ -455,7 +477,7 @@ def enforce_origin(request: Request) -> None:
 
     # 3) Skip enforcement in development mode
     cfg = get_config()
-    if cfg.app.environment == 'development' or cfg.app.environment == 'test':
+    if cfg.app.environment == "development" or cfg.app.environment == "test":
         return
 
     allowed_origins = get_allowed_origins()  # normalized list of (scheme, host, port)
@@ -490,7 +512,7 @@ def enforce_origin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Referer origin not allowed")
 
 
-#TODO: REMOVE
+# TODO: REMOVE
 def enforce_origin_old(request: Request) -> None:
     """
     Enforce Origin/Referer allowlist for state-changing requests.
@@ -558,7 +580,7 @@ def require_csrf(request: Request) -> None:
 
     # 3) Skip enforcement in development mode
     cfg = get_config()
-    if cfg.app.environment == 'development' or cfg.app.environment == 'test':
+    if cfg.app.environment == "development" or cfg.app.environment == "test":
         return
 
     csrf_header = request.headers.get("x-csrf-token")
@@ -571,4 +593,3 @@ def require_csrf(request: Request) -> None:
 
     if not validate_csrf_token(session_id, csrf_header):
         raise HTTPException(status_code=403, detail="Invalid CSRF token")
-

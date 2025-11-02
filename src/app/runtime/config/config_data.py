@@ -177,6 +177,15 @@ class RedisConfig(BaseModel):
     decode_responses: bool = Field(
         default=True, description="Decode Redis responses to strings"
     )
+    max_connections: int = Field(
+        default=10, description="Maximum number of connections in the pool"
+    )
+    socket_timeout: int = Field(
+        default=5, description="Socket timeout in seconds for Redis operations"
+    )
+    socket_connect_timeout: int = Field(
+        default=5, description="Socket connect timeout in seconds for Redis"
+    )
 
     @computed_field
     @property

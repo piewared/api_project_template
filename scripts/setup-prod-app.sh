@@ -22,8 +22,9 @@ echo ""
 # Step 2: Create log directory
 echo "📁 Step 2: Creating log directory..."
 mkdir -p data/app-logs
-chmod 755 data/app-logs
-echo "✅ Log directory created"
+# Try to set permissions, but don't fail if we can't (e.g., if Docker owns it)
+chmod 755 data/app-logs 2>/dev/null || echo "   Note: Directory already exists with existing permissions"
+echo "✅ Log directory ready"
 echo ""
 
 # Step 3: Check .env file

@@ -16,9 +16,15 @@ from .jwt.jwt_verify import JwtVerificationService
 # OIDC Services
 from .oidc_client_service import OidcClientService
 
+# Redis Service
+from .redis_service import RedisService
+
 # Session Services
 from .session.auth_session import AuthSessionService
 from .session.user_session import UserSessionService
+
+# Temporal Services
+from .temporal.temporal_client import TemporalClientService
 
 # User Services
 from .user.user_management import UserManagementService
@@ -42,4 +48,8 @@ __all__ = [
     "RedisSessionStorage",
     # Database Service
     "DbSessionService",
+    # Redis Service
+    "RedisService",
+    # Temporal Services
+    "TemporalClientService",
 ]

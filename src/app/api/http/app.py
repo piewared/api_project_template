@@ -19,6 +19,7 @@ from src.app.api.http.middleware.limiter import (
 )
 from src.app.api.http.routers.auth import router_jit
 from src.app.api.http.routers.auth_bff_enhanced import router_bff
+from src.app.api.http.routers.health import router as health_router
 from src.app.api.utils.app_startup import configure_logging
 from src.app.core.services import (
     AuthSessionService,
@@ -27,6 +28,8 @@ from src.app.core.services import (
     JwtGeneratorService,
     JwtVerificationService,
     OidcClientService,
+    RedisService,
+    TemporalClientService,
     UserSessionService,
 )
 from src.app.core.storage.session_storage import get_session_storage
@@ -136,7 +139,7 @@ async def log_requests(request: Request, call_next):
         "request_id": request_id,
         "method": request.method,
         "path": request.url.path,
-        #"query": query,
+        # "query": query,
         "client_ip": client_ip,
         "user_agent": request.headers.get("user-agent", "unknown"),
         "http_version": request.scope.get("http_version", "1.1"),
@@ -208,6 +211,9 @@ async def log_requests(request: Request, call_next):
 
 
 # --- Router registration ---
+# Health check endpoints
+app.include_router(health_router)
+
 # OIDC compliant authentication endpoints
 app.include_router(router_jit, prefix="/auth")
 
@@ -269,72 +275,6 @@ async def startup() -> None:
     # Initialize application-wide dependencies here
     # e.g. database connections, caches, etc.
 
-    # DEBUG: Log environment variables from secrets
-    import os
-
-    logger.info("=== DEBUG: Environment Variables from Secrets ===")
-    secret_vars = []
-    for key, value in os.environ.items():
-        if any(
-            secret in key
-            for secret in ["POSTGRES", "REDIS", "CSRF", "SESSION", "BACKUP", "OIDC"]
-        ):
-            if "PASSWORD" in key or "SECRET" in key:
-                if key.endswith("_FILE"):
-                    secret_vars.append(f"{key}: {value}")
-                else:
-                    secret_vars.append(
-                        f"{key}: [PRESENT - length {len(value)}] - first 5: '{value[:5]}...'"
-                    )
-            else:
-                secret_vars.append(f"{key}: {value}")
-
-    if secret_vars:
-        # logger.info("Found secret environment variables:")
-        for var in sorted(secret_vars):
-            logger.info("  {}", var)
-    else:
-        logger.warning("No secret environment variables found!")
-
-    # Compare environment variables with their corresponding files
-    logger.info("=== Comparing ENV vars with FILE contents ===")
-    for key, value in os.environ.items():
-        if key.endswith("_FILE") and any(
-            secret in key
-            for secret in ["POSTGRES", "REDIS", "CSRF", "SESSION", "BACKUP", "OIDC"]
-        ):
-            base_name = key[:-5]  # Remove '_FILE' suffix
-            env_value = os.getenv(base_name, "")
-            if env_value and os.path.exists(value):
-                try:
-                    with open(value) as f:
-                        file_content = f.read()
-                    matches = env_value == file_content
-                    logger.info(
-                        "{}: ENV='{}...' FILE='{}...' MATCH={}",
-                        base_name,
-                        env_value[:5],
-                        file_content[:5],
-                        matches,
-                    )
-                except Exception as e:
-                    logger.error("Failed to read {}: {}", value, e)
-
-    # Specifically check for key passwords
-    postgres_password = os.getenv("POSTGRES_APP_USER_PW", "")
-    redis_password = os.getenv("REDIS_PASSWORD", "")
-    if postgres_password:
-        logger.info("POSTGRES_APP_USER_PW available")
-    else:
-        logger.warning("POSTGRES_APP_USER_PW not set")
-
-    if redis_password:
-        logger.info("REDIS_PASSWORD available")
-    else:
-        logger.warning("REDIS_PASSWORD not set")
-
-    logger.info("=== END DEBUG ===")
-
     logger.info("Starting application dependencies initialization")
     try:
         jwks_cache = JWKSCacheInMemory()
@@ -357,6 +297,12 @@ async def startup() -> None:
         logger.info("Creating database session service")
         database_service = DbSessionService()
 
+        logger.info("Creating Redis service")
+        redis_service = RedisService()
+
+        logger.info("Creating Temporal client service")
+        temporal_service = TemporalClientService()
+
         logger.info("Finalizing application dependencies")
         deps = ApplicationDependencies(
             jwks_cache=jwks_cache,
@@ -367,12 +313,13 @@ async def startup() -> None:
             user_session_service=user_session_service,
             auth_session_service=auth_session_service,
             database_service=database_service,
+            redis_service=redis_service,
+            temporal_service=temporal_service,
         )
     except Exception as e:
         logger.exception("Failed to initialize application dependencies: %s", e)
         # Re-raise to avoid continuing startup with incomplete dependencies
         raise
-
 
     app.state.app_dependencies = deps
 
@@ -380,6 +327,64 @@ async def startup() -> None:
     config = get_config()
     logger.info("Starting up application in {} environment", config.app.environment)
     # Validate configuration so we fail fast on misconfiguration
+
+    # Perform health checks on critical services
+    logger.info("Performing startup health checks on critical services")
+    health_check_errors = []
+
+    # Database health check
+    try:
+        logger.info("Checking database connectivity...")
+        db_healthy = deps.database_service.health_check()
+        if db_healthy:
+            logger.info("✓ Database is healthy")
+        else:
+            error_msg = "Database health check returned unhealthy status"
+            logger.error(error_msg)
+            health_check_errors.append(("database", error_msg))
+    except Exception as e:
+        error_msg = f"Database health check failed: {e}"
+        logger.exception(error_msg)
+        health_check_errors.append(("database", str(e)))
+
+    # Redis health check (non-critical, just warn)
+    if config.redis.enabled:
+        try:
+            logger.info("Checking Redis connectivity...")
+            redis_healthy = await deps.redis_service.health_check()
+            if redis_healthy:
+                logger.info("✓ Redis is healthy")
+            else:
+                logger.warning("⚠ Redis health check returned unhealthy status, will use in-memory fallback")
+        except Exception as e:
+            logger.warning("⚠ Redis health check failed: %s, will use in-memory fallback", e)
+    else:
+        logger.info("Redis is disabled, skipping health check")
+
+    # Temporal health check (critical if enabled)
+    if config.temporal.enabled:
+        try:
+            logger.info("Checking Temporal connectivity...")
+            temporal_healthy = await deps.temporal_service.health_check()
+            if temporal_healthy:
+                logger.info("✓ Temporal is healthy")
+            else:
+                error_msg = "Temporal health check returned unhealthy status"
+                logger.error(error_msg)
+                health_check_errors.append(("temporal", error_msg))
+        except Exception as e:
+            error_msg = f"Temporal health check failed: {e}"
+            logger.exception(error_msg)
+            health_check_errors.append(("temporal", str(e)))
+    else:
+        logger.info("Temporal is disabled, skipping health check")
+
+    # Fail startup if critical services are unhealthy
+    if health_check_errors and config.app.environment == "production":
+        error_summary = "; ".join([f"{svc}: {err}" for svc, err in health_check_errors])
+        raise RuntimeError(f"Critical service health checks failed: {error_summary}")
+    elif health_check_errors:
+        logger.warning("Some health checks failed but continuing in non-production environment: %s", health_check_errors)
 
     # Verify JWKS endpoints so auth failures surface early
     if config.oidc.providers:
@@ -409,21 +414,13 @@ async def shutdown() -> None:
     # Clean up application-wide dependencies here
     await app_dependencies.auth_session_service.purge_expired()
     await app_dependencies.user_session_service.purge_expired()
+    # Close Redis connection
+    await app_dependencies.redis_service.close()
+    # Close Temporal client connection
+    await app_dependencies.temporal_service.close()
 
 
 # --- Route handlers ---
-
-
-@app.get("/health")
-async def health() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "healthy"}
-
-
-@app.get("/ready")
-async def readiness() -> dict[str, str]:
-    """Readiness check endpoint."""
-    return {"status": "ready"}
 
 
 if __name__ == "__main__":

@@ -532,7 +532,7 @@ temporal:
 
 ### View Workflow History
 
-Use the Temporal Web UI at http://localhost:8081 (in development) to:
+Use the Temporal Web UI at http://localhost:8082 (in development) to:
 - View workflow execution history
 - See activity results
 - Debug failures

@@ -40,7 +40,7 @@ services:
     networks:
       - dev-network
     ports:
-      - 8081:8080
+      - 8082:8080
 
 volumes:
   api-template-temporal-postgres-data:

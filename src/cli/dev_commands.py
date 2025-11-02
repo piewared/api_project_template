@@ -361,7 +361,7 @@ def _check_temporal_status(temporal_url: str) -> None:
         console.print(f"  └─ Server: {temporal_url}")
 
     if temporal_web_running:
-        console.print("  └─ Web UI: ✅ http://localhost:8081")
+        console.print("  └─ Web UI: ✅ http://localhost:8082")
     else:
         console.print("  └─ Web UI: ⚠️  Not running")
 

@@ -316,5 +316,5 @@ curl http://localhost:8000/users/user-123/onboarding
 curl http://localhost:8000/health/
 
 # View workflows in Temporal UI
-# Open http://localhost:8081 in browser
+# Open http://localhost:8082 in browser
 """

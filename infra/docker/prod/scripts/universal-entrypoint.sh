@@ -39,9 +39,6 @@ echo "Target directories = ${KEYS_TARGET_DIR} (keys), ${CERTS_TARGET_DIR} (certs
 echo "Setting up secure secrets directory..."
 install -d -m 0700 -o "$CONTAINER_USER_UID" -g "$CONTAINER_USER_GID" "$KEYS_TARGET_DIR"
 install -d -m 0700 -o "$CONTAINER_USER_UID" -g "$CONTAINER_USER_GID" "$CERTS_TARGET_DIR"
-# Create target directories if they don't exist
-mkdir -p "$KEYS_TARGET_DIR"
-mkdir -p "$CERTS_TARGET_DIR"
 
 
 have_secrets_dir=false

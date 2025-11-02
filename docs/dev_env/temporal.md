@@ -14,7 +14,7 @@ The setup includes:
 | Service | Purpose | Port(s) | Notes |
 |----------|----------|---------|-------|
 | **temporal-server** | Main Temporal service (gRPC API) | 7233 | Used by workers and clients |
-| **temporal-web** | Web UI for monitoring workflows | 8081 | Accessible at [http://localhost:8081](http://localhost:8081) |
+| **temporal-web** | Web UI for monitoring workflows | 8082 | Accessible at [http://localhost:8082](http://localhost:8082) |
 | **temporal-postgresql** | Dedicated Temporal database | — (internal) | Not exposed to host |
 
 ---
@@ -43,7 +43,7 @@ The setup includes:
 
 ### Temporal Web UI
 - **Image:** `temporalio/ui:2.34.0`
-- **Port Mapping:** `8081:8080`
+- **Port Mapping:** `8082:8080`
 - **CORS Origin:** `http://localhost:3000`
 - **Network:** `dev-network`
 
@@ -80,7 +80,7 @@ docker compose logs -f temporal-server
 
 | Component    | URL / Endpoint                                 | Description                    |
 | ------------ | ---------------------------------------------- | ------------------------------ |
-| **Web UI**   | [http://localhost:8081](http://localhost:8081) | Visualize and manage workflows |
+| **Web UI**   | [http://localhost:8082](http://localhost:8082) | Visualize and manage workflows |
 | **gRPC API** | `localhost:7233`                               | Connect from Temporal workers  |
 | **CLI**      | `tctl --address localhost:7233 namespace list` | Temporal command-line access   |
 

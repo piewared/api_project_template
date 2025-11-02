@@ -17,6 +17,8 @@ services:
     environment:
       <<: *entrypoint-common-vars
       CERTS_TARGET_DIR: /etc/postgresql/ssl
+      CONTAINER_USER_UID: postgres
+      CONTAINER_USER_GID: postgres
 
       # Application DB settings
       APP_DB: ${APP_DB:-appdb}
@@ -30,8 +32,7 @@ services:
       TEMPORAL_DB_USER: ${TEMPORAL_DB_USER:-temporaluser}
 
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --data-checksums"
-      CONTAINER_USER_UID: postgres
-      CONTAINER_USER_GID: postgres
+
       PGDATA: /var/lib/postgresql/data/pgdata
     secrets:
       - postgres_password
@@ -68,6 +69,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    restart: no
     env_file:
       - .env
     secrets:
@@ -152,6 +154,8 @@ services:
 
 
   temporal-admin-tools:
+    container_name: api-template-temporal-admin-tools-prod
+    restart: unless-stopped
     image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
     networks: [backend]
     environment:
@@ -207,7 +211,7 @@ services:
       POSTGRES_DB: ${TEMPORAL_DB:-temporal}
       SQL_TLS_ENABLED: "true"
       SQL_CA: /run/secrets/ca-bundle.crt
-      SQL_HOST_VERIFICATION: "false"
+      SQL_HOST_VERIFICATION: "true"
       SQL_HOST_NAME: postgres
       BIND_ON_IP: "0.0.0.0"
 
@@ -288,14 +292,30 @@ services:
         condition: service_completed_successfully
     env_file:
       - .env
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN           # Required for entrypoint to change file ownership
+      - DAC_OVERRIDE    # Required to bypass file permission checks as root
+      - FOWNER          # Required for entrypoint to override file permissions
+      - SETUID          # Required for gosu/su-exec to drop privileges
+      - SETGID          # Required for gosu/su-exec to drop privileges
+      #- NET_BIND_SERVICE  # Only if needed for port 80/443
+    #read_only: true  # If filesystem doesn't need writes
+    tmpfs:
+    - /tmp:noexec,nosuid,nodev,size=100m
     environment:
       <<: *entrypoint-common-vars
-      
+      CONTAINER_USER_UID: appuser
+      CONTAINER_USER_GID: appgroup
+
       # Application settings
       APP_ENVIRONMENT: production
       APP_HOST: 0.0.0.0
       APP_PORT: 8000
-      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: json
       
     secrets:

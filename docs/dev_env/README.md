@@ -84,7 +84,7 @@ uv run cli dev reset-env
 | **PostgreSQL**      | Primary DB          | localhost:5433                                 | `postgres:5432`          |
 | **Redis**           | Caching / sessions  | localhost:6380                                 | `redis:6379`             |
 | **Temporal Server** | Workflow RPC        | localhost:7233                                 | `temporal-server:7233`   |
-| **Temporal UI**     | Workflow dashboard  | [http://localhost:8081](http://localhost:8081) | `temporal-web:8080`      |
+| **Temporal UI**     | Workflow dashboard  | [http://localhost:8082](http://localhost:8082) | `temporal-web:8080`      |
 
 ---
 
@@ -134,7 +134,7 @@ Temporal handles distributed workflows, background processing, and task orchestr
 Includes:
 
 * Temporal server (port 7233)
-* Temporal Web UI (port 8081)
+* Temporal Web UI (port 8082)
 * Dedicated PostgreSQL backend
 
 CORS origins default to:

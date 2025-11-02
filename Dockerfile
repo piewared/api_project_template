@@ -90,5 +90,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Use tini as init process for proper signal handling
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/universal-entrypoint.sh"]
 
+# Create secrets directories with secure permissions (0700 = owner only)
+RUN install -d -m 0700 -o appuser -g appgroup /app/keys && \
+    install -d -m 0700 -o appuser -g appgroup /app/certs
+
 # Start application
 CMD ["uvicorn", "src_main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

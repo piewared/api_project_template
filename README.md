@@ -116,7 +116,7 @@ uv run cli dev start-server   # API w/ hot reload
 | API         | [http://localhost:8000](http://localhost:8000)           | Dev server (hot reload)     |
 | Docs        | [http://localhost:8000/docs](http://localhost:8000/docs) | OpenAPI/Swagger             |
 | Keycloak*   | [http://localhost:8080](http://localhost:8080)           | Dev/test auth (admin/admin) |
-| Temporal UI | [http://localhost:8081](http://localhost:8081)           | Workflows                   |
+| Temporal UI | [http://localhost:8082](http://localhost:8082)           | Workflows                   |
 
 > * In prod, configure a managed IdP and set `issuer`, `client_id`, `audiences`, cookies `Secure=true`, etc.
 

@@ -1,5 +1,17 @@
 # Copilot Agent Onboarding - FastAPI Production Template
 
+## ⚠️ CRITICAL INSTRUCTIONS FOR AI ASSISTANTS
+
+**DO NOT create meta-documentation files** (e.g., DOCUMENTATION_CONSOLIDATION.md, DOCUMENTATION_VERIFICATION.md, CHANGES.md, etc.). These pollute the repository with information that is only relevant to the AI's work process, not to actual users or developers. 
+
+**When making changes**:
+- Edit existing documentation files directly
+- Do not create summary files about what you changed
+- Do not create verification reports
+- Users care about the final state, not the change process
+
+---
+
 ## Repository Overview
 
 **Project Type**: Cookiecutter-based FastAPI API template for production-ready microservices  
@@ -158,7 +170,7 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA temporal_visibility TO temporaluser
 **Ports Used**: 
 - 8000 (FastAPI app)
 - 8080 (Keycloak)
-- 8081 (Temporal UI)
+- 8082 (Temporal UI)
 - 5432 (PostgreSQL - production)
 - 5433 (PostgreSQL - development)
 - 6379 (Redis - production)
@@ -365,7 +377,7 @@ uv run cli dev stop-env
 
 ### Development (`docker-compose.dev.yml`)
 **Services**: keycloak, keycloak-setup, postgres, redis, temporal, temporal-web  
-**Ports**: 8080 (Keycloak), 5433 (PostgreSQL), 6380 (Redis), 7233 (Temporal), 8081 (Temporal UI)  
+**Ports**: 8080 (Keycloak), 5433 (PostgreSQL), 6380 (Redis), 7233 (Temporal), 8082 (Temporal UI)  
 **Credentials**: All hardcoded (devuser/devpass, admin/admin)  
 **Network**: `dev-network` bridge
 
@@ -423,7 +435,7 @@ docker exec -it api-template-redis-dev redis-cli
 curl http://localhost:8080/realms/test-realm/.well-known/openid-configuration
 
 # Test Temporal UI
-open http://localhost:8081
+open http://localhost:8082
 ```
 
 ---

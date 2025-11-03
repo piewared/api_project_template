@@ -1,4 +1,11 @@
 # worker/main.py
+
+"""
+Temporal worker process entrypoint.
+Starts workers for all discovered task queues or specified queues.
+Handles graceful shutdown on SIGINT/SIGTERM.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -52,7 +59,10 @@ async def _run_workers(
     logger.info("Workers started; polling queues: {}", ", ".join(task_queues))
     try:
         await stop_event.wait()
-        logger.info("Shutdown signal received; draining workers (timeout: {}s)...", drain_timeout)
+        logger.info(
+            "Shutdown signal received; draining workers (timeout: {}s)...",
+            drain_timeout,
+        )
 
         await asyncio.wait_for(
             asyncio.shield(
@@ -62,7 +72,9 @@ async def _run_workers(
         )
         logger.info("Workers drained cleanly.")
     except TimeoutError:
-        logger.warning("Drain timed out after {}s; cancelling run loops.", drain_timeout)
+        logger.warning(
+            "Drain timed out after {}s; cancelling run loops.", drain_timeout
+        )
         for t in run_tasks:
             t.cancel()
     finally:
@@ -97,8 +109,8 @@ def serve(
         sink=sys.stderr,
         level=log_level.upper(),
         format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-               "<level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - "
-               "<level>{message}</level>",
+        "<level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - "
+        "<level>{message}</level>",
         colorize=True,
     )
 
@@ -114,27 +126,41 @@ def serve(
     manager = TemporalWorkerManager()
     discovered = sorted(manager.pools.keys())
     if not discovered:
-        logger.error("No queues discovered. Define @workflow_defn/@activity_defn in your code.")
+        logger.error(
+            "No queues discovered. Define @workflow_defn/@activity_defn in your code."
+        )
         raise typer.Exit(code=2)
 
     if queue:
         unknown = [q for q in queue if q not in discovered]
         if unknown:
-            logger.error("Unknown queue(s): {}. Known: {}", ", ".join(unknown), ", ".join(discovered))
+            logger.error(
+                "Unknown queue(s): {}. Known: {}",
+                ", ".join(unknown),
+                ", ".join(discovered),
+            )
             raise typer.Exit(code=2)
         queues = queue
     else:
         queues = discovered
 
     # Connect Temporal client (TLS optional)
-    logger.info("Connecting to Temporal: url={}, namespace={}, tls={}",
-                temporal_config.url, temporal_config.namespace, temporal_config.tls)
+    logger.info(
+        "Connecting to Temporal: url={}, namespace={}, tls={}",
+        temporal_config.url,
+        temporal_config.namespace,
+        temporal_config.tls,
+    )
     tls = None
     if temporal_config.tls:
         if TLSConfig is None:
-            logger.error("TLS requested but TLSConfig is unavailable in temporalio package.")
+            logger.error(
+                "TLS requested but TLSConfig is unavailable in temporalio package."
+            )
             raise typer.Exit(code=2)
-        tls = TLSConfig()  # customize as needed (server_root_ca_cert, client cert/key, etc.)
+        tls = (
+            TLSConfig()
+        )  # customize as needed (server_root_ca_cert, client cert/key, etc.)
 
     async def _amain() -> int:
         client = await Client.connect(

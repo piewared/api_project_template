@@ -1,5 +1,4 @@
-version: "3.8"
-
+name: api-template-dev
 services:
   keycloak:
     container_name: api-template-keycloak-dev
@@ -90,5 +89,4 @@ volumes:
 
 networks:
   dev-network:
-    name: dev-network
     driver: bridge

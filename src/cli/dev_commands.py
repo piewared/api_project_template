@@ -29,20 +29,22 @@ dev_app = typer.Typer(help="🚀 Development environment commands")
 dev_app.add_typer(users_app, name="users")
 
 
-@dev_app.command(name="start-server")
 def start_server(
-    host: str = typer.Option("0.0.0.0", help="Host to bind the server to"),
-    port: int = typer.Option(8000, help="Port to bind the server to"),
-    reload: bool = typer.Option(True, help="Enable auto-reload on code changes"),
-    log_level: str = typer.Option(
-        "info", help="Log level (debug, info, warning, error, critical)"
-    ),
+    host: str = "0.0.0.0",
+    port: int = 8000,
+    reload: bool = True,
+    log_level: str = "info",
 ) -> None:
     """
     🚀 Start the FastAPI development server.
 
-    This command starts the FastAPI application in development mode with hot reloading
-    and detailed logging. Perfect for development and testing.
+    This is a helper function used internally. For the CLI command, use 'cli dev start-server'.
+
+    Args:
+        host: Host to bind the server to
+        port: Port to bind the server to
+        reload: Enable auto-reload on code changes
+        log_level: Log level (debug, info, warning, error, critical)
     """
     console.print(
         Panel.fit(
@@ -83,6 +85,24 @@ def start_server(
     except typer.Exit:
         console.print("[red]Failed to start development server[/red]")
         raise
+
+
+@dev_app.command(name="start")
+def start_server_command(
+    host: str = typer.Option("0.0.0.0", help="Host to bind the server to"),
+    port: int = typer.Option(8000, help="Port to bind the server to"),
+    reload: bool = typer.Option(True, help="Enable auto-reload on code changes"),
+    log_level: str = typer.Option(
+        "info", help="Log level (debug, info, warning, error, critical)"
+    ),
+) -> None:
+    """
+    🚀 Start the FastAPI development server.
+
+    This command starts the FastAPI application in development mode with hot reloading
+    and detailed logging. Perfect for development and testing.
+    """
+    start_server(host=host, port=port, reload=reload, log_level=log_level)
 
 
 @dev_app.command(name="start-env")
@@ -127,15 +147,69 @@ def start_env(
     redis_running = check_container_running("api-template-redis-dev")
     temporal_running = check_container_running("api-template-temporal-dev")
 
-    if (
-        keycloak_running or postgres_running or redis_running or temporal_running
-    ) and not force:
-        console.print(
-            "[yellow]⚠️  Services are already running. Use --force to restart.[/yellow]"
-        )
-        return
+    # Count running services
+    running_services = []
+    if keycloak_running:
+        running_services.append("Keycloak")
+    if postgres_running:
+        running_services.append("PostgreSQL")
+    if redis_running:
+        running_services.append("Redis")
+    if temporal_running:
+        running_services.append("Temporal")
 
     project_root_dir = get_project_root()
+
+    # Check if ALL services are running
+    all_services_running = (
+        keycloak_running and postgres_running and redis_running and temporal_running
+    )
+
+    # If ALL services are running and --force is NOT used, just skip
+    if all_services_running and not force:
+        console.print(
+            "[green]✅ All services are already running and healthy![/green]"
+        )
+        console.print(
+            "[bold yellow]💡 Tip: Use --force to restart all services (will stop and recreate containers)[/bold yellow]"
+        )
+        console.print("\n[bold green]🎉 Development environment is ready![/bold green]")
+        console.print("[dim]Use 'cli dev status' to check service statuses[/dim]")
+        console.print("[dim]Use 'cli dev stop' to stop the development services[/dim]")
+        return
+
+    # If services are running and --force is used, restart everything
+    if running_services and force:
+        console.print(
+            f"[yellow]⚠️  Found running services: {', '.join(running_services)}[/yellow]"
+        )
+        console.print("[yellow]🔄 Restarting all services with --force flag...[/yellow]")
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+            transient=True,
+        ) as progress:
+            task1 = progress.add_task("Stopping existing containers...", total=1)
+            run_command(
+                ["docker", "compose", "-f", "docker-compose.dev.yml", "down", "--remove-orphans"],
+                cwd=project_root_dir,
+            )
+            progress.update(task1, completed=1)
+
+    # If SOME services are running but --force is NOT used, show warning and stop
+    elif running_services:
+        console.print(
+            f"[yellow]⚠️  Some services are already running: {', '.join(running_services)}[/yellow]"
+        )
+        console.print(
+            "[bold yellow]💡 To avoid conflicts, please use --force to restart all services[/bold yellow]"
+        )
+        console.print(
+            "[dim]This ensures containers are properly recreated with the correct configuration.[/dim]"
+        )
+        raise typer.Exit(0)
 
     with Progress(
         SpinnerColumn(),
@@ -143,20 +217,11 @@ def start_env(
         console=console,
         transient=True,
     ) as progress:
-        # Start containers
+        # Start containers (docker-compose up will skip already running containers)
         task1 = progress.add_task("Starting Docker containers...", total=1)
 
-        if force and (
-            keycloak_running or postgres_running or redis_running or temporal_running
-        ):
-            console.print("[yellow]Stopping existing containers...[/yellow]")
-            run_command(
-                ["docker", "compose", "-f", "docker-compose.dev.yml", "down"],
-                cwd=project_root_dir,
-            )
-
         run_command(
-            ["docker", "compose", "-f", "docker-compose.dev.yml", "up", "-d"],
+            ["docker", "compose", "-f", "docker-compose.dev.yml", "up", "-d", "--remove-orphans"],
             cwd=project_root_dir,
         )
         progress.update(task1, completed=1)
@@ -242,6 +307,7 @@ def start_env(
     console.print("\n[bold green]🎉 Development environment is ready![/bold green]")
     status()
     console.print("\n[dim]Use 'cli dev start-server' to start the API server[/dim]")
+    console.print("[dim]Happy coding! 🚀[/dim]")
 
 
 def _check_docker_status() -> bool:
@@ -417,7 +483,7 @@ def stop() -> None:
 
     with console.status("[bold red]Stopping containers..."):
         run_command(
-            ["docker", "compose", "-f", "docker-compose.dev.yml", "down"],
+            ["docker", "compose", "-f", "docker-compose.dev.yml", "down", "--remove-orphans"],
             cwd=project_root,
         )
 

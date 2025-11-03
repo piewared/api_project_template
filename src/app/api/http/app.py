@@ -248,7 +248,7 @@ async def _initialize_rate_limiter() -> None:
         return
 
     try:
-        logger.info("Initializing FastAPI limiter with Redis: %s", config.redis.url)
+        logger.info("Initializing FastAPI limiter with Redis: {}", config.redis.url)
         client = redis_async.from_url(
             config.redis.connection_string,
             encoding="utf-8",
@@ -257,7 +257,7 @@ async def _initialize_rate_limiter() -> None:
         await FastAPILimiter.init(client)
         app.state.redis = client
         logger.info(
-            "FastAPI limiter initialized with Redis: %s", config.redis.connection_string
+            "FastAPI limiter initialized with Redis: {}", config.redis.connection_string
         )
         configure_rate_limiter()  # use default redis-based limiter
         app.state.local_rate_limiter = None
@@ -317,7 +317,7 @@ async def startup() -> None:
             temporal_service=temporal_service,
         )
     except Exception as e:
-        logger.exception("Failed to initialize application dependencies: %s", e)
+        logger.exception("Failed to initialize application dependencies")
         # Re-raise to avoid continuing startup with incomplete dependencies
         raise
 
@@ -357,7 +357,7 @@ async def startup() -> None:
             else:
                 logger.warning("⚠ Redis health check returned unhealthy status, will use in-memory fallback")
         except Exception as e:
-            logger.warning("⚠ Redis health check failed: %s, will use in-memory fallback", e)
+            logger.warning("⚠ Redis health check failed: {}, will use in-memory fallback", e)
     else:
         logger.info("Redis is disabled, skipping health check")
 
@@ -384,7 +384,7 @@ async def startup() -> None:
         error_summary = "; ".join([f"{svc}: {err}" for svc, err in health_check_errors])
         raise RuntimeError(f"Critical service health checks failed: {error_summary}")
     elif health_check_errors:
-        logger.warning("Some health checks failed but continuing in non-production environment: %s", health_check_errors)
+        logger.warning("Some health checks failed but continuing in non-production environment: {}", health_check_errors)
 
     # Verify JWKS endpoints so auth failures surface early
     if config.oidc.providers:
@@ -400,7 +400,7 @@ async def startup() -> None:
             if isinstance(err, Exception)
         ]
         for iss, err in errors:
-            logger.exception("Failed to fetch JWKS for issuer %s: %s", iss, err)
+            logger.exception("Failed to fetch JWKS for issuer {}: {}", iss, err)
         if errors and config.app.environment == "production":
             raise RuntimeError(f"JWKS readiness check failed for issuers: {errors}")
 

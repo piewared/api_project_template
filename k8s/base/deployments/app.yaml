@@ -26,9 +26,9 @@ spec:
         app.kubernetes.io/part-of: api-template
     spec:
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        # Container must start as root to run entrypoint script
+        # Script will drop privileges to appuser (1001) via gosu
+        fsGroup: 1001
         seccompProfile:
           type: RuntimeDefault
       containers:

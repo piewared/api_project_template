@@ -80,24 +80,58 @@ This script creates:
 
 ### Step 3: Build and Push Docker Images
 
-Before deploying, build and tag your custom images:
+Build all images using the automated build script:
 
 ```bash
-# Build PostgreSQL image
-docker build -f infra/docker/prod/postgres/Dockerfile -t app_data_postgres_image:latest .
+# Build all images with correct build contexts
+./k8s/scripts/build-images.sh
 
-# Build Redis image
-docker build -f infra/docker/prod/redis/Dockerfile -t app_data_redis_image:latest .
+# This script automatically:
+# - Detects if you're using Minikube/kind/k3d
+# - Builds all 4 images with correct contexts
+# - Loads images into local cluster (if kind/k3d)
+# - Verifies all images were built successfully
+```
 
-# Build Temporal image
-docker build -f infra/docker/prod/temporal/Dockerfile -t my-temporal-server:1.29.0 .
+**Manual Build (if needed):**
 
-# Build application image
+```bash
+# PostgreSQL (context: infra/docker/prod)
+cd infra/docker/prod
+docker build -f postgres/Dockerfile -t app_data_postgres_image:latest .
+cd ../../..
+
+# Redis (context: infra/docker/prod/redis)
+cd infra/docker/prod/redis
+docker build -t app_data_redis_image:latest .
+cd ../../../..
+
+# Temporal (context: infra/docker/prod/temporal)
+cd infra/docker/prod/temporal
+docker build -t my-temporal-server:1.29.0 .
+cd ../../../..
+
+# Application (context: project root)
 docker build -f Dockerfile -t api-template-app:latest .
+```
 
-# If using a registry, tag and push
-# docker tag api-template-app:latest your-registry.io/api-template-app:1.0.0
-# docker push your-registry.io/api-template-app:1.0.0
+**For Production (with registry):**
+
+```bash
+# Tag and push to your registry
+docker tag api-template-app:latest your-registry.io/api-template-app:1.0.0
+docker tag app_data_postgres_image:latest your-registry.io/postgres:latest
+docker tag app_data_redis_image:latest your-registry.io/redis:latest
+docker tag my-temporal-server:1.29.0 your-registry.io/temporal:1.29.0
+
+# Push all images
+docker push your-registry.io/api-template-app:1.0.0
+docker push your-registry.io/postgres:latest
+docker push your-registry.io/redis:latest
+docker push your-registry.io/temporal:1.29.0
+
+# Update image references in manifests
+# Edit k8s/base/deployments/*.yaml to use your registry URLs
 ```
 
 ### Step 4: Deploy to Kubernetes

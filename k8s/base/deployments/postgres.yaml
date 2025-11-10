@@ -23,8 +23,8 @@ spec:
         app.kubernetes.io/part-of: api-template
     spec:
       securityContext:
-        runAsNonRoot: false  # PostgreSQL needs root for init
-        runAsUser: 70  # postgres user in official image
+        # Container must start as root to run entrypoint script
+        # Script will drop privileges to user 70 (postgres) via gosu
         fsGroup: 70
         seccompProfile:
           type: RuntimeDefault

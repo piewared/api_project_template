@@ -23,8 +23,7 @@ spec:
         app.kubernetes.io/part-of: api-template
     spec:
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 999  # redis user
+        # Container starts as root, entrypoint drops to redis user via su-exec
         fsGroup: 999
         seccompProfile:
           type: RuntimeDefault
@@ -65,6 +64,10 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
+              add:
+                - CHOWN
+                - SETGID
+                - SETUID
               drop:
                 - ALL
             readOnlyRootFilesystem: false

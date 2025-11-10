@@ -7,10 +7,12 @@ metadata:
 # Namespace for all resources
 namespace: api-template-prod
 
-# Common labels applied to all resources
-commonLabels:
-  app.kubernetes.io/managed-by: kustomize
-  environment: production
+# Common labels applied to all resources (metadata only, not selectors)
+# Note: Using commonLabels adds labels to Service selectors which breaks pod matching
+# Use labels: in each resource definition instead
+# commonLabels:
+#   app.kubernetes.io/managed-by: kustomize
+#   environment: production
 
 # Resources to deploy (in order)
 resources:
@@ -22,6 +24,7 @@ resources:
   
   # 3. ConfigMaps
   - configmaps/env-config.yaml
+  - configmaps/app-env.yaml
   - configmaps/postgres-config.yaml
   - configmaps/postgres-verifier-config.yaml
   - configmaps/temporal-config.yaml

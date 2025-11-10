@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-env
+  namespace: api-template-prod
+data:
+  # Environment Configuration
+  APP_ENVIRONMENT: "production"
+  PRODUCTION_BASE_URL: "http://localhost:8000"
+  
+  # Database Settings
+  APP_DB: "appdb"
+  APP_DB_OWNER: "appowner"
+  APP_DB_USER: "appuser"
+  APP_DB_RO_USER: "backupuser"
+  DATABASE_URL: "postgresql://appuser@postgres:5432/appdb"
+  DATABASE_PASSWORD_FILE_PATH: "/run/secrets/postgres_app_user_pw"
+  
+  # Redis Settings
+  REDIS_URL: "redis://redis:6379/0"
+  REDIS_PASSWORD_FILE_PATH: "/run/secrets/redis_password"
+  
+  # Temporal Settings (disabled until Temporal is deployed)
+  TEMPORAL_ENABLED: "false"
+  TEMPORAL_URL: "temporal:7233"
+  TEMPORAL_DB_USER: "temporaluser"
+  TEMPORAL_DB: "temporal"
+  TEMPORAL_VIS_DB: "temporal_visibility"
+  
+  # OIDC Configuration
+  OIDC_REDIRECT_URI: "http://localhost:8000/auth/web/callback"
+  OIDC_GOOGLE_CLIENT_SECRET: "placeholder-configure-for-production"
+  OIDC_MICROSOFT_CLIENT_SECRET: "placeholder-configure-for-production"
+  OIDC_KEYCLOAK_CLIENT_SECRET: "placeholder-configure-for-production"
+  
+  # JWT Configuration
+  JWT_AUDIENCE: "api://default"
+  JWT_AUDIENCE_SECONDARY: "http://localhost:8000"
+  SESSION_MAX_AGE: "3600"
+  
+  # Session/CSRF secrets (file paths)
+  SESSION_SIGNING_SECRET_FILE: "/run/secrets/session_signing_secret"
+  CSRF_SIGNING_SECRET_FILE: "/run/secrets/csrf_signing_secret"

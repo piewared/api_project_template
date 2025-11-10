@@ -35,14 +35,17 @@ spec:
         - name: app
           image: api-template-app:latest
           imagePullPolicy: IfNotPresent
+          # Load all app environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: app-env
           env:
+            # Override/add specific values
             - name: TZ
               valueFrom:
                 configMapKeyRef:
                   name: env-config
                   key: TZ
-            - name: APP_ENVIRONMENT
-              value: production
             - name: APP_HOST
               value: 0.0.0.0
             - name: APP_PORT

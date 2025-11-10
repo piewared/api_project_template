@@ -72,6 +72,12 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /home/ui-server/config
+      volumes:
+        - name: config
+          emptyDir: {}
       restartPolicy: Always
 
 ---

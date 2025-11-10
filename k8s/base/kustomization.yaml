@@ -1,0 +1,58 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: api-template-prod
+
+# Namespace for all resources
+namespace: api-template-prod
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  environment: production
+
+# Resources to deploy (in order)
+resources:
+  # 1. Namespace
+  - namespace/namespace.yaml
+  
+  # 2. Storage (PVCs)
+  - storage/persistentvolumeclaims.yaml
+  
+  # 3. ConfigMaps
+  - configmaps/env-config.yaml
+  - configmaps/postgres-config.yaml
+  - configmaps/postgres-verifier-config.yaml
+  - configmaps/temporal-config.yaml
+  - configmaps/app-config.yaml
+  
+  # 4. Services
+  - services/services.yaml
+  
+  # 5. Deployments
+  - deployments/postgres.yaml
+  - deployments/redis.yaml
+  - deployments/temporal.yaml
+  - deployments/temporal-web.yaml
+  - deployments/app.yaml
+  
+  # 6. Jobs (init tasks)
+  - jobs/postgres-verifier.yaml
+  - jobs/temporal-schema-setup.yaml
+  - jobs/temporal-namespace-init.yaml
+
+# Image transformations (if needed in future)
+# images:
+#   - name: api-template-app
+#     newName: your-registry.io/api-template-app
+#     newTag: 1.0.0
+
+# Configuration options
+configurations: []
+
+# Patches (if needed in future)
+patches: []
+
+# Replacements (if needed in future)
+replacements: []

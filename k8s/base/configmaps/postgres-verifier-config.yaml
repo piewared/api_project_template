@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-verifier-config
+  namespace: api-template-prod
+  labels:
+    app.kubernetes.io/name: postgres-verifier
+    app.kubernetes.io/component: database-verification
+data:
+  verify-init.sh: |
+    #!/usr/bin/env sh
+    set -eu
+    
+    # --- Inputs ------------------------
+    APP_DB="${APP_DB:-appdb}"
+    APP_USER="${APP_DB_USER:-appuser}"
+    APP_RO="${APP_DB_RO_USER:-backupuser}"
+    APP_OWNER="${APP_DB_OWNER:-appowner}"
+    TEMPORAL_DB="${TEMPORAL_DB:-temporal}"
+    TEMPORAL_DB_USER="${TEMPORAL_DB_USER:-temporaluser}"
+    TEMPORAL_DB_OWNER="${TEMPORAL_DB_OWNER:-${TEMPORAL_DB_USER}_owner}"
+    APP_SCHEMA="${APP_SCHEMA:-app}"
+    
+    # Kubernetes cluster network CIDRs
+    ALLOWED_SUBNETS="${ALLOWED_SUBNETS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}"
+    
+    # --- psql (connect as app_user) -----
+    PSQL="psql -U ${APP_USER} -w -At -h postgres -d postgres"
+    PSQL_APP="psql -U ${APP_USER} -w -At -h postgres -d ${APP_DB}"
+    
+    ok()  { printf "✅ %s\n" "$*"; }
+    bad() { printf "❌ %s\n" "$*"; exit 1; }
+    warn(){ printf "⚠️  %s\n" "$*"; }
+    
+    echo "== Verifying Postgres (host: postgres) =="
+    echo "   DB=$APP_DB  OWNER=$APP_OWNER  USER=$APP_USER  RO=$APP_RO  SCHEMA=$APP_SCHEMA"
+    echo "   Temporal DB=$TEMPORAL_DB  USER=$TEMPORAL_DB_USER  OWNER=$TEMPORAL_DB_OWNER"
+    echo
+    
+    # --- Core: roles / db / schema / grants ---------------------------------------
+    
+    # App DB roles exist?
+    [ "$($PSQL -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='${APP_USER}';")" = "1" ] \
+      || bad "Role ${APP_USER} does not exist"
+    [ "$($PSQL -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='${APP_RO}';")" = "1" ] \
+      || bad "Role ${APP_RO} does not exist"
+    [ "$($PSQL -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='${APP_OWNER}';")" = "1" ] \
+      || bad "Role ${APP_OWNER} does not exist"
+    
+    # LOGIN/NOLOGIN checks
+    [ "$($PSQL -c "SELECT rolcanlogin FROM pg_roles WHERE rolname='${APP_USER}';")" = "t" ] \
+      || bad "Role ${APP_USER} missing LOGIN"
+    [ "$($PSQL -c "SELECT rolcanlogin FROM pg_roles WHERE rolname='${APP_RO}';")" = "t" ] \
+      || bad "Role ${APP_RO} missing LOGIN"
+    [ "$($PSQL -c "SELECT rolcanlogin FROM pg_roles WHERE rolname='${APP_OWNER}';")" = "f" ] \
+      || bad "Role ${APP_OWNER} should be NOLOGIN"
+    ok "App DB role login attributes look correct"
+    
+    # Temporal DB roles exist?
+    [ "$($PSQL -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='${TEMPORAL_DB_USER}';")" = "1" ] \
+      || bad "Role ${TEMPORAL_DB_USER} does not exist"
+    [ "$($PSQL -c "SELECT COUNT(*) FROM pg_roles WHERE rolname='${TEMPORAL_DB_OWNER}';")" = "1" ] \
+      || bad "Role ${TEMPORAL_DB_OWNER} does not exist"
+    
+    # LOGIN/NOLOGIN checks
+    [ "$($PSQL -c "SELECT rolcanlogin FROM pg_roles WHERE rolname='${TEMPORAL_DB_USER}';")" = "t" ] \
+      || bad "Role ${TEMPORAL_DB_USER} missing LOGIN"
+    [ "$($PSQL -c "SELECT rolcanlogin FROM pg_roles WHERE rolname='${TEMPORAL_DB_OWNER}';")" = "f" ] \
+      || bad "Role ${TEMPORAL_DB_OWNER} should be NOLOGIN"
+    
+    ok "Temporal DB role login attributes look correct"
+    
+    # Database ownership
+    OWNER="$($PSQL -c "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='${APP_DB}';")"
+    [ -n "$OWNER" ] || bad "Database ${APP_DB} does not exist"
+    [ "$OWNER" = "$APP_OWNER" ] || bad "Database ${APP_DB} owner is '${OWNER}' (expected ${APP_OWNER})"
+    ok "Database ${APP_DB} owner is ${APP_OWNER}"
+    
+    # Schema ownership
+    SCHEMA_OWNER="$($PSQL_APP -c "SELECT r.rolname
+                                   FROM pg_namespace n
+                                   JOIN pg_roles r ON r.oid = n.nspowner
+                                   WHERE n.nspname='${APP_SCHEMA}';")"
+    [ -n "$SCHEMA_OWNER" ] || bad "Schema ${APP_SCHEMA} does not exist in ${APP_DB}"
+    [ "$SCHEMA_OWNER" = "$APP_OWNER" ] || bad "Schema ${APP_SCHEMA} owner is '${SCHEMA_OWNER}' (expected ${APP_OWNER})"
+    ok "Schema ${APP_SCHEMA} owner is ${APP_OWNER}"
+    
+    # TLS verification
+    SSL_ON="$($PSQL -c "SHOW ssl;")"
+    [ "$SSL_ON" = "on" ] || bad "ssl is OFF (SHOW ssl)"
+    ok "ssl=on"
+    
+    # Current session should be SSL
+    CURR_SSL="$($PSQL -c "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid();")"
+    [ "$CURR_SSL" = "t" ] && ok "Current connection is using TLS" \
+                          || bad "Current connection is NOT using TLS"
+    
+    # Negative test: non-TLS must fail
+    if psql "host=postgres dbname=${APP_DB} user=${APP_USER} password=${PGPASSWORD} sslmode=disable" -At -c "select 1" >/dev/null 2>&1; then
+      bad "Non-TLS connection (sslmode=disable) unexpectedly succeeded"
+    else
+      ok "Non-TLS connection (sslmode=disable) correctly rejected"
+    fi
+    
+    ok "All checks passed 🎉"

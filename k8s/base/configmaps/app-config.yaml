@@ -1,0 +1,152 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: api-template-prod
+  labels:
+    app.kubernetes.io/name: app
+    app.kubernetes.io/component: application
+data:
+  config.yaml: |
+    config:
+      rate_limiter:
+        requests: 10
+        window_ms: 5000
+        enabled: true
+        per_endpoint: true
+        per_method: true
+
+      database:
+        url: "${DATABASE_URL:-postgresql+asyncpg://user:password@postgres:5432/app_db}"
+        app_db: "${APP_DB:-appdb}"
+        owner_user: "${APP_DB_OWNER:-appowner}"
+        user: "${APP_DB_USER:-user}"
+        ro_user: "${APP_DB_RO_USER:-backupuser}"
+        pool_size: 20
+        max_overflow: 10
+        pool_timeout: 30
+        pool_recycle: 1800
+        environment_mode: "${APP_ENVIRONMENT:-development}"
+        password_file_path: "${DATABASE_PASSWORD_FILE_PATH:-/run/secrets/postgres_app_user_pw}"
+        password_env_var: "${DATABASE_PASSWORD_ENV_VAR:-POSTGRES_APP_USER_PW}"
+
+      temporal:
+        enabled: true
+        url: "${TEMPORAL_URL:-temporal:7233}"
+        namespace: "default"
+        task_queue: "default"
+        workflows:
+          execution_timeout_s: 86400
+          run_timeout_s: 7200
+          task_timeout_s: 10
+        activities:
+          start_to_close_timeout_s: 1200
+          schedule_to_close_timeout_s: 3600
+          heartbeat_timeout_s: 300
+          retry:
+            maximum_attempts: 5
+            initial_interval_seconds: 5
+            backoff_coefficient: 2.0
+            maximum_interval_seconds: 60
+        worker:
+          enabled: true
+          activities_per_second: 10
+          max_concurrent_activities: 100
+          max_concurrent_workflows: 100
+          poll_interval_ms: 1000
+          workflow_cache_size: 100
+          max_workflow_tasks_per_second: 100
+          max_concurrent_workflow_tasks: 100
+          sticky_queue_schedule_to_start_timeout_ms: 10000
+          worker_build_id: "api-worker-1"
+
+      redis:
+        url: "${REDIS_URL:-redis://redis:6379}"
+        password_file_path: "${REDIS_PASSWORD_FILE_PATH:-/run/secrets/redis_password}"
+        password_env_var: "${REDIS_PASSWORD_ENV_VAR:-REDIS_PASSWORD}"
+        db: 0
+        max_connections: 10
+        decode_responses: true
+        socket_timeout: 5
+        socket_connect_timeout: 5
+        health_check_interval: 30
+
+      oidc:
+        callback_url: "${OIDC_CALLBACK_URL:-http://localhost:8000/auth/web/callback}"
+        logout_url: "${OIDC_LOGOUT_URL:-http://localhost:8000}"
+        providers:
+          google:
+            enabled: false
+            issuer: "https://accounts.google.com"
+            client_id: "${OIDC_GOOGLE_CLIENT_ID:-}"
+            client_secret_file_path: "${OIDC_GOOGLE_CLIENT_SECRET_FILE_PATH:-}"
+            client_secret_env_var: "${OIDC_GOOGLE_CLIENT_SECRET_ENV_VAR:-OIDC_GOOGLE_CLIENT_SECRET}"
+            scopes:
+              - openid
+              - profile
+              - email
+          microsoft:
+            enabled: false
+            issuer: "https://login.microsoftonline.com/common/v2.0"
+            client_id: "${OIDC_MICROSOFT_CLIENT_ID:-}"
+            client_secret_file_path: "${OIDC_MICROSOFT_CLIENT_SECRET_FILE_PATH:-}"
+            client_secret_env_var: "${OIDC_MICROSOFT_CLIENT_SECRET_ENV_VAR:-OIDC_MICROSOFT_CLIENT_SECRET}"
+            scopes:
+              - openid
+              - profile
+              - email
+          keycloak:
+            enabled: false
+            issuer: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/test-realm}"
+            client_id: "${OIDC_KEYCLOAK_CLIENT_ID:-test-client}"
+            client_secret_file_path: "${OIDC_KEYCLOAK_CLIENT_SECRET_FILE_PATH:-}"
+            client_secret_env_var: "${OIDC_KEYCLOAK_CLIENT_SECRET_ENV_VAR:-OIDC_KEYCLOAK_CLIENT_SECRET}"
+            scopes:
+              - openid
+              - profile
+              - email
+
+      jwt:
+        issuer_url: "${JWT_ISSUER_URL:-http://localhost:8000}"
+        audience: "${JWT_AUDIENCE:-api-template}"
+        max_age_seconds: 3600
+        clock_skew_seconds: 60
+
+      app:
+        name: "API Template"
+        version: "1.0.0"
+        environment: "${APP_ENVIRONMENT:-development}"
+        debug: false
+        cors:
+          allow_origins:
+            - "http://localhost:3000"
+            - "http://localhost:8000"
+          allow_credentials: true
+          allow_methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - PATCH
+            - OPTIONS
+          allow_headers:
+            - "*"
+          max_age: 3600
+        sessions:
+          cookie_name: "session"
+          max_age: 86400
+          signing_secret_file_path: "${SESSION_SIGNING_SECRET_FILE_PATH:-/run/secrets/session_signing_secret}"
+          signing_secret_env_var: "${SESSION_SIGNING_SECRET_ENV_VAR:-SESSION_SIGNING_SECRET}"
+          signing_algorithm: "HS256"
+          csrf:
+            enabled: true
+            token_name: "csrf_token"
+            header_name: "X-CSRF-Token"
+            signing_secret_file_path: "${CSRF_SIGNING_SECRET_FILE_PATH:-/run/secrets/csrf_signing_secret}"
+            signing_secret_env_var: "${CSRF_SIGNING_SECRET_ENV_VAR:-CSRF_SIGNING_SECRET}"
+            signing_algorithm: "HS256"
+
+      logging:
+        level: "${LOG_LEVEL:-INFO}"
+        format: "${LOG_FORMAT:-json}"
+        output: "stdout"

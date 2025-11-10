@@ -201,6 +201,20 @@ class RedisConfig(BaseModel):
                 return f"{scheme}://:{self.password}@{rest}"
         return self.url
 
+    @computed_field
+    @property
+    def sanitized_connection_string(self) -> str:
+        """Get connection string with password masked for safe logging."""
+        conn_str = self.connection_string
+        if ":" in conn_str and "@" in conn_str:
+            # Format: redis://:PASSWORD@host:port/db
+            # Split on LAST @ (password might contain @)
+            parts = conn_str.rsplit("@", 1)
+            if len(parts) == 2:
+                prefix = parts[0].split(":")[0]  # Get scheme (redis://)
+                return f"{prefix}:****@{parts[1]}"
+        return conn_str
+
 
 class OIDCProviderConfig(BaseModel):
     """OIDC provider configuration model."""
@@ -387,12 +401,12 @@ class DatabaseConfig(BaseModel):
                     self.password_file_path,
                 )
                 raise ValueError("Database password not provided in production mode")
-            return password
 
         else:
             raise ValueError(
                 "Invalid environment_mode; must be 'development', 'production', or 'test'"
             )
+        return password
 
     @computed_field
     @property
@@ -449,6 +463,23 @@ class DatabaseConfig(BaseModel):
             return f"postgresql://{url_with_password.username}:{url_with_password.password}@{url_with_password.host}:{url_with_password.port}/{url_with_password.database}"
         else:
             return f"postgresql://{base_url.username}@{base_url.host}:{base_url.port}/{base_url.database}"  # No password available; return URL as-is
+
+    @computed_field
+    @property
+    def sanitized_connection_string(self) -> str:
+        """Get connection string with password masked for safe logging."""
+        conn_str = self.connection_string
+        if ":" in conn_str and "@" in conn_str:
+            # Format: postgresql://user:PASSWORD@host:port/db
+            # Split on LAST @ (password might contain @)
+            parts = conn_str.rsplit("@", 1)
+            if len(parts) == 2:
+                prefix_parts = parts[0].split(":")
+                if len(prefix_parts) >= 3:
+                    # Reconstruct with masked password
+                    scheme_and_user = ":".join(prefix_parts[:-1])  # postgresql://user
+                    return f"{scheme_and_user}:****@{parts[1]}"
+        return conn_str
 
 
 class AppConfig(BaseModel):

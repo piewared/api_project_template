@@ -43,7 +43,7 @@ class RedisService:
 
             logger.info(
                 "Initializing Redis client with connection string: {}",
-                self._connection_string,
+                redis_config.sanitized_connection_string,
             )
 
             retry = Retry(

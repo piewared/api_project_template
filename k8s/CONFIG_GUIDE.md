@@ -44,6 +44,12 @@ configMapGenerator:
   - name: postgres-verifier-config
     files:
       - verify-postgres.sh=.k8s-sources/verify-postgres.sh.k8s
+  
+  # Temporal scripts
+  - name: temporal-config
+    files:
+      - schema-setup.sh=.k8s-sources/temporal-schema-setup.sh.k8s
+      - entrypoint.sh=.k8s-sources/temporal-entrypoint.sh.k8s
 ```
 
 **Consistent Pattern:** All config files follow the same workflow:
@@ -161,12 +167,13 @@ kubectl kustomize k8s/base/ | grep -A 100 "kind: ConfigMap"
 
 **Source Files (edit these):**
 ```
-.env                                          # Environment variables
-config.yaml                                   # Application configuration
-infra/docker/prod/postgres/postgresql.conf    # PostgreSQL server config
-infra/docker/prod/postgres/pg_hba.conf        # PostgreSQL auth rules
-infra/docker/prod/postgres/init-scripts/*.sh  # Database init scripts
-infra/docker/prod/postgres/verify-init.sh     # Database verifier
+.env                                           # Environment variables
+config.yaml                                    # Application configuration
+infra/docker/prod/postgres/postgresql.conf     # PostgreSQL server config
+infra/docker/prod/postgres/pg_hba.conf         # PostgreSQL auth rules
+infra/docker/prod/postgres/init-scripts/*.sh   # Database init scripts
+infra/docker/prod/postgres/verify-init.sh      # Database verifier
+infra/docker/prod/temporal/scripts/*.sh        # Temporal setup scripts
 ```
 
 **Auto-Generated (don't edit):**
@@ -185,7 +192,7 @@ k8s/scripts/deploy-config.sh   # Deployment script
 **What happens automatically:**
 1. Script copies all source files to `k8s/base/.k8s-sources/`
 2. Kustomize reads the `.k8s` files from `.k8s-sources/`
-3. Auto-generates all ConfigMaps (app-env, app-config, postgres-config, postgres-verifier-config)
+3. Auto-generates all ConfigMaps (app-env, app-config, postgres-config, postgres-verifier-config, temporal-config)
 4. Deploys to Kubernetes
 5. App restarts with new config
 

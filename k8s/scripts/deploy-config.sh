@@ -131,6 +131,22 @@ else
   echo -e "${YELLOW}⚠ Warning: verify-init.sh not found, skipping${NC}"
 fi
 
+# Temporal scripts
+TEMPORAL_DIR="$PROJECT_ROOT/infra/docker/prod/temporal/scripts"
+
+if [[ ! -d "$TEMPORAL_DIR" ]]; then
+  echo -e "${RED}✗ Error: Temporal scripts directory not found${NC}"
+  exit 1
+fi
+
+echo -n "  schema-setup.sh → .k8s-sources/temporal-schema-setup.sh.k8s... "
+cp "$TEMPORAL_DIR/schema-setup.sh" "$K8S_SOURCES/temporal-schema-setup.sh.k8s"
+echo -e "${GREEN}✓${NC}"
+
+echo -n "  entrypoint.sh → .k8s-sources/temporal-entrypoint.sh.k8s... "
+cp "$TEMPORAL_DIR/entrypoint.sh" "$K8S_SOURCES/temporal-entrypoint.sh.k8s"
+echo -e "${GREEN}✓${NC}"
+
 echo ""
 echo -e "${GREEN}✓ All config files copied${NC}"
 

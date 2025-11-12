@@ -39,6 +39,14 @@ configMapGenerator:
       - verify-postgres.sh=.k8s-sources/verify-postgres.sh.k8s
     options:
       disableNameSuffixHash: true
+  
+  # Temporal scripts
+  - name: temporal-config
+    files:
+      - schema-setup.sh=.k8s-sources/temporal-schema-setup.sh.k8s
+      - entrypoint.sh=.k8s-sources/temporal-entrypoint.sh.k8s
+    options:
+      disableNameSuffixHash: true
 
 # Common labels applied to all resources (metadata only, not selectors)
 # Note: Using commonLabels adds labels to Service selectors which breaks pod matching
@@ -57,7 +65,6 @@ resources:
   
   # 3. ConfigMaps
   # All ConfigMaps auto-generated via configMapGenerator above
-  - configmaps/temporal-config.yaml
   
   # 4. Services
   - services/services.yaml

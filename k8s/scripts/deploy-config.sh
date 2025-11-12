@@ -113,8 +113,20 @@ echo -n "  postgresql.conf → .k8s-sources/postgresql.conf.k8s... "
 cp "$PG_DIR/postgresql.conf" "$K8S_SOURCES/postgresql.conf.k8s"
 echo -e "${GREEN}✓${NC}"
 
-echo -n "  pg_hba.conf → .k8s-sources/pg_hba.conf.k8s... "
+echo -n "  pg_hba.conf → .k8s-sources/pg_hba.conf.k8s (K8s-optimized)... "
 cp "$PG_DIR/pg_hba.conf" "$K8S_SOURCES/pg_hba.conf.k8s"
+
+# Kubernetes-specific modification: Replace CIDR-based rules with 0.0.0.0/0
+# Security is enforced via NetworkPolicy instead of IP restrictions
+# This makes the config portable across any K8s cluster
+sed -i 's|^hostssl  all            all             172\.30\.50\.0/24|# hostssl  all            all             172.30.50.0/24  # Disabled for K8s - using NetworkPolicy|' "$K8S_SOURCES/pg_hba.conf.k8s"
+sed -i 's|^hostssl  all            all             172\.18\.0\.0/16|# hostssl  all            all             172.18.0.0/16   # Disabled for K8s - using NetworkPolicy|' "$K8S_SOURCES/pg_hba.conf.k8s"
+sed -i 's|^hostssl  all            all             10\.10\.0\.0/16|# hostssl  all            all             10.10.0.0/16    # Disabled for K8s - using NetworkPolicy|' "$K8S_SOURCES/pg_hba.conf.k8s"
+sed -i 's|^hostssl  all            all             10\.244\.0\.0/16|# hostssl  all            all             10.244.0.0/16   # Disabled for K8s - using NetworkPolicy|' "$K8S_SOURCES/pg_hba.conf.k8s"
+
+# Add Kubernetes-friendly rule (allow SSL from any IP - NetworkPolicy controls access)
+sed -i '/# 2) Allow TLS from your networks/a # Kubernetes: Allow SSL from any IP (NetworkPolicy enforces pod-level access control)\nhostssl  all            all             0.0.0.0/0               scram-sha-256   # K8s pods (secured via NetworkPolicy)' "$K8S_SOURCES/pg_hba.conf.k8s"
+
 echo -e "${GREEN}✓${NC}"
 
 echo -n "  01-init-app.sh → .k8s-sources/01-init-app.sh.k8s... "

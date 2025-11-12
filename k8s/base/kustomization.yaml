@@ -66,17 +66,20 @@ resources:
   # 3. ConfigMaps
   # All ConfigMaps auto-generated via configMapGenerator above
   
-  # 4. Services
+  # 4. Network Policies (security)
+  - network-policies/network-policies.yaml
+  
+  # 5. Services
   - services/services.yaml
   
-  # 5. Deployments
+  # 6. Deployments
   - deployments/postgres.yaml
   - deployments/redis.yaml
   - deployments/temporal.yaml
   - deployments/temporal-web.yaml
   - deployments/app.yaml
   
-  # 6. Jobs (init tasks)
+  # 7. Jobs (init tasks)
   - jobs/postgres-verifier.yaml
   - jobs/temporal-schema-setup.yaml
   - jobs/temporal-namespace-init.yaml

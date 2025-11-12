@@ -7,30 +7,50 @@ Your Kubernetes configuration is automatically generated from your `.env` file. 
 ## How It Works
 
 ```
-.env  →  copy to k8s/base/.env.k8s  →  Kustomize  →  ConfigMap  →  Your app
+Source files  →  copy to k8s/base/.k8s-sources/  →  Kustomize  →  ConfigMaps  →  Your app
 ```
 
-1. You edit `.env` in the project root
-2. The deploy script copies it to `k8s/base/.env.k8s` (kustomize security requirement)
-3. Kustomize reads `k8s/base/.env.k8s` and generates a ConfigMap
-4. Your app gets the config as environment variables
+1. You edit source files (`.env`, `config.yaml`, postgres configs, etc.)
+2. The deploy script copies all source files to `k8s/base/.k8s-sources/` with `.k8s` extension
+3. Kustomize reads the `.k8s` files and auto-generates ConfigMaps
+4. Your app gets the config as environment variables or mounted files
+
+**Why copy files?** Kustomize security requires files to be in the `k8s/base/` directory. We copy source files to `.k8s-sources/` subdirectory with `.k8s` extension. This directory is gitignored.
 
 ## Setup (Already Done)
 
-The `k8s/base/kustomization.yaml` file has this section:
+The `k8s/base/kustomization.yaml` file uses `configMapGenerator` to auto-generate all ConfigMaps:
 
 ```yaml
 configMapGenerator:
+  # Environment variables
   - name: app-env
     envs:
-      - .env.k8s
-    options:
-      disableNameSuffixHash: true
+      - .k8s-sources/.env.k8s
+  
+  # Application config
+  - name: app-config
+    files:
+      - config.yaml=.k8s-sources/config.yaml.k8s
+  
+  # PostgreSQL configs
+  - name: postgres-config
+    files:
+      - postgresql.conf=.k8s-sources/postgresql.conf.k8s
+      - pg_hba.conf=.k8s-sources/pg_hba.conf.k8s
+      - 01-init-app.sh=.k8s-sources/01-init-app.sh.k8s
+  
+  # PostgreSQL verifier
+  - name: postgres-verifier-config
+    files:
+      - verify-postgres.sh=.k8s-sources/verify-postgres.sh.k8s
 ```
 
-This tells Kustomize: "Generate a ConfigMap named `app-env` from `.env.k8s` (in the same directory)."
-
-**Note:** Kustomize has a security restriction - it can only read files in the same directory or subdirectories. That's why the deploy script copies your `.env` to `k8s/base/.env.k8s` before deploying.
+**Consistent Pattern:** All config files follow the same workflow:
+1. Edit source file
+2. Run `deploy-config.sh` (copies to k8s/base/.k8s-sources/)
+3. Kustomize auto-generates ConfigMaps
+4. Deploy to Kubernetes
 
 ## Daily Workflow
 
@@ -113,9 +133,9 @@ Your app reads config at startup. It won't see changes until it restarts.
 kubectl rollout restart deployment/app -n api-template-prod
 ```
 
-### "unable to find file .env.k8s"
+### "unable to find file .k8s-sources/.env.k8s"
 
-The deploy script failed to copy `.env` to `k8s/base/.env.k8s`.
+The deploy script failed to copy `.env` to `k8s/base/.k8s-sources/.env.k8s`.
 
 **Solution:** 
 ```bash
@@ -123,7 +143,7 @@ The deploy script failed to copy `.env` to `k8s/base/.env.k8s`.
 cp .env.example .env
 vim .env  # Add real values
 
-# Run deploy script (it will copy .env to k8s/.env.k8s)
+# Run deploy script (it will copy .env to k8s/base/.k8s-sources/)
 ./k8s/scripts/deploy-config.sh
 ```
 
@@ -139,23 +159,34 @@ kubectl kustomize k8s/base/ | grep -A 100 "kind: ConfigMap"
 
 ## Files You Care About
 
+**Source Files (edit these):**
 ```
-.env                           # Your configuration (edit this)
-k8s/base/.env.k8s              # Copy of .env (auto-generated, gitignored)
-k8s/base/kustomization.yaml    # Has configMapGenerator (don't touch)
-k8s/scripts/deploy-config.sh   # Deployment script (run this)
+.env                                          # Environment variables
+config.yaml                                   # Application configuration
+infra/docker/prod/postgres/postgresql.conf    # PostgreSQL server config
+infra/docker/prod/postgres/pg_hba.conf        # PostgreSQL auth rules
+infra/docker/prod/postgres/init-scripts/*.sh  # Database init scripts
+infra/docker/prod/postgres/verify-init.sh     # Database verifier
+```
+
+**Auto-Generated (don't edit):**
+```
+k8s/base/.k8s-sources/         # Copies of source files (gitignored directory)
+k8s/base/kustomization.yaml    # Kustomize config (defines configMapGenerator)
+k8s/scripts/deploy-config.sh   # Deployment script
 ```
 
 ## Summary
 
 **What you do:**
-1. Edit `.env`
+1. Edit source files (`.env`, `config.yaml`, postgres configs, etc.)
 2. Run `./k8s/scripts/deploy-config.sh --restart`
 
 **What happens automatically:**
-1. Kustomize reads `.env`
-2. Generates ConfigMap with all your vars
-3. Deploys to Kubernetes
-4. App restarts with new config
+1. Script copies all source files to `k8s/base/.k8s-sources/`
+2. Kustomize reads the `.k8s` files from `.k8s-sources/`
+3. Auto-generates all ConfigMaps (app-env, app-config, postgres-config, postgres-verifier-config)
+4. Deploys to Kubernetes
+5. App restarts with new config
 
-**No manual YAML editing. No extra files. Simple.**
+**Consistent workflow for all configs. No manual YAML editing. Single source of truth.**

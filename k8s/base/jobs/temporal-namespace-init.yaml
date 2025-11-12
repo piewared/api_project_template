@@ -25,6 +25,30 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      # Wait for Temporal server to be ready before trying to create namespace
+      initContainers:
+        - name: wait-for-temporal
+          image: busybox:1.36
+          command: 
+            - sh
+            - -c
+            - |
+              echo "Waiting for Temporal server to be ready..."
+              until nc -z -w 2 temporal 7233; do
+                echo "Temporal is unavailable - sleeping"
+                sleep 5
+              done
+              echo "Temporal is up - waiting 10 more seconds for full initialization"
+              sleep 10
+              echo "Temporal is ready!"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
       containers:
         - name: namespace-init
           image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2

@@ -136,33 +136,46 @@ deploy_with_kustomize() {
     else
         # Check if the error is due to immutable field (selector)
         if grep -q "field is immutable" /tmp/kustomize-deploy.log; then
-            log_warn "Detected immutable field errors (likely spec.selector changes)"
-            log_info "Extracting affected deployments and recreating them..."
+            log_warn "Detected immutable field errors (likely spec.selector or spec.template changes)"
+            log_info "Extracting affected deployments and jobs..."
             
             # Extract deployment names from error messages
             local failed_deployments=$(grep "Deployment.apps.*is invalid" /tmp/kustomize-deploy.log | \
                 sed -E 's/.*Deployment\.apps "([^"]+)".*/\1/' | sort -u)
             
-            if [ -n "$failed_deployments" ]; then
-                log_info "Deployments to recreate: $(echo $failed_deployments | tr '\n' ' ')"
+            # Extract job names from error messages
+            local failed_jobs=$(grep "Job.batch.*is invalid" /tmp/kustomize-deploy.log | \
+                sed -E 's/.*Job\.batch "([^"]+)".*/\1/' | sort -u)
+            
+            if [ -n "$failed_deployments" ] || [ -n "$failed_jobs" ]; then
+                if [ -n "$failed_deployments" ]; then
+                    log_info "Deployments to recreate: $(echo $failed_deployments | tr '\n' ' ')"
+                    for deployment in $failed_deployments; do
+                        log_info "Deleting deployment: $deployment"
+                        kubectl delete deployment "$deployment" -n "${NAMESPACE}" --ignore-not-found=true
+                    done
+                fi
                 
-                for deployment in $failed_deployments; do
-                    log_info "Deleting deployment: $deployment"
-                    kubectl delete deployment "$deployment" -n "${NAMESPACE}" --ignore-not-found=true
-                done
+                if [ -n "$failed_jobs" ]; then
+                    log_info "Jobs to recreate: $(echo $failed_jobs | tr '\n' ' ')"
+                    for job in $failed_jobs; do
+                        log_info "Deleting job: $job"
+                        kubectl delete job "$job" -n "${NAMESPACE}" --ignore-not-found=true
+                    done
+                fi
                 
-                log_info "Waiting for deployments to be deleted..."
+                log_info "Waiting for resources to be deleted..."
                 sleep 5
                 
                 log_info "Retrying Kustomize deployment..."
                 if kubectl apply -k "${K8S_BASE}"; then
-                    log_info "✓ All resources deployed after recreating deployments"
+                    log_info "✓ All resources deployed after recreating resources"
                 else
-                    log_error "Kustomize deployment failed even after recreating deployments"
+                    log_error "Kustomize deployment failed even after recreating resources"
                     exit 1
                 fi
             else
-                log_error "Could not extract deployment names from error messages"
+                log_error "Could not extract deployment/job names from error messages"
                 log_error "Please check /tmp/kustomize-deploy.log for details"
                 exit 1
             fi

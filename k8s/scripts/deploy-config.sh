@@ -86,8 +86,14 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "  vim .env"
   exit 1
 fi
-echo -n "  .env → .k8s-sources/.env.k8s... "
+echo -n "  .env → .k8s-sources/.env.k8s (K8s-optimized)... "
 cp "$ENV_FILE" "$K8S_SOURCES/.env.k8s"
+
+# Kubernetes-specific overrides: Force production environment
+# In K8s, we always want production mode (uses service discovery: postgres:5432, redis:6379, temporal:7233)
+# Development mode would try to connect to localhost URLs which don't work in K8s
+sed -i 's/^APP_ENVIRONMENT=.*/APP_ENVIRONMENT=production/' "$K8S_SOURCES/.env.k8s"
+
 echo -e "${GREEN}✓${NC}"
 
 # config.yaml
@@ -125,7 +131,7 @@ sed -i 's|^hostssl  all            all             10\.10\.0\.0/16|# hostssl  al
 sed -i 's|^hostssl  all            all             10\.244\.0\.0/16|# hostssl  all            all             10.244.0.0/16   # Disabled for K8s - using NetworkPolicy|' "$K8S_SOURCES/pg_hba.conf.k8s"
 
 # Add Kubernetes-friendly rule (allow SSL from any IP - NetworkPolicy controls access)
-sed -i '/# 2) Allow TLS from your networks/a # Kubernetes: Allow SSL from any IP (NetworkPolicy enforces pod-level access control)\nhostssl  all            all             0.0.0.0/0               scram-sha-256   # K8s pods (secured via NetworkPolicy)' "$K8S_SOURCES/pg_hba.conf.k8s"
+sed -i '/# 2) Allow TLS from your Docker\/LAN subnets only/a # Kubernetes: Allow SSL from any IP (NetworkPolicy enforces pod-level access control)\nhostssl  all            all             0.0.0.0/0               scram-sha-256   # K8s pods (secured via NetworkPolicy)' "$K8S_SOURCES/pg_hba.conf.k8s"
 
 echo -e "${GREEN}✓${NC}"
 
@@ -136,8 +142,13 @@ echo -e "${GREEN}✓${NC}"
 # PostgreSQL verifier
 VERIFY_SCRIPT="$PG_DIR/verify-init.sh"
 if [[ -f "$VERIFY_SCRIPT" ]]; then
-  echo -n "  verify-init.sh → .k8s-sources/verify-init.sh.k8s... "
+  echo -n "  verify-init.sh → .k8s-sources/verify-init.sh.k8s (K8s-optimized)... "
   cp "$VERIFY_SCRIPT" "$K8S_SOURCES/verify-init.sh.k8s"
+  
+  # Kubernetes-specific modification: Update ALLOWED_SUBNETS to match NetworkPolicy approach
+  # In K8s, we allow 0.0.0.0/0 in pg_hba.conf and use NetworkPolicy for pod-level access control
+  sed -i 's|^ALLOWED_SUBNETS="${ALLOWED_SUBNETS:-172.30.50.0/24}"|ALLOWED_SUBNETS="${ALLOWED_SUBNETS:-0.0.0.0/0}"  # K8s: allow all IPs, NetworkPolicy controls access|' "$K8S_SOURCES/verify-init.sh.k8s"
+  
   echo -e "${GREEN}✓${NC}"
 else
   echo -e "${YELLOW}⚠ Warning: verify-init.sh not found, skipping${NC}"

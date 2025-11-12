@@ -1,93 +1,193 @@
+# Auto-generated from config.yaml by k8s/scripts/deploy-config.sh
+# DO NOT EDIT - Run ./k8s/scripts/deploy-config.sh to regenerate
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
   namespace: api-template-prod
 data:
-  config.yaml: "config:\n  rate_limiter:\n    requests: 10\n    window_ms: 5000\n
-    \   enabled: true\n    per_endpoint: true\n    per_method: true\n\n  database:\n
-    \   url: \"${DATABASE_URL:-postgresql+asyncpg://user:password@postgres:5432/app_db}\"\n
-    \   app_db: \"${APP_DB:-appdb}\"\n    owner_user: \"${APP_DB_OWNER:-appowner}\"\n
-    \   user: \"${APP_DB_USER:-user}\"\n    ro_user: \"${APP_DB_RO_USER:-backupuser}\"\n
-    \   pool_size: 20\n    max_overflow: 10\n    pool_timeout: 30\n    pool_recycle:
-    1800\n    environment_mode: \"${APP_ENVIRONMENT:-development}\"\n    password_file_path:
-    \"${DATABASE_PASSWORD_FILE_PATH:-/run/secrets/postgres_app_user_pw}\"\n    password_env_var:
-    \"${DATABASE_PASSWORD_ENV_VAR:-POSTGRES_APP_USER_PW}\"\n  temporal:\n    enabled:
-    true\n    url: \"${TEMPORAL_URL:-temporal:7233}\"\n    namespace: \"default\"\n
-    \   task_queue: \"default\"\n    workflows:\n      execution_timeout_s: 86400
-    \ # 24 hours. Maximum time a workflow execution can run. Includes retries and
-    continue as new.\n      run_timeout_s: 7200  # 2 hours. Maximum time for a single
-    run of a workflow (before retries).\n      task_timeout_s: 10  # 10 seconds. Maximum
-    time to complete a workflow task.\n    activities:\n      start_to_close_timeout_s:
-    1200  # 20 minutes. Limits the maximum execution time of a single execution of
-    an activity.\n      schedule_to_close_timeout_s: 3600  # 1 hour. Limits the total
-    time allotted for an activity from scheduling to completion. Includes retries.\n
-    \     heartbeat_timeout_s: 300  # 5 minutes. If an activity does not report progress
-    within this time, it is considered failed.\n      retry:\n        maximum_attempts:
-    5\n        initial_interval_seconds: 5\n        backoff_coefficient: 2.0\n        maximum_interval_seconds:
-    60\n    worker:\n      enabled: true\n      activities_per_second: 10\n      max_concurrent_activities:
-    100\n      max_concurrent_workflows: 100\n      poll_interval_ms: 1000\n      workflow_cache_size:
-    100\n      max_workflow_tasks_per_second: 100\n      max_concurrent_workflow_tasks:
-    100\n      sticky_queue_schedule_to_start_timeout_ms: 10000\n      worker_build_id:
-    \"api-worker-1\"\n  redis:\n    enabled: true\n    url: \"${REDIS_URL:-redis://localhost:6379}\"\n
-    \   password: \"${REDIS_PASSWORD:-}\"\n    max_connections: 10\n    decode_responses:
-    true\n    socket_timeout: 5\n    socket_connect_timeout: 5\n  oidc:\n    providers:\n
-    \     google:\n        enabled: true\n        dev_only: false\n        authorization_endpoint:
-    \"https://accounts.google.com/o/oauth2/v2/auth\"\n        token_endpoint: \"https://oauth2.googleapis.com/token\"\n
-    \       userinfo_endpoint: \"https://openidconnect.googleapis.com/v1/userinfo\"\n
-    \       end_session_endpoint: \"https://accounts.google.com/logout\"\n        issuer:
-    \"https://accounts.google.com\"\n        jwks_uri: \"https://www.googleapis.com/oauth2/v3/certs\"\n
-    \       scopes:\n          - openid\n          - profile\n          - email\n
-    \       client_id: your-google-client-id\n        client_secret: \"${OIDC_GOOGLE_CLIENT_SECRET}\"\n
-    \       redirect_uri: \"${OIDC_GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/google/callback}\"\n
-    \     microsoft:\n        enabled: true\n        dev_only: false\n        authorization_endpoint:
-    \"https://login.microsoftonline.com/common/oauth2/v2.0/authorize\"\n        token_endpoint:
-    \"https://login.microsoftonline.com/common/oauth2/v2.0/token\"\n        userinfo_endpoint:
-    \"https://graph.microsoft.com/oidc/userinfo\"\n        end_session_endpoint: \"https://login.microsoftonline.com/common/oauth2/v2.0/logout\"\n
-    \       issuer: \"https://login.microsoftonline.com\"\n        jwks_uri: \"https://login.microsoftonline.com/common/discovery/v2.0/keys\"\n
-    \       scopes:\n          - openid\n          - profile\n          - email\n
-    \       client_id: your-microsoft-client-id\n        client_secret: \"${OIDC_MICROSOFT_CLIENT_SECRET}\"\n
-    \       redirect_uri: \"${OIDC_MICROSOFT_REDIRECT_URI:-http://localhost:8000/auth/microsoft/callback}\"\n
-    \     keycloak:\n        enabled: true\n        dev_only: true\n        issuer:
-    \"http://localhost:8080/realms/test-realm\"\n        openid_configuration_endpoint:
-    \"${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/test-realm}/.well-known/openid-configuration\"\n
-    \       client_id: test-client\n        client_secret: test-client-secret\n        scopes:\n
-    \         - openid\n          - profile\n          - email\n        redirect_uri:
-    \"${OIDC_KEYCLOAK_REDIRECT_URI:-http://localhost:8000/auth/web/callback}\"\n        jwks_uri:
-    \"${OIDC_KEYCLOAK_JWKS_URI:-http://localhost:8080/realms/test-realm/protocol/openid-connect/certs}\"\n
-    \       end_session_endpoint: \"${OIDC_KEYCLOAK_END_SESSION_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/logout}\"\n
-    \       userinfo_endpoint: \"${OIDC_KEYCLOAK_USERINFO_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/userinfo}\"\n
-    \       authorization_endpoint: \"${OIDC_KEYCLOAK_AUTHORIZATION_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/auth}\"\n
-    \       token_endpoint: \"${OIDC_KEYCLOAK_TOKEN_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/token}\"\n
-    \   default_provider: \"keycloak\"\n    global_redirect_uri: \"${OIDC_REDIRECT_URI:-http://localhost:8000/auth/callback}\"\n
-    \   allowed_redirect_hosts: []\n    allowed_audiences: []\n  jwt:\n    # JWT Validation
-    Settings\n    allowed_algorithms: \n      - \"RS256\"\n      - \"RS512\" \n      -
-    \"ES256\"\n      - \"ES384\"\n      - \"HS256\"  # Only if you have shared secrets\n
-    \   # Audiences that your API accepts (who the tokens are intended for)\n    gen_issuer:
-    \"${BASE_URL:-my-api-issuer}\" # Issuer name to use when generating tokens\n    audiences:\n
-    \     - \"${JWT_AUDIENCE:-api://default}\"\n      - \"${JWT_AUDIENCE_SECONDARY:-http://localhost:8000}\"\n
-    \   # Clock skew tolerance in seconds (accounts for time differences between servers)\n
-    \   clock_skew: 60\n    # Token validation settings\n    verify_signature: true\n
-    \   verify_exp: true  # Verify expiration\n    verify_nbf: true  # Verify not-before\n
-    \   verify_iat: true  # Verify issued-at\n    require_exp: true\n    require_iat:
-    true\n    # Claim mappings (how to extract user info from JWT tokens)\n    claims:\n
-    \     user_id: \"${JWT_CLAIM_USER_ID:-sub}\"        # Usually 'sub' (subject)\n
-    \     email: \"${JWT_CLAIM_EMAIL:-email}\"          # Email claim\n      roles:
-    \"${JWT_CLAIM_ROLES:-roles}\"          # Roles/permissions\n      groups: \"${JWT_CLAIM_GROUPS:-groups}\"
-    \      # User groups\n      scope: \"${JWT_CLAIM_SCOPE:-scope}\"          # OAuth
-    scopes\n      name: \"${JWT_CLAIM_NAME:-name}\"             # User's full name\n
-    \     preferred_username: \"${JWT_CLAIM_USERNAME:-preferred_username}\"\n  logging:\n
-    \   level: \"${LOG_LEVEL:-DEBUG}\"\n    format: \"${LOG_FORMAT:-json}\" # Options:
-    \"json\", \"plain\"\n    file: \"${LOG_FILE:-logs/app.log}\"\n    max_size_mb:
-    5\n    backup_count: 5\n  app:\n    environment: \"${APP_ENVIRONMENT:-development}\"
-    # Options: \"development\", \"testing\", \"production\"\n    host: \"${APP_HOST:-localhost}\"\n
-    \   port: \"${APP_PORT:-8000}\"\n    session_max_age: ${SESSION_MAX_AGE:-3600}
-    \ # Session max age in seconds\n    session_signing_secret: \"${SESSION_SIGNING_SECRET}\"
-    \ # Secret for signing session JWTs\n    csrf_signing_secret: \"${CSRF_SIGNING_SECRET}\"
-    \ # Secret for signing CSRF tokens\n    cors:\n      origins:\n        - \"${CLIENT_ORIGIN:-http://localhost:3000}\"\n
-    \     allow_credentials: true\n      allow_methods:\n        - GET\n        -
-    POST\n        - PUT\n        - DELETE\n        - OPTIONS\n      allow_headers:\n
-    \       - Authorization\n        - Content-Type\n        - X-Requested-With\n
-    \       - Accept\n        - Origin\n        - User-Agent\n        - DNT\n        -
-    Cache-Control\n        - X-Mx-ReqToken\n        - Keep-Alive\n        - X-Requested-With\n
-    \       - If-Modified-Since\n        - X-CSRF-Token\n\n\n"
+  config.yaml: |
+    config:
+      rate_limiter:
+        requests: 10
+        window_ms: 5000
+        enabled: true
+        per_endpoint: true
+        per_method: true
+    
+      database:
+        url: "${DATABASE_URL:-postgresql+asyncpg://user:password@postgres:5432/app_db}"
+        app_db: "${APP_DB:-appdb}"
+        owner_user: "${APP_DB_OWNER:-appowner}"
+        user: "${APP_DB_USER:-user}"
+        ro_user: "${APP_DB_RO_USER:-backupuser}"
+        pool_size: 20
+        max_overflow: 10
+        pool_timeout: 30
+        pool_recycle: 1800
+        environment_mode: "${APP_ENVIRONMENT:-development}"
+        password_file_path: "${DATABASE_PASSWORD_FILE_PATH:-/run/secrets/postgres_app_user_pw}"
+        password_env_var: "${DATABASE_PASSWORD_ENV_VAR:-POSTGRES_APP_USER_PW}"
+      temporal:
+        enabled: true
+        url: "${TEMPORAL_URL:-temporal:7233}"
+        namespace: "default"
+        task_queue: "default"
+        workflows:
+          execution_timeout_s: 86400  # 24 hours. Maximum time a workflow execution can run. Includes retries and continue as new.
+          run_timeout_s: 7200  # 2 hours. Maximum time for a single run of a workflow (before retries).
+          task_timeout_s: 10  # 10 seconds. Maximum time to complete a workflow task.
+        activities:
+          start_to_close_timeout_s: 1200  # 20 minutes. Limits the maximum execution time of a single execution of an activity.
+          schedule_to_close_timeout_s: 3600  # 1 hour. Limits the total time allotted for an activity from scheduling to completion. Includes retries.
+          heartbeat_timeout_s: 300  # 5 minutes. If an activity does not report progress within this time, it is considered failed.
+          retry:
+            maximum_attempts: 5
+            initial_interval_seconds: 5
+            backoff_coefficient: 2.0
+            maximum_interval_seconds: 60
+        worker:
+          enabled: true
+          activities_per_second: 10
+          max_concurrent_activities: 100
+          max_concurrent_workflows: 100
+          poll_interval_ms: 1000
+          workflow_cache_size: 100
+          max_workflow_tasks_per_second: 100
+          max_concurrent_workflow_tasks: 100
+          sticky_queue_schedule_to_start_timeout_ms: 10000
+          worker_build_id: "api-worker-1"
+      redis:
+        enabled: true
+        url: "${REDIS_URL:-redis://localhost:6379}"
+        password: "${REDIS_PASSWORD:-}"
+        max_connections: 10
+        decode_responses: true
+        socket_timeout: 5
+        socket_connect_timeout: 5
+      oidc:
+        providers:
+          google:
+            enabled: true
+            dev_only: false
+            authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth"
+            token_endpoint: "https://oauth2.googleapis.com/token"
+            userinfo_endpoint: "https://openidconnect.googleapis.com/v1/userinfo"
+            end_session_endpoint: "https://accounts.google.com/logout"
+            issuer: "https://accounts.google.com"
+            jwks_uri: "https://www.googleapis.com/oauth2/v3/certs"
+            scopes:
+              - openid
+              - profile
+              - email
+            client_id: your-google-client-id
+            client_secret: "${OIDC_GOOGLE_CLIENT_SECRET}"
+            redirect_uri: "${OIDC_GOOGLE_REDIRECT_URI:-http://localhost:8000/auth/google/callback}"
+          microsoft:
+            enabled: true
+            dev_only: false
+            authorization_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+            token_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+            userinfo_endpoint: "https://graph.microsoft.com/oidc/userinfo"
+            end_session_endpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/logout"
+            issuer: "https://login.microsoftonline.com"
+            jwks_uri: "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+            scopes:
+              - openid
+              - profile
+              - email
+            client_id: your-microsoft-client-id
+            client_secret: "${OIDC_MICROSOFT_CLIENT_SECRET}"
+            redirect_uri: "${OIDC_MICROSOFT_REDIRECT_URI:-http://localhost:8000/auth/microsoft/callback}"
+          keycloak:
+            enabled: true
+            dev_only: true
+            issuer: "http://localhost:8080/realms/test-realm"
+            openid_configuration_endpoint: "${OIDC_KEYCLOAK_ISSUER:-http://localhost:8080/realms/test-realm}/.well-known/openid-configuration"
+            client_id: test-client
+            client_secret: test-client-secret
+            scopes:
+              - openid
+              - profile
+              - email
+            redirect_uri: "${OIDC_KEYCLOAK_REDIRECT_URI:-http://localhost:8000/auth/web/callback}"
+            jwks_uri: "${OIDC_KEYCLOAK_JWKS_URI:-http://localhost:8080/realms/test-realm/protocol/openid-connect/certs}"
+            end_session_endpoint: "${OIDC_KEYCLOAK_END_SESSION_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/logout}"
+            userinfo_endpoint: "${OIDC_KEYCLOAK_USERINFO_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/userinfo}"
+            authorization_endpoint: "${OIDC_KEYCLOAK_AUTHORIZATION_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/auth}"
+            token_endpoint: "${OIDC_KEYCLOAK_TOKEN_ENDPOINT:-http://localhost:8080/realms/test-realm/protocol/openid-connect/token}"
+        default_provider: "keycloak"
+        global_redirect_uri: "${OIDC_REDIRECT_URI:-http://localhost:8000/auth/callback}"
+        allowed_redirect_hosts: []
+        allowed_audiences: []
+      jwt:
+        # JWT Validation Settings
+        allowed_algorithms: 
+          - "RS256"
+          - "RS512" 
+          - "ES256"
+          - "ES384"
+          - "HS256"  # Only if you have shared secrets
+        # Audiences that your API accepts (who the tokens are intended for)
+        gen_issuer: "${BASE_URL:-my-api-issuer}" # Issuer name to use when generating tokens
+        audiences:
+          - "${JWT_AUDIENCE:-api://default}"
+          - "${JWT_AUDIENCE_SECONDARY:-http://localhost:8000}"
+        # Clock skew tolerance in seconds (accounts for time differences between servers)
+        clock_skew: 60
+        # Token validation settings
+        verify_signature: true
+        verify_exp: true  # Verify expiration
+        verify_nbf: true  # Verify not-before
+        verify_iat: true  # Verify issued-at
+        require_exp: true
+        require_iat: true
+        # Claim mappings (how to extract user info from JWT tokens)
+        claims:
+          user_id: "${JWT_CLAIM_USER_ID:-sub}"        # Usually 'sub' (subject)
+          email: "${JWT_CLAIM_EMAIL:-email}"          # Email claim
+          roles: "${JWT_CLAIM_ROLES:-roles}"          # Roles/permissions
+          groups: "${JWT_CLAIM_GROUPS:-groups}"       # User groups
+          scope: "${JWT_CLAIM_SCOPE:-scope}"          # OAuth scopes
+          name: "${JWT_CLAIM_NAME:-name}"             # User's full name
+          preferred_username: "${JWT_CLAIM_USERNAME:-preferred_username}"
+      logging:
+        level: "${LOG_LEVEL:-DEBUG}"
+        format: "${LOG_FORMAT:-json}" # Options: "json", "plain"
+        file: "${LOG_FILE:-logs/app.log}"
+        max_size_mb: 5
+        backup_count: 5
+      app:
+        environment: "${APP_ENVIRONMENT:-development}" # Options: "development", "testing", "production"
+        host: "${APP_HOST:-localhost}"
+        port: "${APP_PORT:-8000}"
+        session_max_age: ${SESSION_MAX_AGE:-3600}  # Session max age in seconds
+        session_signing_secret: "${SESSION_SIGNING_SECRET}"  # Secret for signing session JWTs
+        csrf_signing_secret: "${CSRF_SIGNING_SECRET}"  # Secret for signing CSRF tokens
+        cors:
+          origins:
+            - "${CLIENT_ORIGIN:-http://localhost:3000}"
+          allow_credentials: true
+          allow_methods:
+            - GET
+            - POST
+            - PUT
+            - DELETE
+            - OPTIONS
+          allow_headers:
+            - Authorization
+            - Content-Type
+            - X-Requested-With
+            - Accept
+            - Origin
+            - User-Agent
+            - DNT
+            - Cache-Control
+            - X-Mx-ReqToken
+            - Keep-Alive
+            - X-Requested-With
+            - If-Modified-Since
+            - X-CSRF-Token
+    
+    

@@ -91,7 +91,3 @@ data:
     \       - Accept\n        - Origin\n        - User-Agent\n        - DNT\n        -
     Cache-Control\n        - X-Mx-ReqToken\n        - Keep-Alive\n        - X-Requested-With\n
     \       - If-Modified-Since\n        - X-CSRF-Token\n\n\n"
-kind: ConfigMap
-metadata:
-  name: app-config
-  namespace: api-template-prod

@@ -7,6 +7,14 @@ metadata:
 # Namespace for all resources
 namespace: api-template-prod
 
+# Auto-generate ConfigMaps from .env files
+configMapGenerator:
+  - name: app-env
+    envs:
+      - .env.k8s
+    options:
+      disableNameSuffixHash: true
+
 # Common labels applied to all resources (metadata only, not selectors)
 # Note: Using commonLabels adds labels to Service selectors which breaks pod matching
 # Use labels: in each resource definition instead
@@ -23,8 +31,7 @@ resources:
   - storage/persistentvolumeclaims.yaml
   
   # 3. ConfigMaps
-  - configmaps/env-config.yaml
-  - configmaps/app-env.yaml
+  # app-env is auto-generated from .env.k8s via configMapGenerator
   - configmaps/postgres-config.yaml
   - configmaps/postgres-verifier-config.yaml
   - configmaps/temporal-config.yaml

@@ -164,6 +164,7 @@ terraform.tfvars
 k8s-secrets/
 *.k8s.yaml
 kube-secrets/
+k8s/base/.env.k8s
 
 # Cloud provider credentials
 .aws/

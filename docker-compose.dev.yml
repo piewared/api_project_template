@@ -75,6 +75,33 @@ services:
     ports:
       - 8082:8080
 
+  worker:
+    container_name: api-template-worker-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: api-template-app:latest
+    depends_on:
+      - postgres
+      - redis
+      - temporal
+    env_file:
+      - .env
+    environment:
+      - APP_ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - LOG_FORMAT=json
+      - PYTHONPATH=/app
+      - DEVELOPMENT_TEMPORAL_URL=temporal:7233
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./src:/app/src:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - dev-network
+    command: ["python", "-m", "src.worker.main", "--log-level", "DEBUG"]
+    restart: unless-stopped
+
 volumes:
   keycloak_data:
     driver: local

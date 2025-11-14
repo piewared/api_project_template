@@ -256,8 +256,9 @@ async def _initialize_rate_limiter() -> None:
         )
         await FastAPILimiter.init(client)
         app.state.redis = client
+
         logger.info(
-            "FastAPI limiter initialized with Redis: {}", config.redis.connection_string
+            "FastAPI limiter initialized with Redis: {}", config.redis.sanitized_connection_string
         )
         configure_rate_limiter()  # use default redis-based limiter
         app.state.local_rate_limiter = None

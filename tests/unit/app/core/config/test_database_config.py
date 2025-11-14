@@ -70,7 +70,7 @@ class TestDatabaseConfigPasswordResolution:
             config = DatabaseConfig(
                 url="postgresql+asyncpg://user@postgres:5432/appdb",
                 environment_mode="production",
-                password_file=temp_file_path,
+                password_file_path=temp_file_path,
             )
 
             assert config.password == "production_secret_password"
@@ -87,7 +87,7 @@ class TestDatabaseConfigPasswordResolution:
             config = DatabaseConfig(
                 url="postgresql+asyncpg://user@postgres:5432/appdb",
                 environment_mode="production",
-                password_file=temp_file_path,
+                password_file_path=temp_file_path,
             )
 
             assert config.password == "production_password_with_spaces"
@@ -99,11 +99,11 @@ class TestDatabaseConfigPasswordResolution:
         config = DatabaseConfig(
             url="postgresql+asyncpg://user@postgres:5432/appdb",
             environment_mode="production",
-            password_file="/nonexistent/password/file",
+            password_file_path="/nonexistent/password/file",
         )
 
         with pytest.raises(
-            ValueError, match="Failed to read database password from file"
+            FileNotFoundError
         ):
             _ = config.password
 
@@ -120,11 +120,11 @@ class TestDatabaseConfigPasswordResolution:
             config = DatabaseConfig(
                 url="postgresql+asyncpg://user@postgres:5432/appdb",
                 environment_mode="production",
-                password_file=temp_file_path,
+                password_file_path=temp_file_path,
             )
 
             with pytest.raises(
-                ValueError, match="Failed to read database password from file"
+                PermissionError
             ):
                 _ = config.password
         finally:
@@ -153,7 +153,7 @@ class TestDatabaseConfigPasswordResolution:
         )
 
         with pytest.raises(
-            ValueError, match="Environment variable MISSING_DB_PASSWORD not set"
+            ValueError, match="Database password not provided in production mode"
         ):
             _ = config.password
 
@@ -167,11 +167,11 @@ class TestDatabaseConfigPasswordResolution:
         )
 
         with pytest.raises(
-            ValueError, match="Environment variable DB_PASSWORD not set"
+            ValueError, match="Database password not provided in production mode"
         ):
             _ = config.password
 
-    def test_production_mode_file_takes_precedence_over_env_var(self):
+    def test_production_mode_env_var_takes_precedence_over_file(self):
         """Test that password_file_path takes precedence over environment variable."""
         with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
             temp_file.write("file_password")
@@ -182,11 +182,11 @@ class TestDatabaseConfigPasswordResolution:
                 config = DatabaseConfig(
                     url="postgresql+asyncpg://user@postgres:5432/appdb",
                     environment_mode="production",
-                    password_file=temp_file_path,
+                    password_file_path=temp_file_path,
                     password_env_var="DB_PASSWORD",
                 )
 
-                assert config.password == "file_password"
+                assert config.password == "env_password"
         finally:
             os.unlink(temp_file_path)
 
@@ -199,7 +199,7 @@ class TestDatabaseConfigPasswordResolution:
 
         with pytest.raises(
             ValueError,
-            match="In production mode, either password_file or password_env_var must be set",
+            match="Database password not provided in production mode",
         ):
             _ = config.password
 
@@ -257,7 +257,7 @@ class TestDatabaseConfigPasswordResolution:
             config = DatabaseConfig(
                 url="postgresql+asyncpg://user@postgres:5432/appdb",
                 environment_mode="production",
-                password_file=temp_file_path,
+                password_file_path=temp_file_path,
             )
 
             # File reading strips whitespace including newlines

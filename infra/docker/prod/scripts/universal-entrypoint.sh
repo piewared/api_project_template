@@ -137,9 +137,6 @@ echo "Secrets setup complete."
 # Drop privileges and start the application (unless explicitly skipped)
 if [ "$SKIP_USER_SWITCH" = "false" ]; then
     echo "Starting application as user ${CONTAINER_USER_UID}:${CONTAINER_USER_GID}..."
-    # Debug: Print environment before gosu
-    echo "Environment variables before gosu:"
-    env | grep -E "(POSTGRES|REDIS)_PASSWORD" || echo "No password vars found"
     # No need to source any file; env already set and inherited
     if command -v gosu >/dev/null 2>&1; then
         exec gosu "$CONTAINER_USER_UID:$CONTAINER_USER_GID" "$@"

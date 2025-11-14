@@ -61,39 +61,14 @@ spec:
               export PGPASSWORD="$(cat /run/secrets/postgres_app_user_pw)"
               export PGSU_PASSWORD="$(cat /run/secrets/postgres_password)"
               exec /scripts/verify-init.sh
+          # Load all app environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: app-env
           env:
+            # Override/add specific values
             - name: TZ
               value: UTC
-            - name: APP_DB
-              valueFrom:
-                configMapKeyRef:
-                  name: app-env
-                  key: APP_DB
-            - name: APP_DB_USER
-              valueFrom:
-                configMapKeyRef:
-                  name: app-env
-                  key: APP_DB_USER
-            - name: APP_DB_OWNER
-              valueFrom:
-                configMapKeyRef:
-                  name: app-env
-                  key: APP_DB_OWNER
-            - name: APP_DB_RO_USER
-              valueFrom:
-                configMapKeyRef:
-                  name: app-env
-                  key: APP_DB_RO_USER
-            - name: TEMPORAL_DB
-              valueFrom:
-                configMapKeyRef:
-                  name: app-env
-                  key: TEMPORAL_DB
-            - name: TEMPORAL_DB_USER
-              valueFrom:
-                configMapKeyRef:
-                  name: app-env
-                  key: TEMPORAL_DB_USER
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

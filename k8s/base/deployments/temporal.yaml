@@ -33,7 +33,12 @@ spec:
           image: my-temporal-server:1.29.0
           imagePullPolicy: IfNotPresent
           command: ["/opt/entry/scripts/entrypoint.sh"]
+          # Load all app environment variables from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: app-env
           env:
+            # Override/add specific values
             - name: TZ
               value: UTC
             - name: SERVICES

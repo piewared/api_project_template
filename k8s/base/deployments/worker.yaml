@@ -25,6 +25,9 @@ spec:
         app.kubernetes.io/component: temporal-worker
         app.kubernetes.io/part-of: api-template
     spec:
+      # Disable automatic service discovery environment variable injection
+      # to prevent conflicts with explicitly defined environment variables (e.g., APP_PORT)
+      enableServiceLinks: false
       securityContext:
         # Container must start as root to run entrypoint script
         # Script will drop privileges to appuser (1001) via gosu

@@ -33,10 +33,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: TZ
+              value: UTC
             - name: REDIS_PASSWORD_FILE
               value: /run/secrets/redis_password
           ports:

@@ -35,10 +35,7 @@ spec:
           command: ["/opt/entry/scripts/entrypoint.sh"]
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: TZ
+              value: UTC
             - name: SERVICES
               value: "history,matching,worker,frontend"
             - name: DB
@@ -48,12 +45,12 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_DB_USER
             - name: POSTGRES_DB
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_DB
             - name: SQL_TLS_ENABLED
               value: "true"
@@ -70,12 +67,12 @@ spec:
             - name: DBNAME
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_DB
             - name: VISIBILITY_DBNAME
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_VIS_DB
             - name: DB_PORT
               value: "5432"

@@ -45,17 +45,11 @@ spec:
           env:
             # Override/add specific values
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: TZ
+              value: UTC
             - name: LOG_FORMAT
               value: json
             - name: LOG_LEVEL
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: LOG_LEVEL
+              value: INFO
             # Entrypoint variables
             - name: CONTAINER_USER_UID
               value: appuser

@@ -55,24 +55,21 @@ spec:
           args: ["/scripts/schema-setup.sh"]
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: TZ
+              value: UTC
             - name: TEMPORAL_DB
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_DB
             - name: TEMPORAL_VIS_DB
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_VIS_DB
             - name: TEMPORAL_DB_USER
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_DB_USER
             - name: EP
               value: postgres

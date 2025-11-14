@@ -63,39 +63,36 @@ spec:
               exec /scripts/verify-init.sh
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: TZ
+              value: UTC
             - name: APP_DB
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: APP_DB
             - name: APP_DB_USER
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: APP_DB_USER
             - name: APP_DB_OWNER
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: APP_DB_OWNER
             - name: APP_DB_RO_USER
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: APP_DB_RO_USER
             - name: TEMPORAL_DB
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_DB
             - name: TEMPORAL_DB_USER
               valueFrom:
                 configMapKeyRef:
-                  name: env-config
+                  name: app-env
                   key: TEMPORAL_DB_USER
           securityContext:
             allowPrivilegeEscalation: false

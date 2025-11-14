@@ -33,10 +33,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: TZ
+              value: UTC
             - name: TEMPORAL_ADDRESS
               value: temporal:7233
           ports:
@@ -115,10 +112,7 @@ spec:
           imagePullPolicy: IfNotPresent
           env:
             - name: TZ
-              valueFrom:
-                configMapKeyRef:
-                  name: env-config
-                  key: TZ
+              value: UTC
             - name: TEMPORAL_ADDRESS
               value: temporal:7233
           securityContext:

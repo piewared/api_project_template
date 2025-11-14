@@ -78,6 +78,7 @@ resources:
   - deployments/temporal.yaml
   - deployments/temporal-web.yaml
   - deployments/app.yaml
+  - deployments/worker.yaml
   
   # 7. Jobs (init tasks)
   - jobs/postgres-verifier.yaml

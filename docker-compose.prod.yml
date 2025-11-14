@@ -359,6 +359,79 @@ services:
           cpus: '0.25'
           memory: 128M
 
+  # Temporal Worker
+  worker:
+    container_name: api-template-worker-prod
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: api-template-app:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      temporal:
+        condition: service_healthy
+      temporal-namespace-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN           # Required for entrypoint to change file ownership
+      - DAC_OVERRIDE    # Required to bypass file permission checks as root
+      - FOWNER          # Required for entrypoint to override file permissions
+      - SETUID          # Required for gosu/su-exec to drop privileges
+      - SETGID          # Required for gosu/su-exec to drop privileges
+    tmpfs:
+    - /tmp:noexec,nosuid,nodev,size=100m
+    environment:
+      <<: *entrypoint-common-vars
+      CONTAINER_USER_UID: appuser
+      CONTAINER_USER_GID: appgroup
+
+      # Application settings
+      APP_ENVIRONMENT: production
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: json
+      
+    secrets:
+      - postgres_app_user_pw
+      - redis_password
+      - session_signing_secret
+      - csrf_signing_secret
+    
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - app_logs:/app/logs
+      - /etc/localtime:/etc/localtime:ro
+    
+    networks:
+      - backend
+    
+    restart: unless-stopped
+    
+    command: ["python", "-m", "src.worker.main", "--log-level", "INFO"]
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
 # Volume Configuration
 volumes:
   postgres_data:

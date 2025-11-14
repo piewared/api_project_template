@@ -8,6 +8,7 @@ This directory contains automation scripts for building, deploying, and managing
 |--------|---------|-------|
 | `build-images.sh` | Build all Docker images | `./build-images.sh` |
 | `create-secrets.sh` | Create Kubernetes secrets | `./create-secrets.sh [namespace]` |
+| `deploy-config.sh` | Sync config files and deploy | `./deploy-config.sh [--restart] [--sync-only]` |
 | `deploy-resources.sh` | Deploy all resources | `./deploy-resources.sh [namespace]` |
 
 ## Quick Start
@@ -21,14 +22,66 @@ For a complete fresh deployment:
 # 2. Generate secrets (from project root)
 cd ../../infra/secrets && ./generate_secrets.sh && cd -
 
-# 3. Create Kubernetes secrets
+# 3. Sync config files
+./deploy-config.sh --sync-only
+
+# 4. Create Kubernetes secrets
 ./create-secrets.sh
 
-# 4. Deploy everything
+# 5. Deploy everything
 ./deploy-resources.sh
 ```
 
 ## Script Details
+
+### deploy-config.sh
+
+Syncs configuration files from source locations to Kubernetes and auto-generates ConfigMaps.
+
+**Requirements**:
+- kubectl installed and configured
+- Kubernetes cluster accessible
+- Source files exist (`.env`, `config.yaml`, postgres configs, temporal scripts)
+
+**Arguments**:
+- `--restart` - Also restart app deployment after config update
+- `--sync-only` - Only copy files to `.k8s-sources/`, don't deploy
+
+**What it does**:
+1. Copies all config files to `k8s/base/.k8s-sources/` with `.k8s` extension
+   - `.env` → `.env.k8s` (forces APP_ENVIRONMENT=production)
+   - `config.yaml` → `config.yaml.k8s`
+   - PostgreSQL configs → `*.k8s` (modifies pg_hba.conf for K8s)
+   - Temporal scripts → `*.k8s`
+2. Validates Kustomize configuration
+3. Previews ConfigMap changes
+4. Deploys to Kubernetes (generates 5 ConfigMaps via Kustomize)
+5. Optionally restarts app to pick up changes
+
+**ConfigMaps generated**:
+- `app-env` (from `.env.k8s`)
+- `app-config` (from `config.yaml.k8s`)
+- `postgres-config` (from postgresql.conf, pg_hba.conf, init scripts)
+- `postgres-verifier-config` (from verify-init.sh)
+- `temporal-config` (from temporal scripts)
+
+**Exit codes**:
+- `0` - Success
+- `1` - Missing source files or deployment failed
+
+**Examples**:
+```bash
+# Sync and deploy config
+./deploy-config.sh
+
+# Sync, deploy, and restart app
+./deploy-config.sh --restart
+
+# Only sync files (don't deploy)
+./deploy-config.sh --sync-only
+```
+
+---
 
 ### build-images.sh
 
@@ -105,16 +158,16 @@ Deploys all Kubernetes resources in dependency order with health checks.
 1. **Checks prerequisites** - kubectl, cluster, secrets
 2. **Deploys namespace** - Creates if missing
 3. **Deploys storage** - PersistentVolumeClaims
-4. **Deploys ConfigMaps** - All configuration files
+4. **Deploys ConfigMaps** - All configuration files (auto-generated via Kustomize from `.k8s-sources/`)
 5. **Deploys Services** - ClusterIP services for all components
 6. **Deploys databases** - PostgreSQL and Redis
    - Waits up to 120s for each to be ready
 7. **Initializes Temporal** - Runs schema setup job
    - Waits up to 300s for completion
-8. **Deploys Temporal** - Temporal server and web UI
+8. **Deploys Temporal** - Temporal server, web UI, and admin tools
    - Waits up to 120s for server to be ready
-9. **Deploys application** - FastAPI app
-   - Waits up to 120s for app to be ready
+9. **Deploys application** - FastAPI app and Temporal worker
+   - Waits up to 120s for each to be ready
 10. **Verifies deployment** - Checks pod status and app health
 11. **Displays next steps** - Commands for accessing services
 

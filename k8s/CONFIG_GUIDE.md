@@ -23,12 +23,12 @@ The `k8s/base/kustomization.yaml` file uses `configMapGenerator` to auto-generat
 
 ```yaml
 configMapGenerator:
-  # Environment variables
+  # Environment variables (from .env file)
   - name: app-env
     envs:
       - .k8s-sources/.env.k8s
   
-  # Application config
+  # Application config (from config.yaml)
   - name: app-config
     files:
       - config.yaml=.k8s-sources/config.yaml.k8s
@@ -51,6 +51,8 @@ configMapGenerator:
       - schema-setup.sh=.k8s-sources/temporal-schema-setup.sh.k8s
       - entrypoint.sh=.k8s-sources/temporal-entrypoint.sh.k8s
 ```
+
+**Note**: Operational values like `TZ`, `LOG_FORMAT`, and `LOG_LEVEL` are hardcoded directly in deployment manifests (not in ConfigMaps) for consistency.
 
 **Consistent Pattern:** All config files follow the same workflow:
 1. Edit source file

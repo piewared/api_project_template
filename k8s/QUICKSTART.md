@@ -45,7 +45,7 @@ cd infra/secrets && ./generate_secrets.sh && cd ../.. && \
 ### Infrastructure Layer
 - ✅ Namespace: `api-template-prod`
 - ✅ Storage: 5 PersistentVolumeClaims
-- ✅ ConfigMaps: 6 configuration files
+- ✅ ConfigMaps: 5 configuration files
 - ✅ Services: 5 ClusterIP services
 
 ### Data Layer
@@ -55,9 +55,12 @@ cd infra/secrets && ./generate_secrets.sh && cd ../.. && \
 ### Application Layer
 - ✅ Temporal Server (workflow engine)
 - ✅ Temporal Web UI
+- ✅ Temporal Admin Tools
 - ✅ FastAPI Application
+- ✅ Temporal Worker (background tasks)
 
 ### Initialization Jobs
+- ✅ PostgreSQL verifier (security checks)
 - ✅ Temporal schema setup
 - ✅ Temporal namespace initialization
 
@@ -154,13 +157,14 @@ minikube ssh "docker images | grep 'api-template\|my-temporal' | awk '{print \$3
    - With `kubectl apply -k`, some pods may restart until dependencies are ready
 
 2. **Deployment order matters**
-   - Database → Temporal schemas → Temporal → App
+   - Database → Temporal schemas → Temporal → App/Worker
    - Scripts handle this automatically
 
 3. **Environment variables**
    - App uses `config.yaml` with `${VAR:-default}` patterns
-   - ConfigMap `app-env.yaml` provides the variables
-   - Don't modify `app-config.yaml` directly
+   - ConfigMap `app-env` (generated from `.env`) provides the variables
+   - Deployments use `envFrom` to load all env vars at once
+   - Operational values (TZ, LOG_FORMAT, LOG_LEVEL) are hardcoded in manifests
 
 4. **Secrets**
    - Generate with `infra/secrets/generate_secrets.sh`
@@ -229,16 +233,18 @@ kubectl rollout restart deployment/app -n api-template-prod
 
 ### Update Configuration
 ```bash
-# 1. Edit config.yaml or app-env ConfigMap
-vim config.yaml
+# 1. Edit .env or config.yaml
+vim .env
 # or
-vim k8s/base/configmaps/app-env.yaml
+vim config.yaml
 
-# 2. Apply changes
-kubectl apply -f k8s/base/configmaps/app-env.yaml
+# 2. Sync changes and deploy
+./k8s/scripts/deploy-config.sh --restart
 
-# 3. Restart app
-kubectl rollout restart deployment/app -n api-template-prod
+# This automatically:
+# - Copies files to k8s/base/.k8s-sources/
+# - Generates ConfigMaps via Kustomize
+# - Restarts affected deployments
 ```
 
 ### Update Secrets

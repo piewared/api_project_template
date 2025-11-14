@@ -11,12 +11,12 @@ k8s/
 │   │   └── namespace.yaml
 │   ├── storage/                   # PersistentVolumeClaims
 │   │   └── persistentvolumeclaims.yaml
-│   ├── configmaps/                # Configuration data
-│   │   ├── env-config.yaml        # Environment variables
+│   ├── configmaps/                # Configuration data (auto-generated)
+│   │   ├── app-env.yaml           # Environment variables
+│   │   ├── app-config.yaml        # Application configuration
 │   │   ├── postgres-config.yaml   # PostgreSQL configuration
 │   │   ├── postgres-verifier-config.yaml
-│   │   ├── temporal-config.yaml   # Temporal configuration
-│   │   └── app-config.yaml        # Application configuration
+│   │   └── temporal-config.yaml   # Temporal configuration
 │   ├── services/                  # Kubernetes Services
 │   │   └── services.yaml
 │   ├── deployments/               # Application deployments
@@ -24,7 +24,8 @@ k8s/
 │   │   ├── redis.yaml
 │   │   ├── temporal.yaml
 │   │   ├── temporal-web.yaml
-│   │   └── app.yaml
+│   │   ├── app.yaml
+│   │   └── worker.yaml            # Temporal worker
 │   ├── jobs/                      # Initialization jobs
 │   │   ├── postgres-verifier.yaml
 │   │   ├── temporal-schema-setup.yaml
@@ -59,7 +60,21 @@ ls -la infra/secrets/keys/
 ls -la infra/secrets/certs/
 ```
 
-### Step 2: Create Kubernetes Secrets
+### Step 2: Sync Configuration Files
+
+Sync your `.env` and `config.yaml` to the k8s deployment:
+
+```bash
+# Copy source files to k8s/base/.k8s-sources/ for Kustomize
+./k8s/scripts/deploy-config.sh
+
+# This copies:
+# - .env → .k8s-sources/.env.k8s
+# - config.yaml → .k8s-sources/config.yaml.k8s
+# - All postgres and temporal scripts
+```
+
+### Step 3: Create Kubernetes Secrets
 
 Run the secret creation script to create all Kubernetes secrets:
 
@@ -78,7 +93,7 @@ This script creates:
 - `redis-secrets`: Redis password
 - `app-secrets`: Session and CSRF signing secrets
 
-### Step 3: Build and Push Docker Images
+### Step 4: Build and Push Docker Images
 
 Build all images using the automated build script:
 
@@ -134,7 +149,7 @@ docker push your-registry.io/temporal:1.29.0
 # Edit k8s/base/deployments/*.yaml to use your registry URLs
 ```
 
-### Step 4: Deploy to Kubernetes
+### Step 5: Deploy to Kubernetes
 
 Deploy all resources using Kustomize:
 
@@ -193,6 +208,9 @@ kubectl logs -n api-template-prod deployment/temporal -f
 # Application logs
 kubectl logs -n api-template-prod deployment/app -f
 
+# Worker logs
+kubectl logs -n api-template-prod deployment/worker -f
+
 # Job logs
 kubectl logs -n api-template-prod job/postgres-verifier
 kubectl logs -n api-template-prod job/temporal-schema-setup
@@ -218,19 +236,33 @@ kubectl port-forward -n api-template-prod svc/temporal-web 8080:8080
 
 ### Environment Variables
 
-Edit `k8s/base/configmaps/env-config.yaml` to change:
+Edit `.env` file and sync using `./k8s/scripts/deploy-config.sh`:
 - `APP_ENVIRONMENT`: production, staging, development
-- `LOG_LEVEL`: DEBUG, INFO, WARNING, ERROR
-- `TZ`: Timezone (default: UTC)
+- `DATABASE_URL`, `REDIS_URL`: Connection strings
+- `OIDC_*_CLIENT_ID`, `OIDC_*_CLIENT_SECRET`: OAuth credentials
+
+**Note**: `TZ`, `LOG_LEVEL`, and `LOG_FORMAT` are hardcoded in deployment manifests (not in ConfigMaps).
 
 ### Application Configuration
 
-Edit `k8s/base/configmaps/app-config.yaml` to configure:
+Edit `config.yaml` and sync using `./k8s/scripts/deploy-config.sh`:
 - Database connection settings
 - Redis settings
 - OIDC providers
 - Session management
 - CORS settings
+
+### Configuration Pattern
+
+The deployment uses `envFrom` to load environment variables from the `app-env` ConfigMap:
+
+```yaml
+envFrom:
+  - configMapRef:
+      name: app-env
+```
+
+This loads all variables from `.env` at once, simplifying manifest maintenance.
 
 ### Resource Limits
 
@@ -269,7 +301,12 @@ resources:
 - Seccomp profile enabled
 - Read-only root filesystem where possible
 
-### 3. Network Policies
+### 3. Service Discovery Isolation
+- `enableServiceLinks: false` in app and worker pods
+- Prevents Kubernetes from injecting service discovery environment variables
+- Avoids conflicts with application environment variables (e.g., `APP_PORT`)
+
+### 4. Network Policies
 Services use ClusterIP (internal only). To expose externally:
 
 ```yaml
@@ -282,7 +319,7 @@ spec:
   type: LoadBalancer  # or use Ingress
 ```
 
-### 4. TLS/mTLS
+### 5. TLS/mTLS
 - PostgreSQL: TLS-only connections enforced
 - Redis: Password authentication
 - Temporal: TLS for database connections
@@ -429,6 +466,7 @@ Services are accessible via DNS:
 - Redis: `redis.api-template-prod.svc.cluster.local:6379`
 - Temporal: `temporal.api-template-prod.svc.cluster.local:7233`
 - App: `app.api-template-prod.svc.cluster.local:8000`
+- Worker: No service (uses Temporal client connection)
 
 ### From Outside Cluster
 
@@ -497,8 +535,8 @@ When modifying manifests:
 
 ### Best Practices Applied
 
-✅ Consolidated ConfigMaps (5 vs 12 original)  
-✅ Consolidated Secrets (5 vs 11 original)  
+✅ Consolidated ConfigMaps (5 total)  
+✅ Consolidated Secrets (5 total)  
 ✅ Jobs instead of Pods for init tasks  
 ✅ Proper security contexts on all resources  
 ✅ Resource limits and requests defined  
@@ -508,10 +546,13 @@ When modifying manifests:
 ✅ Standard memory/CPU units (Mi, m)  
 ✅ Namespace isolation  
 ✅ Kustomize for easy management  
+✅ envFrom pattern for environment variables  
+✅ Service discovery isolation (enableServiceLinks: false)  
+✅ Temporal worker deployment  
 ✅ Comprehensive documentation  
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: 2025-11-09  
+**Version**: 1.1.0  
+**Last Updated**: 2025-11-14  
 **Maintained By**: DevOps Team

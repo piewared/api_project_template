@@ -42,9 +42,11 @@ kubectl get pvc -n api-template-prod
 ```bash
 # View logs (follow)
 kubectl logs -n api-template-prod deployment/app -f
+kubectl logs -n api-template-prod deployment/worker -f
 kubectl logs -n api-template-prod deployment/postgres -f
 kubectl logs -n api-template-prod deployment/redis -f
 kubectl logs -n api-template-prod deployment/temporal -f
+kubectl logs -n api-template-prod deployment/temporal-web -f
 
 # View job logs
 kubectl logs -n api-template-prod job/postgres-verifier
@@ -137,11 +139,17 @@ kubectl delete secret postgres-secrets -n api-template-prod
 ## 📊 Scaling
 
 ```bash
-# Scale deployment
+# Scale application deployment
 kubectl scale deployment/app --replicas=3 -n api-template-prod
 
-# Autoscale
+# Scale worker deployment (for increased throughput)
+kubectl scale deployment/worker --replicas=3 -n api-template-prod
+
+# Autoscale application
 kubectl autoscale deployment/app --min=2 --max=10 --cpu-percent=80 -n api-template-prod
+
+# Autoscale worker
+kubectl autoscale deployment/worker --min=1 --max=5 --cpu-percent=80 -n api-template-prod
 
 # View HPA
 kubectl get hpa -n api-template-prod

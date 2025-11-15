@@ -25,13 +25,23 @@ A **powerful CLI** streamlines your workflow — start/stop the dev environment,
 * [Quick Start](#quick-start)
 * [Building Your Service](#building-your-service)
 * [Built-in Development Environment](#built-in-development-environment)
+  * [Deployment Environments](#deployment-environments)
+  * [Development Environment (dev)](#development-environment-dev)
+  * [Unified Deployment CLI](#unified-deployment-cli)
+  * [Common Options](#common-options)
 * [Configuration](#configuration)
 * [Authentication API](#authentication-api)
 * [Testing](#testing)
 * [Development Workflow](#development-workflow)
+  * [Getting Started](#getting-started)
+  * [Adding Features](#adding-features)
+  * [Debugging](#debugging)
+  * [Testing Deployments](#testing-deployments)
 * [Troubleshooting](#troubleshooting)
 * [Project Structure](#project-structure)
 * [Architecture & Design](#architecture--design)
+  * [Application Architecture](#application-architecture)
+  * [CLI Architecture](#cli-architecture)
 * [License](#license)
 * [Support](#support)
 
@@ -44,7 +54,8 @@ This template provides a complete foundation for building scalable FastAPI appli
 * 🔐 **OIDC Authentication (BFF)** – Authorization Code + PKCE + nonce, secure sessions, CSRF protection, cookies
 * 🏗️ **Clean Architecture** – Entities → Repositories → Services → API layers
 * ⚡ **Complete Dev Environment** – Keycloak (dev/test only), PostgreSQL, Redis, Temporal
-* 🛠️ **Developer CLI** – Manage env, DB, hot reload, and scaffold entities/routes
+* 🛠️ **Unified CLI** – Single interface for dev/prod/k8s deployments + entity scaffolding
+* 🚀 **Three Deployment Targets** – Development, Production (Docker Compose), Kubernetes
 * 🔄 **Cruft Updates** – Keep your fork synced with template updates
 * 🗄️ **Flexible Database** – PostgreSQL (prod), SQLite (dev/test)
 * 📊 **Type-safe ORM** – SQLModel + Pydantic
@@ -64,11 +75,15 @@ This template provides a complete foundation for building scalable FastAPI appli
 - Sensible **CORS** and security headers for production
 
 ### Development Experience
+- **Unified CLI** – Single command interface for dev/prod/k8s deployments
+- **Three deployment targets** – Development (hot reload), Production (Docker Compose), Kubernetes
 - **Docker Compose** stack (Keycloak*, PostgreSQL, Redis, Temporal)
 - **Zero-manual setup** with pre-seeded dev realm/users in Keycloak
-- **Hot reload** dev server
+- **Hot reload** dev server with automatic service orchestration
+- **Health monitoring** – Automatic health checks with 90s timeout
+- **Build caching** – Fast incremental builds with Docker layer caching
 - **Structured logging** with request tracing
-- **CLI** for environment + entity codegen
+- **Entity codegen** – Generate complete CRUD endpoints with one command
 
 > \* Keycloak is **dev/test only**. In production, configure a managed IdP and point the app to its discovery/issuer URL.
 
@@ -104,9 +119,7 @@ cruft create https://github.com/piewared/api_project_template
 # 2) Configure & run
 cd your-project-name
 cp .env.example .env
-uv run cli dev start-env      # Keycloak (dev), PostgreSQL, Redis, Temporal
-uv run init-db
-uv run cli dev start-server   # API w/ hot reload
+api-forge-cli deploy up dev   # Start dev environment (Keycloak, PostgreSQL, Redis, Temporal + API)
 ```
 
 **Local URLs**
@@ -149,6 +162,16 @@ What’s generated:
 
 **Start here:** **[docs/dev_env/README.md](docs/dev_env/README.md)**
 
+### Deployment Environments
+
+The template supports three deployment environments:
+
+* 🏗️ **dev** – Development with Docker Compose + hot reload
+* 🏭 **prod** – Production-like Docker Compose with TLS/health checks
+* ☸️ **k8s** – Kubernetes deployment with Kustomize
+
+### Development Environment (dev)
+
 Dockerized services for local dev/test to quickly spin up a local stack that mimics production:
 
 * 🔐 **Keycloak** – OIDC provider with pre-configured dev realm/users (**dev/test only**) → [docs/dev_env/keycloak.md](docs/dev_env/keycloak.md)
@@ -156,15 +179,34 @@ Dockerized services for local dev/test to quickly spin up a local stack that mim
 * ⚡ **Redis** – cache, sessions, rate limiting → [docs/dev_env/redis.md](docs/dev_env/redis.md)
 * ⏱️ **Temporal** – workflow engine + UI → [docs/dev_env/temporal.md](docs/dev_env/temporal.md)
 
-Common commands:
+### Unified Deployment CLI
 
 ```bash
-uv run cli dev start-env
-uv run cli dev status
-uv run cli dev logs [service]
-uv run cli dev stop-env
-uv run cli dev start-server
+# Development environment (with hot reload)
+api-forge-cli deploy up dev           # Start all services + FastAPI server
+api-forge-cli deploy down dev         # Stop all services
+api-forge-cli deploy status dev       # Check service status
+
+# Production environment (Docker Compose with health checks)
+api-forge-cli deploy up prod          # Build & start production stack
+api-forge-cli deploy up prod --skip-build    # Skip image rebuild
+api-forge-cli deploy down prod        # Stop production services
+api-forge-cli deploy down prod --volumes     # Stop and remove volumes
+api-forge-cli deploy status prod      # Check production status
+
+# Kubernetes deployment (Minikube/cluster)
+api-forge-cli deploy up k8s           # Build images, create secrets, deploy
+api-forge-cli deploy down k8s         # Delete namespace and all resources
+api-forge-cli deploy status k8s       # Show pods and services
 ```
+
+### Common Options
+
+* `--force` – Force restart even if services are running (dev only)
+* `--no-wait` – Don't wait for services to be ready
+* `--skip-build` – Skip building Docker images (prod only)
+* `--namespace` – Kubernetes namespace (k8s only, default: api-forge-prod)
+* `--volumes` – Remove Docker volumes on teardown (Docker Compose only)
 
 ---
 
@@ -303,58 +345,123 @@ uv run pytest tests/e2e/
 
 ## Development Workflow
 
-1. Start Environment: `uv run cli dev start-env`
-2. Verify: `uv run cli dev status`
-3. Start Server: `uv run cli dev start-server`
-4. Access: API/Docs/Keycloak/Temporal via the URLs above
+### Getting Started
 
-**Adding Features**
+1. **Start Development Environment**: `api-forge-cli deploy up dev`
+2. **Check Status**: `api-forge-cli deploy status dev`
+3. **Access Services**: API/Docs/Keycloak/Temporal via the URLs above
+4. **Stop Environment**: `api-forge-cli deploy down dev`
 
-* `uv run cli entity add EntityName`
+### Adding Features
+
+* `api-forge-cli entity add EntityName` – Generate new entity with CRUD endpoints
 * Add business logic in services/repositories
 * Write unit/integration tests
 * Update docs
 
-**Debugging**
+### Debugging
 
-* `uv run cli dev logs`
-* `uv run cli dev logs postgres | keycloak | redis | temporal`
+Check service logs using Docker commands:
+```bash
+docker compose -f docker-compose.dev.yml logs -f [service]
+docker compose -f docker-compose.dev.yml logs -f postgres
+docker compose -f docker-compose.dev.yml logs -f keycloak
+```
+
+### Testing Deployments
+
+```bash
+# Test dev environment
+api-forge-cli deploy up dev
+api-forge-cli deploy status dev
+api-forge-cli deploy down dev
+
+# Test production build
+api-forge-cli deploy up prod
+api-forge-cli deploy status prod
+api-forge-cli deploy down prod
+
+# Test Kubernetes (requires minikube or cluster)
+api-forge-cli deploy up k8s
+api-forge-cli deploy status k8s
+kubectl get pods -n api-forge-prod
+api-forge-cli deploy down k8s
+```
 
 ---
 
 ## Troubleshooting
 
+### Common Issues
+
 **Ports in use**
-
 ```bash
-sudo netstat -tlnp | grep -E ':8080|:5432'
+sudo netstat -tlnp | grep -E ':8080|:5432|:8000'
 ```
 
-**DB reset**
-
+**Services not starting**
 ```bash
-uv run cli dev stop-env
-docker volume rm dev_env_postgres_data
-uv run cli dev start-env
+# Check status
+api-forge-cli deploy status dev
+
+# View logs
+docker compose -f docker-compose.dev.yml logs [service]
+
+# Force restart
+api-forge-cli deploy down dev
+api-forge-cli deploy up dev --force
 ```
 
-**Keycloak (dev)**
+**Database reset**
+```bash
+api-forge-cli deploy down dev --volumes
+api-forge-cli deploy up dev
+```
 
+**Keycloak (dev) verification**
 ```bash
 curl http://localhost:8080/realms/test-realm/.well-known/openid-configuration
-uv run cli dev logs keycloak
+docker compose -f docker-compose.dev.yml logs keycloak
 ```
 
-**Clean reset**
-
+**Complete environment cleanup**
 ```bash
-uv run cli dev stop-env
-docker compose -f dev_env/docker-compose.yml down -v
-uv run cli dev start-env
+# Development
+api-forge-cli deploy down dev
+docker compose -f docker-compose.dev.yml down -v
+
+# Production
+api-forge-cli deploy down prod --volumes
+
+# Kubernetes
+api-forge-cli deploy down k8s
+```
+
+**Build cache issues (production)**
+```bash
+# Rebuild without cache
+docker compose -f docker-compose.prod.yml build --no-cache app
+
+# Or use the CLI (uses cache by default for faster builds)
+api-forge-cli deploy up prod
+```
+
+**Kubernetes issues**
+```bash
+# Check pod logs
+kubectl logs -n api-forge-prod -l app.kubernetes.io/name=app -f
+
+# Describe pod issues
+kubectl describe pod -n api-forge-prod <pod-name>
+
+# Check events
+kubectl get events -n api-forge-prod --sort-by='.lastTimestamp'
+
+# Port-forward for local testing
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
 ```
 
 **Cookies & cross-site**
-
 * If your frontend runs on a different origin, set `SameSite=None` and ensure HTTPS (`Secure=true`).
 
 ---

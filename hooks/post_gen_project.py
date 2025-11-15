@@ -33,10 +33,33 @@ def copy_infrastructure():
             if potential_src.exists():
                 search_paths.append(potential_src)
 
-    # Strategy 2: The most reliable approach for remote templates
+    # Strategy 2: Look in COOKIECUTTER_TEMPLATE_DIR (set by cookiecutter during generation)
+    # This is the most reliable way for remote templates
+    template_dir = os.environ.get("COOKIECUTTER_TEMPLATE_DIR")
+    if template_dir:
+        potential_src = Path(template_dir) / "src"
+        if potential_src.exists() and potential_src.is_dir():
+            search_paths.append(potential_src)
+            print(f"   Found template directory from environment: {template_dir}")
+
+    # Strategy 3: Look for cookiecutter/cruft temp directories in /tmp
+    # Remote templates are typically cloned to /tmp/cookiecutter-* or similar
+    current_working_dir = Path(".").absolute()
+    if template_path_str.startswith(("git@", "https://", "http://")):
+        # For remote templates, search in /tmp for cookiecutter directories
+        tmp_dir = Path("/tmp")
+        try:
+            for item in tmp_dir.iterdir():
+                if item.is_dir() and ("cookiecutter" in item.name.lower() or "cruft" in item.name.lower()):
+                    potential_src = item / "src"
+                    if potential_src.exists() and potential_src.is_dir():
+                        search_paths.append(potential_src)
+        except (PermissionError, OSError):
+            pass
+
+    # Strategy 4: The most reliable approach for remote templates
     # When cookiecutter clones a remote template, it runs the hook from within the template directory
     # So ../src should be the template's src directory
-    current_working_dir = Path(".").absolute()
     potential_locations = [
         # Direct parent (most common for cookiecutter)
         current_working_dir.parent / "src",
@@ -54,7 +77,8 @@ def copy_infrastructure():
         except (OSError, RuntimeError):
             continue
 
-    # Strategy 3: Look in parent directories systematically
+    # Strategy 4: Look in parent directories systematically
+    # This helps find the template src in case it's nested
     current = current_working_dir
     for level in range(4):  # Don't search too far up
         if level > 0:
@@ -65,15 +89,17 @@ def copy_infrastructure():
         if potential_src.exists():
             search_paths.append(potential_src)
 
-        # Look for template-like directories that contain src
-        try:
-            for item in current.iterdir():
-                if item.is_dir():
-                    potential_src = item / "src"
-                    if potential_src.exists():
-                        search_paths.append(potential_src)
-        except (PermissionError, OSError):
-            continue
+        # Only check immediate children to avoid scanning entire filesystem
+        # Skip this for remote templates to avoid false positives
+        if level == 0 and not template_path_str.startswith(("git@", "https://", "http://")):
+            try:
+                for item in current.iterdir():
+                    if item.is_dir() and item.name != project_slug:  # Skip the generated project
+                        potential_src = item / "src"
+                        if potential_src.exists():
+                            search_paths.append(potential_src)
+            except (PermissionError, OSError):
+                continue
 
     print(f"🔍 Searching for template src directory...")
     print(f"   Found {len(search_paths)} potential locations")

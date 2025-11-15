@@ -28,7 +28,7 @@ This guide covers the deployment of the FastAPI application stack to production 
 ### 1. Clone and Setup
 ```bash
 git clone <your-repo>
-cd api_project_template3
+cd api-forge3
 
 # Copy and configure environment
 cp .env .env.production

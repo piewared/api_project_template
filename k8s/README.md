@@ -50,7 +50,7 @@ Before deploying, you must generate the required secrets:
 
 ```bash
 # Navigate to project root
-cd /path/to/api_project_template3
+cd /path/to/api-forge3
 
 # Generate secrets if not already done
 ./infra/secrets/generate_secrets.sh

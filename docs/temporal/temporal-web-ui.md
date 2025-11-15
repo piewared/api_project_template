@@ -59,7 +59,7 @@ docker stop api-forge-temporal-ui-dev
 
 # Run with a different port
 docker run -d --name temporal-ui-custom \
-  --network api_project_template3_dev-network \
+  --network api-forge3_dev-network \
   -e TEMPORAL_ADDRESS=temporal:7233 \
   -e TEMPORAL_CORS_ORIGINS=http://localhost:3000 \
   -p 8083:8080 \
@@ -480,7 +480,7 @@ handle = await OrderWorkflow.start_workflow(
 
 3. Verify network configuration:
    ```bash
-   docker network inspect api_project_template3_dev-network
+   docker network inspect api-forge3_dev-network
    ```
 
 4. Check Temporal server logs:

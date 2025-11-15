@@ -17,29 +17,26 @@ def copy_infrastructure():
 
     print("🔧 Merging infrastructure with business logic...")
     print(f"📁 Template path: {template_path_str}")
-    print(f"📁 Current directory: {project_root}")
+    print(f"📁 Generated project: {project_root}")
     print(f"📁 Package name: {package_name}")
 
-    # CRITICAL INSIGHT: When cookiecutter runs the hook:
-    # - The hook script is at: /tmp/tmpXXX/hooks/post_gen_project.py (template location)
-    # - The cwd is: /path/to/generated/project (generated project location)
-    # - We need to get the template directory from the hook script's location!
+    # CRITICAL INSIGHT: Cookiecutter uses `with work_in(repo_dir)` when running hooks
+    # This means os.getcwd() returns the template repository directory!
+    # See: cookiecutter/hooks.py:155 - with work_in(repo_dir)
     
-    # Get the template directory from this script's location
-    this_script = Path(__file__).resolve()
-    template_dir = this_script.parent.parent  # Go up from hooks/ to template root
-    
+    # Get the template directory from the current working directory
+    template_dir = Path(os.getcwd()).resolve()
     src_dir = None
     search_paths = []
 
-    print(f"📁 Hook script location: {this_script}")
-    print(f"📁 Template directory: {template_dir}")
+    print(f"📁 Template directory (from cwd): {template_dir}")
 
-    # Strategy 1: Look in template directory (derived from hook script location)
+    # Strategy 1: Look in current working directory (the template directory)
     # This is the most reliable method for both local and remote templates
     potential_src = template_dir / "src"
     if potential_src.exists() and potential_src.is_dir():
         search_paths.append(potential_src)
+        print(f"   ✅ Found src/ in template directory: {potential_src}")
 
     # Strategy 2: Check if this is a local template (direct path fallback)
     if not template_path_str.startswith(("git@", "https://", "http://")):
@@ -48,11 +45,10 @@ def copy_infrastructure():
             potential_src = local_template / "src"
             if potential_src.exists():
                 search_paths.append(potential_src)
+                print(f"   ✅ Found src/ in local template path: {potential_src}")
 
-    print("🔍 Searching for template src directory...")
-    print(f"   Found {len(search_paths)} potential locations")
-
-    # Validate each potential src directory
+    print(f"🔍 Searching for template src directory...")
+    print(f"   Found {len(search_paths)} potential locations")    # Validate each potential src directory
     for i, potential_src in enumerate(search_paths):
         print(f"   [{i + 1}] Checking: {potential_src}")
 

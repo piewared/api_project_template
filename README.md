@@ -7,468 +7,310 @@
 ![Tests](https://img.shields.io/badge/tests-pytest-success)
 ![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
 
-Build scalable, production-ready REST APIs with built-in **OIDC authentication**, **server-side session management**, and modern **security** (rate limiting, CSRF protection, client fingerprinting).
+Build scalable, production-ready REST APIs with **FastAPI**, a **BFF-style OIDC session layer**, and a full **Docker dev stack** (PostgreSQL, Redis, Temporal, Keycloak for dev/test).
 
-Develop and test like production with a full **Docker stack** — **PostgreSQL**, **Redis**, **Temporal**, and a **local Keycloak instance for dev/test OIDC flows**.
+A **project CLI** lets you start/stop environments, deploy to Docker Compose or Kubernetes, and generate CRUD entities from the domain model.
 
-> In **production**, use a managed IdP (Azure AD, Okta, Auth0, Google, Cognito, etc.).
-
-A **powerful CLI** streamlines your workflow — start/stop the dev environment, manage databases, run the API with hot reload, and generate boilerplate for new domain entities (Entity class, ORM model, repository, and router with pre-generated CRUD endpoints).
+> In **production**, use a managed IdP (Identity Provider) such as Azure AD, Okta, Auth0, Google, AWS Cognito, etc.
 
 ---
 
 ## Table of Contents
 
-* [Overview](#overview)
-* [Key Features](#key-features)
-* [Requirements](#requirements)
-* [Quick Start](#quick-start)
-* [Building Your Service](#building-your-service)
-* [Built-in Development Environment](#built-in-development-environment)
-  * [Deployment Environments](#deployment-environments)
-  * [Development Environment (dev)](#development-environment-dev)
-  * [Unified Deployment CLI](#unified-deployment-cli)
-  * [Common Options](#common-options)
-* [Configuration](#configuration)
-* [Authentication API](#authentication-api)
-* [Testing](#testing)
-* [Development Workflow](#development-workflow)
-  * [Getting Started](#getting-started)
-  * [Adding Features](#adding-features)
-  * [Debugging](#debugging)
-  * [Testing Deployments](#testing-deployments)
-* [Troubleshooting](#troubleshooting)
-* [Project Structure](#project-structure)
-* [Architecture & Design](#architecture--design)
-  * [Application Architecture](#application-architecture)
-  * [CLI Architecture](#cli-architecture)
-* [License](#license)
-* [Support](#support)
+- [Overview](#overview)
+- [Features at a Glance](#features-at-a-glance)
+- [Who Is This For?](#who-is-this-for)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Project CLI](#project-cli)
+- [Configuration & Auth](#configuration--auth)
+- [Development & Testing](#development--testing)
+- [Project Structure](#project-structure)
+- [More Documentation](#more-documentation)
+- [License](#license)
+- [Support](#support)
 
 ---
 
 ## Overview
 
-This template provides a complete foundation for building scalable FastAPI applications with:
+This template gives you a batteries-included starting point for FastAPI services:
 
-* 🔐 **OIDC Authentication (BFF)** – Authorization Code + PKCE + nonce, secure sessions, CSRF protection, cookies
-* 🏗️ **Clean Architecture** – Entities → Repositories → Services → API layers
-* ⚡ **Complete Dev Environment** – Keycloak (dev/test only), PostgreSQL, Redis, Temporal
-* 🛠️ **Unified CLI** – Single interface for dev/prod/k8s deployments + entity scaffolding
-* 🚀 **Three Deployment Targets** – Development, Production (Docker Compose), Kubernetes
-* 🔄 **Cruft Updates** – Keep your fork synced with template updates
-* 🗄️ **Flexible Database** – PostgreSQL (prod), SQLite (dev/test)
-* 📊 **Type-safe ORM** – SQLModel + Pydantic
-* 🧪 **Comprehensive Testing** – pytest (unit, integration, E2E)
+- OIDC-based **backend-for-frontend (BFF)** with secure session cookies
+- Clean, layered architecture (entities → repositories → services → API)
+- A Dockerized **dev environment** that mirrors production
+- A unified **CLI** to run dev/prod/k8s deployments
+- First-class **testing**, typing, and linting
 
 ---
 
-## Key Features
+## Features at a Glance
 
 ### Authentication & Security
-- **BFF pattern** with secure, HttpOnly session cookies
-- **OIDC** with multiple providers (Keycloak for dev/test; bring your own IdP for prod)
-- **PKCE + nonce + state**; ID token validation with JWKS caching/rotation
-- **CSRF protection** for state-changing routes; **origin allowlist**
-- **Client fingerprinting** for session binding
-- **Rate limiting** with Redis
+
+- **BFF pattern** with HttpOnly session cookies (no tokens in the browser)
+- **OIDC** with multiple providers (Keycloak for dev/test; managed IdP for prod)
+- **PKCE + nonce + state** with JWKS-based token validation
+- **CSRF protection** for state-changing requests (origin allowlist + CSRF token)
+- **Client fingerprinting** to bind sessions to user agents
+- **Rate limiting** backed by Redis
 - Sensible **CORS** and security headers for production
 
 ### Development Experience
-- **Unified CLI** – Single command interface for dev/prod/k8s deployments
-- **Three deployment targets** – Development (hot reload), Production (Docker Compose), Kubernetes
-- **Docker Compose** stack (Keycloak*, PostgreSQL, Redis, Temporal)
-- **Zero-manual setup** with pre-seeded dev realm/users in Keycloak
-- **Hot reload** dev server with automatic service orchestration
-- **Health monitoring** – Automatic health checks with 90s timeout
-- **Build caching** – Fast incremental builds with Docker layer caching
-- **Structured logging** with request tracing
-- **Entity codegen** – Generate complete CRUD endpoints with one command
 
-> \* Keycloak is **dev/test only**. In production, configure a managed IdP and point the app to its discovery/issuer URL.
+- **Unified CLI**: `api-forge-cli` for dev, prod (Docker Compose), and k8s
+- **Hot reload** dev server with a single command to spin up the full stack
+- **Docker Compose stack**: Keycloak (dev/test), PostgreSQL, Redis, Temporal
+- Pre-seeded Keycloak realm/users for local auth flows
+- Structured logging with request tracing
+- Entity code generation: create new CRUD entities with one command
 
-### Architecture & Code Quality
-- Clean Architecture layers
-- Dependency Injection for testability
-- Ruff (format/lint), MyPy (types), pytest (fixtures & E2E)
+### Architecture & Quality
+
+- Clean Architecture with DDD-inspired layering
+- SQLModel + Pydantic for type-safe persistence and validation
+- Ruff for lint/format, MyPy for static types, pytest for tests (unit, integration, E2E)
+
+---
+
+## Who Is This For?
+
+This template is a good fit if:
+
+- You’re building a **backend-for-frontend (BFF)** serving web or SPA clients
+- You want **OIDC login with server-side sessions** instead of rolling your own
+- You care about a **dev environment that looks like production**
+- You plan to deploy with **Docker Compose** and/or **Kubernetes**
+
+It may not be ideal if:
+
+- You only need a minimal toy API with no external infra
+- You don’t want Docker or external services in your workflow
 
 ---
 
 ## Requirements
 
-- **Python 3.13+**
-- **Docker & Docker Compose**
-- **uv** (recommended) or **pip**
+**Core**
+
+- Python **3.13+**
+- **Docker** & **Docker Compose**
+- **uv** (recommended) or **pip** + virtualenv
+
+**Optional**
+
+- **kubectl** and a cluster (or minikube) for the `k8s` target
 
 ---
 
 ## Quick Start
 
-**One-liner:**
-```bash
-pip install -U cruft && cruft create https://github.com/piewared/api_project_template
-````
-
-**Full steps:**
+### 1. Create a project from the template
 
 ```bash
-# 1) Create from the template
 pip install -U cruft
 cruft create https://github.com/piewared/api_project_template
-
-# 2) Configure & run
 cd your-project-name
+````
+
+### 2. Install dependencies & project
+
+```bash
+# Recommended: uv
+uv sync
+
+# Or with pip (inside a venv)
+# python -m venv .venv
+# source .venv/bin/activate  # or .venv\Scripts\activate on Windows
+# pip install -e .
+```
+
+### 3. Configure environment
+
+```bash
 cp .env.example .env
-api-forge-cli deploy up dev   # Start dev environment (Keycloak, PostgreSQL, Redis, Temporal + API)
 ```
 
-**Local URLs**
+### 4. Start the dev stack
 
-| Service     | URL                                                      | Notes                       |
-| ----------- | -------------------------------------------------------- | --------------------------- |
-| API         | [http://localhost:8000](http://localhost:8000)           | Dev server (hot reload)     |
-| Docs        | [http://localhost:8000/docs](http://localhost:8000/docs) | OpenAPI/Swagger             |
-| Keycloak*   | [http://localhost:8080](http://localhost:8080)           | Dev/test auth (admin/admin) |
-| Temporal UI | [http://localhost:8082](http://localhost:8082)           | Workflows & background jobs |
+```bash
+api-forge-cli deploy up dev
+# Or, if you prefer not to install the script:
+# uv run api-forge-cli deploy up dev
+```
 
-> * In prod, configure a managed IdP and set `issuer`, `client_id`, `audiences`, cookies `Secure=true`, etc.
+Once services are healthy, open:
+
+* API: `http://localhost:8000`
+* Docs: `http://localhost:8000/docs`
+* Keycloak (dev only): `http://localhost:8080` (admin/admin)
+* Temporal UI: `http://localhost:8082`
+
+Keycloak is **dev/test only**. In production, use a managed IdP (see [Configuration & Auth](#configuration--auth)).
 
 ---
 
-## Building Your Service
+## Project CLI
 
-Use the CLI to generate domain entities (model, ORM, repository, router with CRUD) and auto-register routes in the app.
+When you install the project (via `uv sync` or `pip install -e .`), you get a **project CLI**:
+
+* As a script: `api-forge-cli`
+* Or via uv: `uv run api-forge-cli ...`
+
+Common examples:
 
 ```bash
-# Create a new entity with interactive field prompts
-uv run cli entity add Product
+# Development environment (Docker Compose + hot reload)
+api-forge-cli deploy up dev
+api-forge-cli deploy status dev
+api-forge-cli deploy down dev
 
-# Manage entities
-uv run cli entity ls
-uv run cli entity rm Product [--force]
+# Production-like stack (Docker Compose)
+api-forge-cli deploy up prod
+api-forge-cli deploy status prod
+api-forge-cli deploy down prod --volumes
+
+# Kubernetes (requires cluster/minikube)
+api-forge-cli deploy up k8s
+api-forge-cli deploy status k8s
+api-forge-cli deploy down k8s
 ```
 
-What’s generated:
+### Entity scaffolding
 
-* **Entity** (domain model + validation)
-* **Table** (SQLModel)
+Generate CRUD endpoints and supporting layers for a new domain entity:
+
+```bash
+api-forge-cli entity add Product
+api-forge-cli entity ls
+api-forge-cli entity rm Product --force
+```
+
+The generator creates:
+
+* Domain **entity** (validation, invariants)
+* SQLModel **table**
 * **Repository** (CRUD + queries)
-* **Router** (CRUD endpoints)
-* **Auto-registration** with FastAPI
+* **Router** (CRUD endpoints) auto-registered with FastAPI
 
 ---
 
-## Built-in Development Environment
+## Configuration & Auth
 
-**Start here:** **[docs/dev_env/README.md](docs/dev_env/README.md)**
+### Config layers
 
-### Deployment Environments
+Configuration is centralized in **`config.yaml`** with environment variable substitution (`${VAR_NAME:-default}`):
 
-The template supports three deployment environments:
+| Layer         | Description                               |
+| ------------- | ----------------------------------------- |
+| `.env`        | Environment-specific values               |
+| `config.yaml` | Structured defaults with env substitution |
+| Startup       | Pydantic models for validation and types  |
 
-* 🏗️ **dev** – Development with Docker Compose + hot reload
-* 🏭 **prod** – Production-like Docker Compose with TLS/health checks
-* ☸️ **k8s** – Kubernetes deployment with Kustomize
+Key sections:
 
-### Development Environment (dev)
+* `app` – app metadata, session, CORS, host config
+* `database` – DB URL, pool, timeouts
+* `redis` – cache and session store
+* `temporal` – workflow connection
+* `oidc.providers` – OIDC provider definitions
+* `jwt` – token validation rules
+* `rate_limiter` – per-endpoint throttling
+* `logging` – structured logging config
 
-Dockerized services for local dev/test to quickly spin up a local stack that mimics production:
+### Auth model (BFF + OIDC)
 
-* 🔐 **Keycloak** – OIDC provider with pre-configured dev realm/users (**dev/test only**) → [docs/dev_env/keycloak.md](docs/dev_env/keycloak.md)
-* 🗄️ **PostgreSQL** – production-like DB with persistent volume → [docs/dev_env/postgres.md](docs/dev_env/postgres.md)
-* ⚡ **Redis** – cache, sessions, rate limiting → [docs/dev_env/redis.md](docs/dev_env/redis.md)
-* ⏱️ **Temporal** – workflow engine + UI → [docs/dev_env/temporal.md](docs/dev_env/temporal.md)
+* Auth uses OIDC **Authorization Code + PKCE** with **server-side sessions**
+* The **OIDC `redirect_uri`** is defined **server-side** in `config.yaml`, not taken from clients
+* Clients can pass an optional `return_to` parameter (relative path or allowlisted host) for post-login redirect
+* The app:
 
-### Unified Deployment CLI
+  * stores state and PKCE verifier (e.g. in Redis)
+  * validates `state` and `nonce` on callback
+  * issues an HttpOnly, signed session cookie
+  * rotates session ID and CSRF token on refresh
+
+### Cookies & cross-site usage
+
+* Cookies are always **HttpOnly**
+* In **production**, require `Secure=true` and HTTPS
+* For cross-site frontends, use `SameSite=None` + `Secure=true`
+* Configure `CLIENT_ORIGINS` (comma-separated in `.env`) to control allowed origins
+
+### Authentication endpoints
+
+All web auth endpoints live under `/auth/web`:
+
+* `GET /auth/web/login` – start OIDC login (uses server-configured `redirect_uri`)
+* `GET /auth/web/callback` – handle OIDC callback, validate tokens, set session cookie
+* `GET /auth/web/me` – return auth state and a CSRF token
+* `POST /auth/web/refresh` – rotate session and CSRF token
+* `POST /auth/web/logout` – invalidate session; supports RP-initiated logout if the IdP does
+
+Client examples:
+
+* [`docs/clients/javascript.md`](docs/clients/javascript.md)
+* [`docs/clients/python.md`](docs/clients/python.md)
+
+### Dev vs prod auth
+
+* **Dev/Test**
+
+  * Local Keycloak, pre-seeded realm/users
+  * Redirect URI: `http://localhost:8000/auth/web/callback`
+
+* **Production**
+
+  * Managed IdP (Azure AD, Okta, Auth0, Google, etc.)
+  * Redirect URI: `https://your-api.com/auth/web/callback`
+  * Configure `issuer`, `client_id`, `client_secret`, and JWKS validation
+  * Use strong `SESSION_SIGNING_SECRET`, HTTPS, and secure cookies
+
+---
+
+## Development & Testing
+
+### Typical dev loop
+
+1. Start dev stack: `api-forge-cli deploy up dev`
+2. Work on entities, services, and routers
+3. Run tests
+4. Stop dev stack: `api-forge-cli deploy down dev`
+
+### Testing
 
 ```bash
-# Development environment (with hot reload)
-api-forge-cli deploy up dev           # Start all services + FastAPI server
-api-forge-cli deploy down dev         # Stop all services
-api-forge-cli deploy status dev       # Check service status
-
-# Production environment (Docker Compose with health checks)
-api-forge-cli deploy up prod          # Build & start production stack
-api-forge-cli deploy up prod --skip-build    # Skip image rebuild
-api-forge-cli deploy down prod        # Stop production services
-api-forge-cli deploy down prod --volumes     # Stop and remove volumes
-api-forge-cli deploy status prod      # Check production status
-
-# Kubernetes deployment (Minikube/cluster)
-api-forge-cli deploy up k8s           # Build images, create secrets, deploy
-api-forge-cli deploy down k8s         # Delete namespace and all resources
-api-forge-cli deploy status k8s       # Show pods and services
-```
-
-### Common Options
-
-* `--force` – Force restart even if services are running (dev only)
-* `--no-wait` – Don't wait for services to be ready
-* `--skip-build` – Skip building Docker images (prod only)
-* `--namespace` – Kubernetes namespace (k8s only, default: api-forge-prod)
-* `--volumes` – Remove Docker volumes on teardown (Docker Compose only)
-
----
-
-## Configuration
-
-### 🔧 Overview
-
-Configuration is centralized in a single **`config.yaml`**, with environment variable overrides (`${VAR_NAME:-default}` syntax).
-This allows clean defaults under version control, while keeping secrets and environment-specific overrides in `.env`.
-
-### ⚙️ Layers
-
-| Layer           | Source                | Description                               |
-| --------------- | --------------------- | ----------------------------------------- |
-| `.env`          | Environment variables | Environment-specific values               |
-| `config.yaml`   | Application config    | Structured defaults with env substitution |
-| FastAPI startup | Pydantic models       | Final validation & type safety            |
-
-### 🧭 Structure
-
-Key sections in `config.yaml`:
-
-* `app` → app metadata, session, CORS, and host configuration
-* `database` → DB URL, pool size, timeouts
-* `redis` → cache/session store config
-* `temporal` → background workflows
-* `oidc.providers` → multi-provider authentication
-* `jwt` → token validation rules & claim mappings
-* `rate_limiter` → per-endpoint throttling
-* `logging` → log level, structured format
-
-### 🔐 Authentication & Redirects
-
-* The **OIDC `redirect_uri`** (callback) is defined *server-side* per provider in `config.yaml` — never accepted from clients.
-* Clients may optionally pass a `return_to` param (relative path or allowlisted host) for post-login redirection.
-* The application:
-
-  * Stores state and PKCE verifier securely (e.g., in Redis).
-  * Validates `state` and `nonce` on callback.
-  * Issues an HttpOnly, `SameSite=Lax` signed session cookie.
-  * Rotates session ID and CSRF token on refresh.
-
-### 🍪 Cookie & Security Notes
-
-* `HttpOnly` cookies always (no JS access).
-* In **production**, `Secure=true` and HTTPS are mandatory.
-* For cross-site frontends, set `SameSite=None` + `Secure=true`.
-* Configure `CLIENT_ORIGINS` as a **list** (comma-separated in `.env`).
-
-### 🗝️ Provider Configuration
-
-Prefer discovery:
-
-```yaml
-oidc:
-  providers:
-    keycloak:
-      issuer: http://localhost:8080/realms/test-realm
-      client_id: test-client
-      client_secret: test-secret
-      scopes: ["openid", "email", "profile"]
-```
-
-For production IdPs (Google, Microsoft, Okta, etc.), set:
-
-* `issuer` to the IdP base URL
-* `client_id` / `client_secret` via env vars
-* `end_session_endpoint` if your provider supports RP-initiated logout
-
----
-
-### ⚡️ Example `.env`
-
-```bash
-APP_ENVIRONMENT=development
-DATABASE_URL=postgresql://appuser:devpass@localhost:5432/appdb
-REDIS_URL=redis://localhost:6379/0
-BASE_URL=http://localhost:8000
-SESSION_SIGNING_SECRET=change-this-32-char-secret
-CLIENT_ORIGINS=http://localhost:3000
-OIDC_KEYCLOAK_ISSUER=http://localhost:8080/realms/test-realm
-OIDC_KEYCLOAK_CLIENT_ID=test-client
-OIDC_KEYCLOAK_CLIENT_SECRET=test-secret
-```
-
----
-
-### 🏁 Prod vs Dev Auth
-
-| Environment    | Provider                                          | Redirect URI                              | Security                                        |
-| -------------- | ------------------------------------------------- | ----------------------------------------- | ----------------------------------------------- |
-| **Dev/Test**   | Local Keycloak                                    | `http://localhost:8000/auth/web/callback` | Self-contained, no internet access              |
-| **Production** | Managed IdP (e.g., Azure AD, Okta, Auth0, Google) | `https://your-api.com/auth/web/callback`  | HTTPS required, Secure cookies, rotated secrets |
-
-> ✅ In production:
->
-> * Replace Keycloak URLs with your IdP’s `issuer` and `client_id`.
-> * Configure OIDC discovery, JWKS validation, and session rotation.
-> * Set `Secure=true`, `SameSite=None`, and a strong `SESSION_SIGNING_SECRET`.
-
----
-
-## Authentication API
-
-All endpoints are under `/auth/web` for web clients using session cookies.
-
-* **`GET /auth/web/login`** – Initiates OIDC login (uses server-configured `redirect_uri`). Accepts `provider` (optional) and sanitized `return_to` (relative path).
-* **`GET /auth/web/callback`** – Handles OIDC callback. Validates `state`, `nonce`, tokens (issuer/audience/exp/alg via JWKS). Single-use auth session; sets `user_session_id` cookie; redirects to `return_to` or `/`.
-* **`GET /auth/web/me`** – Returns auth state and a CSRF token for subsequent state-changing requests.
-* **`POST /auth/web/refresh`** – Refreshes session (rotates session id + CSRF). Requires `X-CSRF-Token` and Origin allowlist.
-* **`POST /auth/web/logout`** – Logs out (requires `X-CSRF-Token`); optionally supports RP-initiated logout when provider supports it.
-
-**Client examples:**
-
-* **[docs/clients/javascript.md](docs/clients/javascript.md)**
-* **[docs/clients/python.md](docs/clients/python.md)**
-
----
-
-## Testing
-
-```bash
+# Full test suite
 uv run pytest
+
+# With coverage
 uv run pytest --cov=your_package
+
+# Targeted suites
 uv run pytest tests/unit/
 uv run pytest tests/integration/
 uv run pytest tests/e2e/
 ```
 
-* **Unit** – business logic
+* **Unit** – domain logic and small units
 * **Integration** – DB + external services
-* **E2E** – full auth + workflows
-* **Fixtures** – `tests/fixtures/`
+* **E2E** – full auth + workflows (assumes dev stack is running)
 
----
+### Troubleshooting (high level)
 
-## Development Workflow
+Common checks:
 
-### Getting Started
+* **Services up?** – `api-forge-cli deploy status dev`
+* **Logs** – `docker compose -f docker-compose.dev.yml logs [service]`
+* **Ports in use?** – `netstat`/`ss` on `:8000`, `:8080`, `:5432`, etc.
 
-1. **Start Development Environment**: `api-forge-cli deploy up dev`
-2. **Check Status**: `api-forge-cli deploy status dev`
-3. **Access Services**: API/Docs/Keycloak/Temporal via the URLs above
-4. **Stop Environment**: `api-forge-cli deploy down dev`
-
-### Adding Features
-
-* `api-forge-cli entity add EntityName` – Generate new entity with CRUD endpoints
-* Add business logic in services/repositories
-* Write unit/integration tests
-* Update docs
-
-### Debugging
-
-Check service logs using Docker commands:
-```bash
-docker compose -f docker-compose.dev.yml logs -f [service]
-docker compose -f docker-compose.dev.yml logs -f postgres
-docker compose -f docker-compose.dev.yml logs -f keycloak
-```
-
-### Testing Deployments
-
-```bash
-# Test dev environment
-api-forge-cli deploy up dev
-api-forge-cli deploy status dev
-api-forge-cli deploy down dev
-
-# Test production build
-api-forge-cli deploy up prod
-api-forge-cli deploy status prod
-api-forge-cli deploy down prod
-
-# Test Kubernetes (requires minikube or cluster)
-api-forge-cli deploy up k8s
-api-forge-cli deploy status k8s
-kubectl get pods -n api-forge-prod
-api-forge-cli deploy down k8s
-```
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**Ports in use**
-```bash
-sudo netstat -tlnp | grep -E ':8080|:5432|:8000'
-```
-
-**Services not starting**
-```bash
-# Check status
-api-forge-cli deploy status dev
-
-# View logs
-docker compose -f docker-compose.dev.yml logs [service]
-
-# Force restart
-api-forge-cli deploy down dev
-api-forge-cli deploy up dev --force
-```
-
-**Database reset**
-```bash
-api-forge-cli deploy down dev --volumes
-api-forge-cli deploy up dev
-```
-
-**Keycloak (dev) verification**
-```bash
-curl http://localhost:8080/realms/test-realm/.well-known/openid-configuration
-docker compose -f docker-compose.dev.yml logs keycloak
-```
-
-**Complete environment cleanup**
-```bash
-# Development
-api-forge-cli deploy down dev
-docker compose -f docker-compose.dev.yml down -v
-
-# Production
-api-forge-cli deploy down prod --volumes
-
-# Kubernetes
-api-forge-cli deploy down k8s
-```
-
-**Build cache issues (production)**
-```bash
-# Rebuild without cache
-docker compose -f docker-compose.prod.yml build --no-cache app
-
-# Or use the CLI (uses cache by default for faster builds)
-api-forge-cli deploy up prod
-```
-
-**Kubernetes issues**
-```bash
-# Check pod logs
-kubectl logs -n api-forge-prod -l app.kubernetes.io/name=app -f
-
-# Describe pod issues
-kubectl describe pod -n api-forge-prod <pod-name>
-
-# Check events
-kubectl get events -n api-forge-prod --sort-by='.lastTimestamp'
-
-# Port-forward for local testing
-kubectl port-forward -n api-forge-prod svc/app 8000:8000
-```
-
-**Cookies & cross-site**
-* If your frontend runs on a different origin, set `SameSite=None` and ensure HTTPS (`Secure=true`).
+See [`docs/troubleshooting.md`](docs/troubleshooting.md) for detailed commands and Kubernetes-specific tips.
 
 ---
 
 ## Project Structure
 
-```
+```text
 your_project/
 ├─ src/
 │  └─ your_package/
@@ -479,37 +321,41 @@ your_project/
 │     │  ├─ runtime/             # App runtime
 │     │  └─ service/             # Domain services
 │     └─ dev/                    # Dev tooling
-├─ tests/                        # Unit/integration/E2E
+├─ tests/                        # Unit, integration, E2E
 ├─ infra/                        # Infrastructure files
 │  ├─ docker/                    # Docker configurations (dev/prod)
 │  ├─ scripts/                   # Deployment & utility scripts
 │  └─ secrets/                   # Secrets management & generation
-├─ docs/                         # Additional docs (clients, guides)
-└─ dev_env/                      # Dockerized infra + volumes
+├─ docs/                         # Clients, guides, troubleshooting, etc.
+└─ dev_env/                      # Dockerized infra + local volumes
 ```
 
-> Deleting volumes will wipe local data (`dev_env/postgres-data/`, etc.).
+Deleting volumes in `dev_env/` will wipe local data (e.g. `dev_env/postgres-data/`).
 
 ---
 
-## Architecture & Design
+## More Documentation
 
-* **Clean Architecture** and **DDD**-inspired layering
-* **Entities** (domain) • **Repositories** (data access) • **Services** (business logic) • **API** (FastAPI)
-* **Dependency Injection**, **Repository Pattern**
-* **Temporal** for reliable, long-running workflows
-* **Type safety** end-to-end (Pydantic, SQLModel, MyPy)
+* **Dev environment**: `dev_env/README.md`
+* **Keycloak (dev)**: `dev_env/keycloak.md`
+* **PostgreSQL**: `dev_env/postgres.md`
+* **Redis**: `dev_env/redis.md`
+* **Temporal**: `dev_env/temporal.md`
+* **Client examples**: `docs/clients/`
+* **Troubleshooting**: `docs/troubleshooting.md`
 
 ---
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [`LICENSE`](LICENSE).
+
+---
 
 ## Support
 
-* Open an issue for bugs/features
-* Discussions for Q&A/ideas
+* Open an issue for bugs or feature requests
+* Use Discussions for Q&A and ideas
 
 ---
 

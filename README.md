@@ -109,7 +109,7 @@ It may not be ideal if:
 
 ```bash
 pip install -U cruft
-cruft create https://github.com/piewared/api_project_template
+cruft create https://github.com/piewared/api-forge
 cd your-project-name
 ````
 
@@ -362,5 +362,5 @@ MIT — see [`LICENSE`](LICENSE).
 **Quick create**
 
 ```bash
-cruft create https://github.com/piewared/api_project_template
+cruft create https://github.com/piewared/api-forge
 ```

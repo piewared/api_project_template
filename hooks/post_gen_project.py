@@ -204,7 +204,7 @@ def process_pyproject_toml(
 ) -> str:
     """Process pyproject.toml to replace project-specific placeholders."""
     # Replace the project name and dependencies
-    processed = content.replace("api-forge3", project_slug)
+    processed = content.replace("api-forge", project_slug)
     processed = processed.replace('"src"', f'"{package_name}"')
 
     # Update entry points to use the generated package name
@@ -230,7 +230,7 @@ def process_readme(content: str, package_name: str, project_slug: str, **kwargs)
     processed = content.replace(
         "API Project Template", project_slug.replace("_", " ").title()
     )
-    processed = processed.replace("api-forge3", project_slug)
+    processed = processed.replace("api-forge", project_slug)
     processed = processed.replace("src/", f"{package_name}/")
     processed = processed.replace("api-dev", f"{project_slug}-dev")
     processed = processed.replace("uv run api-dev", f"uv run {project_slug}-dev")

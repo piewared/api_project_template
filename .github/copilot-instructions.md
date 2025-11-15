@@ -129,7 +129,7 @@ docker-compose -f docker-compose.dev.yml down -v
 uv run init-db
 
 # Direct DB access (dev environment)
-docker exec -it api-template-postgres-dev psql -U postgres -d appdb
+docker exec -it api-forge-postgres-dev psql -U postgres -d appdb
 ```
 
 ---
@@ -138,13 +138,13 @@ docker exec -it api-template-postgres-dev psql -U postgres -d appdb
 
 ### 1. CLI Status Command Container Names (FIXED)
 **Issue**: `uv run cli dev status` showed services as "Not running" when they were actually running  
-**Root Cause**: Container name mismatch - code was checking for `app_dev_*` names but actual containers use `api-template-*-dev` naming convention  
+**Root Cause**: Container name mismatch - code was checking for `app_dev_*` names but actual containers use `api-forge-*-dev` naming convention  
 **Fix Applied**: Updated `src/dev/cli/dev_commands.py` to use correct container names:
-- `api-template-keycloak-dev`
-- `api-template-postgres-dev`
-- `api-template-redis-dev`
-- `api-template-temporal-dev`
-- `api-template-temporal-ui-dev`
+- `api-forge-keycloak-dev`
+- `api-forge-postgres-dev`
+- `api-forge-redis-dev`
+- `api-forge-temporal-dev`
+- `api-forge-temporal-ui-dev`
 
 ### 2. Keycloak Setup Module Import Error (FIXED)
 **Issue**: `ModuleNotFoundError: No module named 'src.dev.setup_keycloak'`  
@@ -191,7 +191,7 @@ sudo netstat -tlnp | grep -E ':8080|:5432|:6379|:7233'
 ## Development Environment Test Users
 
 ### Keycloak Preloaded Test Users
-The development Keycloak service (`api-template-keycloak-dev`) is automatically configured with test users when you run `uv run cli dev start-env`. These users are created by the `src/dev/setup_keycloak.py` script.
+The development Keycloak service (`api-forge-keycloak-dev`) is automatically configured with test users when you run `uv run cli dev start-env`. These users are created by the `src/dev/setup_keycloak.py` script.
 
 **Test Users Available:**
 - **Username**: `testuser1`
@@ -426,10 +426,10 @@ git push origin feature/my-feature
 uv run cli dev logs [service_name]
 
 # Access PostgreSQL
-docker exec -it api-template-postgres-dev psql -U postgres
+docker exec -it api-forge-postgres-dev psql -U postgres
 
 # Access Redis CLI
-docker exec -it api-template-redis-dev redis-cli
+docker exec -it api-forge-redis-dev redis-cli
 
 # Check Keycloak config
 curl http://localhost:8080/realms/test-realm/.well-known/openid-configuration

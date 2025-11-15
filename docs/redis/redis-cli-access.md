@@ -24,7 +24,7 @@ redis-cli -p 6380 ping
 # PONG
 
 # From Docker container
-docker exec -it api-template-redis-dev redis-cli ping
+docker exec -it api-forge-redis-dev redis-cli ping
 # PONG
 ```
 
@@ -36,7 +36,7 @@ redis-cli -p 6379 --no-auth-warning -a "$(cat infra/secrets/keys/redis_password.
 # PONG
 
 # From Docker container
-docker exec -it api-template-redis-prod redis-cli -a "$(cat /run/secrets/redis_password)" ping
+docker exec -it api-forge-redis redis-cli -a "$(cat /run/secrets/redis_password)" ping
 # PONG
 
 # Via SSH tunnel (remote access)
@@ -83,13 +83,13 @@ redis-cli -p 6380 INFO server
 
 ```bash
 # Interactive mode
-docker exec -it api-template-redis-dev redis-cli
+docker exec -it api-forge-redis-dev redis-cli
 
 # Single command
-docker exec api-template-redis-dev redis-cli PING
+docker exec api-forge-redis-dev redis-cli PING
 
 # With output
-docker exec api-template-redis-dev redis-cli GET user:abc123
+docker exec api-forge-redis-dev redis-cli GET user:abc123
 ```
 
 ### Using Docker Compose Exec
@@ -128,13 +128,13 @@ PONG
 
 ```bash
 # Interactive mode with auth
-docker exec -it api-template-redis-prod redis-cli --no-auth-warning -a "$$REDIS_PASSWORD"
+docker exec -it api-forge-redis redis-cli --no-auth-warning -a "$$REDIS_PASSWORD"
 
 # Single command with auth
-docker exec api-template-redis-prod redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" PING
+docker exec api-forge-redis redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" PING
 
 # Using secrets file
-docker exec api-template-redis-prod redis-cli --no-auth-warning -a "$(cat /run/secrets/redis_password)" PING
+docker exec api-forge-redis redis-cli --no-auth-warning -a "$(cat /run/secrets/redis_password)" PING
 ```
 
 ### Remote Access via SSH Tunnel
@@ -673,10 +673,10 @@ redis-cli -p 6380 ping
 docker ps | grep redis
 
 # Check Redis logs
-docker logs api-template-redis-dev
+docker logs api-forge-redis-dev
 
 # Check port mapping
-docker port api-template-redis-dev
+docker port api-forge-redis-dev
 ```
 
 ### Authentication Failures
@@ -691,7 +691,7 @@ redis-cli -p 6379 -a "password" ping
 cat infra/secrets/keys/redis_password.txt
 
 # Check Docker secret
-docker exec api-template-redis-prod cat /run/secrets/redis_password
+docker exec api-forge-redis cat /run/secrets/redis_password
 ```
 
 ### Memory Issues
@@ -729,7 +729,7 @@ min: 0, max: 50, avg: 2.5  # Elevated latency
 # Look for expensive operations
 
 # Check CPU usage
-docker stats api-template-redis-dev
+docker stats api-forge-redis-dev
 
 # Check for blocking operations
 > INFO stats | grep blocked_clients

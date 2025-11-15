@@ -385,7 +385,7 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO temporaluser;
 ```yaml
 services:
   postgres:
-    container_name: api-template-postgres-dev
+    container_name: api-forge-postgres-dev
     image: postgres:16-alpine
     environment:
       POSTGRES_PASSWORD: devpass
@@ -423,7 +423,7 @@ DATABASE_URL=postgresql://appuser:devpass@localhost:5433/appdb
 ```yaml
 services:
   postgres:
-    container_name: api-template-postgres-prod
+    container_name: api-forge-postgres
     image: postgres:16-alpine
     environment:
       APP_DB: ${APP_DB:-appdb}
@@ -664,7 +664,7 @@ uv run cli dev start-env
 uv run cli dev logs postgres
 
 # Test connection
-docker exec -it api-template-postgres-dev psql -U postgres -c "SELECT 1"
+docker exec -it api-forge-postgres-dev psql -U postgres -c "SELECT 1"
 ```
 
 **Issue: "Pool timeout exceeded"**
@@ -715,7 +715,7 @@ export $(cat .env | xargs)
 2. Verify SCRAM-SHA-256 is enabled in pg_hba.conf
 3. Reset password:
 ```bash
-docker exec -it api-template-postgres-dev psql -U postgres
+docker exec -it api-forge-postgres-dev psql -U postgres
 ALTER USER appuser PASSWORD 'newpassword';
 ```
 

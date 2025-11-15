@@ -307,7 +307,7 @@ docker-compose -f docker-compose.prod.yml down
 docker-compose -f docker-compose.prod.yml up -d
 
 # 3. Verify new certificates
-docker exec api-template-postgres-prod \
+docker exec api-forge-postgres \
   psql -U appuser -d appdb -c \
   "SELECT * FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
 
@@ -336,7 +336,7 @@ chmod 600 ./infra/secrets/certs/postgres/server.key
 chmod 644 ./infra/secrets/certs/postgres/server.crt
 
 # 4. Reload PostgreSQL
-docker exec api-template-postgres-prod pg_ctl reload -D /var/lib/postgresql/data
+docker exec api-forge-postgres pg_ctl reload -D /var/lib/postgresql/data
 ```
 
 ## Role-Based Access Control
@@ -611,7 +611,7 @@ NEW_PASSWORD=$(openssl rand -base64 24 | tr '+/' '-_' | cut -c1-24)
 echo "$NEW_PASSWORD" > ./infra/secrets/keys/postgres_app_user_pw.txt
 
 # 3. Update password in database
-docker exec -it api-template-postgres-prod psql -U postgres -d appdb <<SQL
+docker exec -it api-forge-postgres psql -U postgres -d appdb <<SQL
 ALTER USER appuser PASSWORD '$NEW_PASSWORD';
 SQL
 
@@ -893,7 +893,7 @@ cd infra/secrets
 ./generate_secrets.sh
 
 # Apply new password
-docker exec api-template-postgres-prod psql -U postgres <<SQL
+docker exec api-forge-postgres psql -U postgres <<SQL
 ALTER USER appuser PASSWORD '<new-password>';
 ALTER USER appuser WITH LOGIN;
 SQL

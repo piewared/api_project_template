@@ -2,11 +2,11 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: postgres-verifier
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: postgres-verifier
     app.kubernetes.io/component: database-verification
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   # Keep successful job for 1 hour for debugging
   ttlSecondsAfterFinished: 3600

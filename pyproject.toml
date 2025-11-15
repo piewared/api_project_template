@@ -1,7 +1,7 @@
 [project]
-name = "api-template-dev"
+name = "api-forge"
 version = "0.1.0"
-description = "FastAPI service template for development and testing"
+description = "Production-ready API platform with OIDC auth, PostgreSQL, Redis, Temporal workflows, and Kubernetes deployment"
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
 ]
@@ -48,8 +48,8 @@ dev = [
 ]
 
 [project.scripts]
-init-db = "src.app.runtime.init_db:init_db"
-cli = "src.cli:app"
+api-forge-init-db = "src.app.runtime.init_db:init_db"
+api-forge-cli = "src.cli:app"
 
 [tool.ruff]
 line-length = 88

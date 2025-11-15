@@ -54,7 +54,7 @@ This document covers security considerations for Redis in development and produc
 # docker-compose.dev.yml
 redis:
   image: redis:7-alpine
-  container_name: api-template-redis-dev
+  container_name: api-forge-redis-dev
   ports:
     - "6380:6379"  # Exposed to host
   command: redis-server --appendonly yes
@@ -114,7 +114,7 @@ redis-cli -p 6380 FLUSHDB
 redis:
   build:
     context: ./infra/docker/prod/redis
-  container_name: api-template-redis-prod
+  container_name: api-forge-redis
   ports:
     - "127.0.0.1:6379:6379"  # Bound to localhost only
   secrets:
@@ -1006,13 +1006,13 @@ redis-cli -p 6379 -a "password" INFO commandstats
 **Commands**:
 ```bash
 # Stop Redis
-docker stop api-template-redis-prod
+docker stop api-forge-redis
 
 # Restore from backup
-docker cp backup-20240315.rdb api-template-redis-prod:/data/dump.rdb
+docker cp backup-20240315.rdb api-forge-redis:/data/dump.rdb
 
 # Start Redis
-docker start api-template-redis-prod
+docker start api-forge-redis
 
 # Verify data
 redis-cli -p 6379 -a "password" DBSIZE

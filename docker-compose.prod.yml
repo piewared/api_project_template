@@ -8,7 +8,7 @@ x-entrypoint-common-vars: &entrypoint-common-vars
 
 services:
   postgres:
-    container_name: api-template-postgres-prod
+    container_name: api-forge-postgres
     image: app_data_postgres_image
     build:
       context: ./infra/docker/prod
@@ -58,7 +58,7 @@ services:
       - ./infra/docker/prod/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./infra/docker/prod/postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$APP_DB_USER\" ${APP_DB:+-d \"$APP_DB\"} -h 127.0.0.1"]
+      test: ["CMD-SHELL", "pg_isready -U $$APP_DB_USER $${APP_DB:+-d $$APP_DB} -h 127.0.0.1"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -91,7 +91,7 @@ services:
   
   # Redis Cache/Session Store
   redis:
-    container_name: api-template-redis-prod
+    container_name: api-forge-redis
     image: app_data_redis_image
     build:
       context: ./infra/docker/prod/redis
@@ -122,7 +122,7 @@ services:
           memory: 128M
 
   temporal-schema-setup:
-    container_name: api-template-temporal-schema-setup-prod
+    container_name: api-forge-temporal-schema-setup
     image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
     depends_on:
       postgres:
@@ -154,7 +154,7 @@ services:
 
 
   temporal-admin-tools:
-    container_name: api-template-temporal-admin-tools-prod
+    container_name: api-forge-temporal-admin-tools
     restart: unless-stopped
     image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
     networks: [backend]
@@ -163,7 +163,7 @@ services:
 
 
   temporal-namespace-init:
-    container_name: api-template-temporal-namespace-init-prod
+    container_name: api-forge-temporal-namespace-init
     image: temporalio/admin-tools:1.29.0-tctl-1.18.4-cli-1.4.2
     depends_on:
       temporal:
@@ -193,7 +193,7 @@ services:
 
   # Temporal Workflow Engine
   temporal:
-    container_name: api-template-temporal-prod
+    container_name: api-forge-temporal
     build:
       context: .
       dockerfile: ./infra/docker/prod/temporal/Dockerfile
@@ -262,7 +262,7 @@ services:
           memory: 256M
 
   temporal-web:
-    container_name: api-template-temporal-ui-prod
+    container_name: api-forge-temporal-web
     image: temporalio/ui:2.34.0
     depends_on:
       - temporal
@@ -276,11 +276,11 @@ services:
 
   # FastAPI Application
   app:
-    container_name: api-template-app-prod
+    container_name: api-forge-app
     build:
       context: .
       dockerfile: Dockerfile
-    image: api-template-app:latest
+    image: api-forge-app:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -361,11 +361,11 @@ services:
 
   # Temporal Worker
   worker:
-    container_name: api-template-worker-prod
+    container_name: api-forge-worker
     build:
       context: .
       dockerfile: Dockerfile
-    image: api-template-app:latest
+    image: api-forge-app:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -416,6 +416,13 @@ services:
     restart: unless-stopped
     
     command: ["python", "-m", "src.worker.main", "--log-level", "INFO"]
+    
+    healthcheck:
+      test: ["CMD", "python", "/app/src/worker/health_check.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     
     logging:
       driver: "json-file"

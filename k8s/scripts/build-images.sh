@@ -50,7 +50,7 @@ if command -v minikube &> /dev/null && minikube status &> /dev/null; then
 elif docker context show 2>/dev/null | grep -q "kind"; then
     print_info "Detected kind context"
     DOCKER_ENV="kind"
-elif command -v k3d &> /dev/null && k3d cluster list 2>/dev/null | grep -q "api-template"; then
+elif command -v k3d &> /dev/null && k3d cluster list 2>/dev/null | grep -q "api-forge"; then
     print_info "Detected k3d cluster"
     DOCKER_ENV="k3d"
 else
@@ -112,7 +112,7 @@ fi
 print_info "Building FastAPI application image..."
 docker build \
     -f Dockerfile \
-    -t api-template-app:latest \
+    -t api-forge-app:latest \
     . 2>&1 | grep -E "(Step|Successfully|Error)" || true
 
 if [ $? -eq 0 ]; then
@@ -132,7 +132,7 @@ IMAGES=(
     "app_data_postgres_image:latest"
     "app_data_redis_image:latest"
     "my-temporal-server:1.29.0"
-    "api-template-app:latest"
+    "api-forge-app:latest"
 )
 
 ALL_FOUND=true
@@ -153,7 +153,7 @@ if [ "$ALL_FOUND" = true ]; then
     # Load images into kind/k3d if needed
     if [ "$DOCKER_ENV" = "kind" ]; then
         print_header "Loading images into kind cluster"
-        CLUSTER_NAME="api-template"
+        CLUSTER_NAME="api-forge"
         for IMAGE in "${IMAGES[@]}"; do
             print_info "Loading $IMAGE..."
             kind load docker-image "$IMAGE" --name "$CLUSTER_NAME" 2>&1 | grep -v "Image.*already present" || true
@@ -161,7 +161,7 @@ if [ "$ALL_FOUND" = true ]; then
         print_success "Images loaded into kind cluster"
     elif [ "$DOCKER_ENV" = "k3d" ]; then
         print_header "Loading images into k3d cluster"
-        CLUSTER_NAME="api-template"
+        CLUSTER_NAME="api-forge"
         for IMAGE in "${IMAGES[@]}"; do
             print_info "Loading $IMAGE..."
             k3d image import "$IMAGE" -c "$CLUSTER_NAME" 2>&1 | grep -v "already exists" || true
@@ -188,10 +188,10 @@ if [ "$ALL_FOUND" = true ]; then
     echo "   Option B - Manual step-by-step:"
     echo "   ./k8s/scripts/deploy-config.sh    # Sync configs and deploy ConfigMaps"
     echo "   kubectl apply -k k8s/base/        # Deploy remaining resources"
-    echo "   kubectl get pods,jobs -n api-template-prod -w"
+    echo "   kubectl get pods,jobs -n api-forge-prod -w"
     echo ""
     echo "4. Verify application health:"
-    echo "   kubectl port-forward -n api-template-prod svc/app 8000:8000 &"
+    echo "   kubectl port-forward -n api-forge-prod svc/app 8000:8000 &"
     echo "   curl http://localhost:8000/health/ready | jq"
     echo ""
 else

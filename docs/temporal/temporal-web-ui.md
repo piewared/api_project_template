@@ -28,7 +28,7 @@ The UI is automatically started when you run the development environment:
 uv run cli dev start-env
 ```
 
-The UI container (`api-template-temporal-ui-dev`) starts automatically and connects to the Temporal server.
+The UI container (`api-forge-temporal-ui-dev`) starts automatically and connects to the Temporal server.
 
 #### Direct Access
 
@@ -36,7 +36,7 @@ The `docker-compose.dev.yml` file maps the UI port directly to localhost:
 
 ```yaml
 temporal-web:
-  container_name: api-template-temporal-ui-dev
+  container_name: api-forge-temporal-ui-dev
   image: temporalio/ui:2.34.0
   ports:
     - 8082:8080  # UI publicly exposed on localhost:8082
@@ -55,7 +55,7 @@ If port 8082 is already in use, you can run the UI on a different port:
 
 ```bash
 # Stop the existing UI container
-docker stop api-template-temporal-ui-dev
+docker stop api-forge-temporal-ui-dev
 
 # Run with a different port
 docker run -d --name temporal-ui-custom \
@@ -77,10 +77,10 @@ Once started, you should see:
 docker ps | grep temporal-ui
 
 # Should show:
-# api-template-temporal-ui-dev   temporalio/ui:2.34.0   ...   0.0.0.0:8082->8080/tcp
+# api-forge-temporal-ui-dev   temporalio/ui:2.34.0   ...   0.0.0.0:8082->8080/tcp
 
 # Check UI logs
-docker logs api-template-temporal-ui-dev
+docker logs api-forge-temporal-ui-dev
 
 # Should show:
 # Temporal UI is running on port 8080
@@ -101,7 +101,7 @@ In production, the Temporal UI is **bound to localhost only** and not exposed to
 
 ```yaml
 temporal-web:
-  container_name: api-template-temporal-ui-prod
+  container_name: api-forge-temporal-web
   image: temporalio/ui:2.34.0
   ports:
     - 127.0.0.1:8081:8080  # Only accessible from localhost
@@ -449,7 +449,7 @@ handle = await OrderWorkflow.start_workflow(
 
 2. Check container logs:
    ```bash
-   docker logs api-template-temporal-ui-dev
+   docker logs api-forge-temporal-ui-dev
    ```
 
 3. Ensure Temporal server is running:
@@ -459,7 +459,7 @@ handle = await OrderWorkflow.start_workflow(
 
 4. Verify port mapping:
    ```bash
-   docker port api-template-temporal-ui-dev
+   docker port api-forge-temporal-ui-dev
    # Should show: 8080/tcp -> 0.0.0.0:8082
    ```
 
@@ -475,7 +475,7 @@ handle = await OrderWorkflow.start_workflow(
 
 2. Check if UI can reach Temporal server:
    ```bash
-   docker exec api-template-temporal-ui-dev ping temporal
+   docker exec api-forge-temporal-ui-dev ping temporal
    ```
 
 3. Verify network configuration:
@@ -485,7 +485,7 @@ handle = await OrderWorkflow.start_workflow(
 
 4. Check Temporal server logs:
    ```bash
-   docker logs api-template-temporal-dev
+   docker logs api-forge-temporal-dev
    ```
 
 ### No Workflows Visible
@@ -502,7 +502,7 @@ handle = await OrderWorkflow.start_workflow(
 
 3. Check if workflows exist:
    ```bash
-   docker exec api-template-temporal-dev tctl workflow list
+   docker exec api-forge-temporal-dev tctl workflow list
    ```
 
 4. Verify worker is running:
@@ -578,19 +578,19 @@ For command-line workflow management:
 
 ```bash
 # List workflows
-docker exec api-template-temporal-dev tctl workflow list
+docker exec api-forge-temporal-dev tctl workflow list
 
 # Describe workflow
-docker exec api-template-temporal-dev tctl workflow describe -w <workflow-id>
+docker exec api-forge-temporal-dev tctl workflow describe -w <workflow-id>
 
 # Show workflow history
-docker exec api-template-temporal-dev tctl workflow show -w <workflow-id>
+docker exec api-forge-temporal-dev tctl workflow show -w <workflow-id>
 
 # Send signal
-docker exec api-template-temporal-dev tctl workflow signal -w <workflow-id> -n signal_name
+docker exec api-forge-temporal-dev tctl workflow signal -w <workflow-id> -n signal_name
 
 # Query workflow
-docker exec api-template-temporal-dev tctl workflow query -w <workflow-id> -t query_name
+docker exec api-forge-temporal-dev tctl workflow query -w <workflow-id> -t query_name
 ```
 
 ### Programmatic Access

@@ -564,7 +564,7 @@ info = await redis_service.get_info()
 
 ```bash
 # Connect to Redis
-docker exec -it api-template-redis-dev redis-cli
+docker exec -it api-forge-redis-dev redis-cli
 
 # Monitor real-time commands
 > MONITOR
@@ -631,7 +631,7 @@ redis.exceptions.ConnectionError: Error connecting to Redis
 
 **Solutions**:
 - Verify Redis container is running: `docker ps | grep redis`
-- Check port mapping: `docker port api-template-redis-dev`
+- Check port mapping: `docker port api-forge-redis-dev`
 - Verify URL in config: `REDIS_URL` environment variable
 - Check firewall rules (if applicable)
 
@@ -688,19 +688,19 @@ redis-cli -p 6380 ping
 # Should return: PONG
 
 # From container
-docker exec -it api-template-redis-dev redis-cli ping
+docker exec -it api-forge-redis-dev redis-cli ping
 ```
 
 **View Data**:
 ```bash
 # List all keys (dev only)
-docker exec -it api-template-redis-dev redis-cli KEYS '*'
+docker exec -it api-forge-redis-dev redis-cli KEYS '*'
 
 # Get specific key
-docker exec -it api-template-redis-dev redis-cli GET user:abc123
+docker exec -it api-forge-redis-dev redis-cli GET user:abc123
 
 # Monitor live operations
-docker exec -it api-template-redis-dev redis-cli MONITOR
+docker exec -it api-forge-redis-dev redis-cli MONITOR
 ```
 
 ### Testing Without Redis

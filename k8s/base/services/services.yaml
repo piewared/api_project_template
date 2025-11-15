@@ -3,11 +3,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: postgres
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   type: ClusterIP
   ports:
@@ -24,11 +24,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: cache
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   type: ClusterIP
   ports:
@@ -45,11 +45,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: temporal
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: temporal
     app.kubernetes.io/component: workflow-engine
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   type: ClusterIP
   ports:
@@ -66,11 +66,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: temporal-web
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: temporal-web
     app.kubernetes.io/component: workflow-ui
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   type: ClusterIP
   ports:
@@ -87,11 +87,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: app
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: app
     app.kubernetes.io/component: application
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   type: ClusterIP
   ports:

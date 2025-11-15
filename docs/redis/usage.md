@@ -27,7 +27,7 @@ uv run cli dev start-env
 docker-compose -f docker-compose.dev.yml up redis -d
 
 # Verify Redis is running
-docker exec -it api-template-redis-dev redis-cli ping
+docker exec -it api-forge-redis-dev redis-cli ping
 # Expected: PONG
 ```
 

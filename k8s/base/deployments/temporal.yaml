@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: temporal
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: temporal
     app.kubernetes.io/component: workflow-engine
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
     app.kubernetes.io/version: "1.29.0"
 spec:
   replicas: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         app.kubernetes.io/name: temporal
         app.kubernetes.io/component: workflow-engine
-        app.kubernetes.io/part-of: api-template
+        app.kubernetes.io/part-of: api-forge
     spec:
       securityContext:
         runAsNonRoot: true

@@ -43,7 +43,7 @@ cd infra/secrets && ./generate_secrets.sh && cd ../.. && \
 ## 🎯 What Gets Deployed
 
 ### Infrastructure Layer
-- ✅ Namespace: `api-template-prod`
+- ✅ Namespace: `api-forge-prod`
 - ✅ Storage: 5 PersistentVolumeClaims
 - ✅ ConfigMaps: 5 configuration files
 - ✅ Services: 5 ClusterIP services
@@ -70,13 +70,13 @@ cd infra/secrets && ./generate_secrets.sh && cd ../.. && \
 
 ```bash
 # Check all pods
-kubectl get pods -n api-template-prod
+kubectl get pods -n api-forge-prod
 
 # Check services
-kubectl get svc -n api-template-prod
+kubectl get svc -n api-forge-prod
 
 # Check app health
-kubectl logs -n api-template-prod -l app.kubernetes.io/name=app | grep healthy
+kubectl logs -n api-forge-prod -l app.kubernetes.io/name=app | grep healthy
 
 # Expected output:
 # ✓ Database is healthy
@@ -90,25 +90,25 @@ kubectl logs -n api-template-prod -l app.kubernetes.io/name=app | grep healthy
 
 ### Application API
 ```bash
-kubectl port-forward -n api-template-prod svc/app 8000:8000
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
 curl http://localhost:8000/health
 ```
 
 ### Temporal Web UI
 ```bash
-kubectl port-forward -n api-template-prod svc/temporal-web 8080:8080
+kubectl port-forward -n api-forge-prod svc/temporal-web 8080:8080
 open http://localhost:8080
 ```
 
 ### PostgreSQL (for debugging)
 ```bash
-kubectl port-forward -n api-template-prod svc/postgres 5432:5432
+kubectl port-forward -n api-forge-prod svc/postgres 5432:5432
 psql postgresql://appuser:PASSWORD@localhost:5432/appdb
 ```
 
 ### Redis (for debugging)
 ```bash
-kubectl port-forward -n api-template-prod svc/redis 6379:6379
+kubectl port-forward -n api-forge-prod svc/redis 6379:6379
 redis-cli -h localhost -p 6379 -a PASSWORD ping
 ```
 
@@ -118,12 +118,12 @@ redis-cli -h localhost -p 6379 -a PASSWORD ping
 
 ### Remove everything
 ```bash
-kubectl delete namespace api-template-prod
+kubectl delete namespace api-forge-prod
 ```
 
 ### Remove images (Minikube)
 ```bash
-minikube ssh "docker images | grep 'api-template\|my-temporal' | awk '{print \$3}' | xargs docker rmi -f"
+minikube ssh "docker images | grep 'api-forge\|my-temporal' | awk '{print \$3}' | xargs docker rmi -f"
 ```
 
 ---
@@ -228,7 +228,7 @@ minikube start --cpus=4 --memory=8192 --disk-size=40g
 ./k8s/scripts/build-images.sh
 
 # 2. Restart app
-kubectl rollout restart deployment/app -n api-template-prod
+kubectl rollout restart deployment/app -n api-forge-prod
 ```
 
 ### Update Configuration
@@ -256,7 +256,7 @@ cd infra/secrets && ./generate_secrets.sh && cd ../..
 ./k8s/scripts/create-secrets.sh
 
 # 3. Restart affected pods
-kubectl rollout restart deployment/postgres -n api-template-prod
-kubectl rollout restart deployment/redis -n api-template-prod
-kubectl rollout restart deployment/app -n api-template-prod
+kubectl rollout restart deployment/postgres -n api-forge-prod
+kubectl rollout restart deployment/redis -n api-forge-prod
+kubectl rollout restart deployment/app -n api-forge-prod
 ```

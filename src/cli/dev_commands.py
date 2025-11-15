@@ -142,10 +142,10 @@ def start_env(
     console.print("[green]✅ Docker is running[/green]")
 
     # Check if services are already running
-    keycloak_running = check_container_running("api-template-keycloak-dev")
-    postgres_running = check_container_running("api-template-postgres-dev")
-    redis_running = check_container_running("api-template-redis-dev")
-    temporal_running = check_container_running("api-template-temporal-dev")
+    keycloak_running = check_container_running("api-forge-keycloak-dev")
+    postgres_running = check_container_running("api-forge-postgres-dev")
+    redis_running = check_container_running("api-forge-redis-dev")
+    temporal_running = check_container_running("api-forge-temporal-dev")
 
     # Count running services
     running_services = []
@@ -328,7 +328,7 @@ def _check_docker_status() -> bool:
 
 def _check_keycloak_status() -> None:
     """Check Keycloak container and health status."""
-    keycloak_running = check_container_running("api-template-keycloak-dev")
+    keycloak_running = check_container_running("api-forge-keycloak-dev")
     status_text = (
         "[green]✅ Running[/green]" if keycloak_running else "[red]❌ Not running[/red]"
     )
@@ -356,7 +356,7 @@ def _check_postgres_status(
     app_db: str, app_user: str, app_password: str, app_db_url: str
 ) -> None:
     """Check PostgreSQL container and connection status."""
-    postgres_running = check_container_running("api-template-postgres-dev")
+    postgres_running = check_container_running("api-forge-postgres-dev")
     status_text = (
         "[green]✅ Running[/green]" if postgres_running else "[red]❌ Not running[/red]"
     )
@@ -386,7 +386,7 @@ def _check_postgres_status(
 
 def _check_redis_status(redis_url: str) -> None:
     """Check Redis container and connection status."""
-    redis_running = check_container_running("api-template-redis-dev")
+    redis_running = check_container_running("api-forge-redis-dev")
     status_text = (
         "[green]✅ Running[/green]" if redis_running else "[red]❌ Not running[/red]"
     )
@@ -405,8 +405,8 @@ def _check_redis_status(redis_url: str) -> None:
 
 def _check_temporal_status(temporal_url: str) -> None:
     """Check Temporal server and UI status."""
-    temporal_server_running = check_container_running("api-template-temporal-dev")
-    temporal_web_running = check_container_running("api-template-temporal-ui-dev")
+    temporal_server_running = check_container_running("api-forge-temporal-dev")
+    temporal_web_running = check_container_running("api-forge-temporal-ui-dev")
 
     status_text = (
         "[green]✅ Running[/green]"

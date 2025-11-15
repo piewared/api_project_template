@@ -124,40 +124,40 @@ kubectl apply -f k8s/base/deployments/postgres.yaml
 kubectl apply -f k8s/base/deployments/redis.yaml
 
 # Wait for databases to be ready
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgres -n api-template-prod --timeout=120s
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=redis -n api-template-prod --timeout=120s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgres -n api-forge-prod --timeout=120s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=redis -n api-forge-prod --timeout=120s
 
 # Initialize Temporal schemas (required before Temporal deployment)
 kubectl apply -f k8s/base/jobs/temporal-schema-setup.yaml
 
 # Wait for schema setup to complete
-kubectl wait --for=condition=complete job/temporal-schema-setup -n api-template-prod --timeout=300s
+kubectl wait --for=condition=complete job/temporal-schema-setup -n api-forge-prod --timeout=300s
 
 # Deploy Temporal
 kubectl apply -f k8s/base/deployments/temporal.yaml
 kubectl apply -f k8s/base/deployments/temporal-web.yaml
 
 # Wait for Temporal to be ready
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=temporal -n api-template-prod --timeout=120s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=temporal -n api-forge-prod --timeout=120s
 
 # Deploy application
 kubectl apply -f k8s/base/deployments/app.yaml
 
 # Wait for app to be ready
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=app -n api-template-prod --timeout=120s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=app -n api-forge-prod --timeout=120s
 
 # Deploy Temporal worker
 kubectl apply -f k8s/base/deployments/worker.yaml
 
 # Wait for worker to be ready
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=worker -n api-template-prod --timeout=120s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=worker -n api-forge-prod --timeout=120s
 ```
 
 ### 5. Verify Deployment
 
 ```bash
 # Check all pods are running
-kubectl get pods -n api-template-prod
+kubectl get pods -n api-forge-prod
 
 # Expected output:
 # NAME                                   READY   STATUS      RESTARTS   AGE
@@ -173,7 +173,7 @@ kubectl get pods -n api-template-prod
 # temporal-namespace-init-xxxxx          0/1     Completed   0          2m
 
 # Check app logs
-kubectl logs -n api-template-prod -l app.kubernetes.io/name=app --tail=50
+kubectl logs -n api-forge-prod -l app.kubernetes.io/name=app --tail=50
 
 # Look for:
 # ✓ Database is healthy
@@ -186,7 +186,7 @@ kubectl logs -n api-template-prod -l app.kubernetes.io/name=app --tail=50
 
 ```bash
 # Port forward to access the app locally
-kubectl port-forward -n api-template-prod svc/app 8000:8000
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
 
 # Test the health endpoint
 curl http://localhost:8000/health
@@ -324,7 +324,7 @@ If you modify `config.yaml` or need to update environment variables:
 # Regenerate app-config.yaml from config.yaml
 kubectl create configmap app-config \
   --from-file=config.yaml=config.yaml \
-  --dry-run=client -o yaml -n api-template-prod > k8s/base/configmaps/app-config.yaml.new
+  --dry-run=client -o yaml -n api-forge-prod > k8s/base/configmaps/app-config.yaml.new
 
 # Add metadata
 cat > k8s/base/configmaps/app-config.yaml << 'EOF'
@@ -332,7 +332,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: app-config
-  namespace: api-template-prod
+  namespace: api-forge-prod
 EOF
 cat k8s/base/configmaps/app-config.yaml.new | grep -A 9999 "^data:" >> k8s/base/configmaps/app-config.yaml
 rm k8s/base/configmaps/app-config.yaml.new
@@ -341,7 +341,7 @@ rm k8s/base/configmaps/app-config.yaml.new
 kubectl apply -f k8s/base/configmaps/app-config.yaml
 
 # Restart app to pick up changes
-kubectl rollout restart deployment/app -n api-template-prod
+kubectl rollout restart deployment/app -n api-forge-prod
 ```
 
 ---
@@ -376,10 +376,10 @@ Pods start as root, run the entrypoint script (which sets up files/permissions),
 
 ```bash
 # Check service selector
-kubectl get svc <service-name> -n api-template-prod -o jsonpath='{.spec.selector}'
+kubectl get svc <service-name> -n api-forge-prod -o jsonpath='{.spec.selector}'
 
 # Check pod labels
-kubectl get pods -n api-template-prod -l app.kubernetes.io/name=<service-name> --show-labels
+kubectl get pods -n api-forge-prod -l app.kubernetes.io/name=<service-name> --show-labels
 ```
 
 ### Temporal Won't Start - Schema Not Found
@@ -390,7 +390,7 @@ kubectl get pods -n api-template-prod -l app.kubernetes.io/name=<service-name> -
 
 ```bash
 kubectl apply -f k8s/base/jobs/temporal-schema-setup.yaml
-kubectl wait --for=condition=complete job/temporal-schema-setup -n api-template-prod --timeout=300s
+kubectl wait --for=condition=complete job/temporal-schema-setup -n api-forge-prod --timeout=300s
 kubectl apply -f k8s/base/deployments/temporal.yaml
 ```
 
@@ -406,10 +406,10 @@ kubectl apply -f k8s/base/deployments/temporal.yaml
 
 ```bash
 # Delete all resources
-kubectl delete namespace api-template-prod
+kubectl delete namespace api-forge-prod
 
 # Remove local images (Minikube)
-minikube ssh "docker images | grep api-template | awk '{print \$3}' | xargs docker rmi -f"
+minikube ssh "docker images | grep api-forge | awk '{print \$3}' | xargs docker rmi -f"
 ```
 
 ---

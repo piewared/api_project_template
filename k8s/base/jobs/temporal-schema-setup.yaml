@@ -2,11 +2,11 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: temporal-schema-setup
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: temporal-schema-setup
     app.kubernetes.io/component: workflow-engine-setup
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   # Keep successful job for 1 hour for debugging
   ttlSecondsAfterFinished: 3600

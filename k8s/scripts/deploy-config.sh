@@ -237,7 +237,7 @@ echo -e "${GREEN}✓ Deployment complete${NC}"
 if [[ "$RESTART_APP" == "true" ]]; then
   echo ""
   echo "Restarting app deployment..."
-  kubectl rollout restart deployment/app -n api-template-prod
+  kubectl rollout restart deployment/app -n api-forge-prod
   echo -e "${GREEN}✓ App restarting${NC}"
 fi
 

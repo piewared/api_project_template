@@ -2,10 +2,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 metadata:
-  name: api-template-prod
+  name: api-forge-prod
 
 # Namespace for all resources
-namespace: api-template-prod
+namespace: api-forge-prod
 
 # Auto-generate ConfigMaps from source files
 # deploy-config.sh copies source files to k8s/base/.k8s-sources/ then Kustomize generates ConfigMaps
@@ -87,8 +87,8 @@ resources:
 
 # Image transformations (if needed in future)
 # images:
-#   - name: api-template-app
-#     newName: your-registry.io/api-template-app
+#   - name: api-forge-app
+#     newName: your-registry.io/api-forge-app
 #     newTag: 1.0.0
 
 # Configuration options

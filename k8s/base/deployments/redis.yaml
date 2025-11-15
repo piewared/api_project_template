@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: cache
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
     app.kubernetes.io/version: "7"
 spec:
   replicas: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         app.kubernetes.io/name: redis
         app.kubernetes.io/component: cache
-        app.kubernetes.io/part-of: api-template
+        app.kubernetes.io/part-of: api-forge
     spec:
       securityContext:
         # Container starts as root, entrypoint drops to redis user via su-exec

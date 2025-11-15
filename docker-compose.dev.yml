@@ -1,13 +1,13 @@
-name: api-template-dev
+name: api-forge-dev
 services:
   keycloak:
-    container_name: api-template-keycloak-dev
+    container_name: api-forge-keycloak-dev
     extends:
       file: infra/docker/dev/keycloak/docker-compose.yml
       service: keycloak
 
   keycloak-setup:
-    container_name: api-template-keycloak-setup-dev
+    container_name: api-forge-keycloak-setup-dev
     image: python:3.11-slim
     depends_on:
       keycloak:
@@ -28,7 +28,7 @@ services:
     restart: "no"
 
   postgres:
-    container_name: api-template-postgres-dev
+    container_name: api-forge-postgres-dev
     extends:
       file: infra/docker/dev/postgres/docker-compose.yml
       service: postgres
@@ -39,13 +39,13 @@ services:
       APP_DB_USER_PW: devpass
 
   redis:
-    container_name: api-template-redis-dev
+    container_name: api-forge-redis-dev
     extends:
       file: infra/docker/dev/redis/docker-compose.yml
       service: redis
 
   temporal:
-    container_name: api-template-temporal-dev
+    container_name: api-forge-temporal-dev
     image: temporalio/auto-setup:1.28.1
     depends_on:
       - postgres
@@ -63,7 +63,7 @@ services:
       - 7234:7233
 
   temporal-web:
-    container_name: api-template-temporal-ui-dev
+    container_name: api-forge-temporal-ui-dev
     image: temporalio/ui:2.34.0
     depends_on:
       - temporal
@@ -76,11 +76,11 @@ services:
       - 8082:8080
 
   worker:
-    container_name: api-template-worker-dev
+    container_name: api-forge-worker-dev
     build:
       context: .
       dockerfile: Dockerfile
-    image: api-template-app:latest
+    image: api-forge-app:latest
     depends_on:
       - postgres
       - redis
@@ -100,6 +100,12 @@ services:
     networks:
       - dev-network
     command: ["python", "-m", "src.worker.main", "--log-level", "DEBUG"]
+    healthcheck:
+      test: ["CMD", "python", "/app/src/worker/health_check.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
 volumes:

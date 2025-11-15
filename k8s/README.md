@@ -79,7 +79,7 @@ Sync your `.env` and `config.yaml` to the k8s deployment:
 Run the secret creation script to create all Kubernetes secrets:
 
 ```bash
-# Create secrets in default namespace (api-template-prod)
+# Create secrets in default namespace (api-forge-prod)
 ./k8s/scripts/create-secrets.sh
 
 # Or specify a custom namespace
@@ -127,20 +127,20 @@ docker build -t my-temporal-server:1.29.0 .
 cd ../../../..
 
 # Application (context: project root)
-docker build -f Dockerfile -t api-template-app:latest .
+docker build -f Dockerfile -t api-forge-app:latest .
 ```
 
 **For Production (with registry):**
 
 ```bash
 # Tag and push to your registry
-docker tag api-template-app:latest your-registry.io/api-template-app:1.0.0
+docker tag api-forge-app:latest your-registry.io/api-forge-app:1.0.0
 docker tag app_data_postgres_image:latest your-registry.io/postgres:latest
 docker tag app_data_redis_image:latest your-registry.io/redis:latest
 docker tag my-temporal-server:1.29.0 your-registry.io/temporal:1.29.0
 
 # Push all images
-docker push your-registry.io/api-template-app:1.0.0
+docker push your-registry.io/api-forge-app:1.0.0
 docker push your-registry.io/postgres:latest
 docker push your-registry.io/redis:latest
 docker push your-registry.io/temporal:1.29.0
@@ -158,7 +158,7 @@ Deploy all resources using Kustomize:
 kubectl apply -k k8s/base/
 
 # Watch deployment progress
-kubectl get pods -n api-template-prod -w
+kubectl get pods -n api-forge-prod -w
 ```
 
 ## 📊 Deployment Order
@@ -178,56 +178,56 @@ The kustomization.yaml ensures resources are deployed in the correct order:
 
 ```bash
 # Check all resources
-kubectl get all -n api-template-prod
+kubectl get all -n api-forge-prod
 
 # Check pods
-kubectl get pods -n api-template-prod
+kubectl get pods -n api-forge-prod
 
 # Check services
-kubectl get svc -n api-template-prod
+kubectl get svc -n api-forge-prod
 
 # Check PVCs
-kubectl get pvc -n api-template-prod
+kubectl get pvc -n api-forge-prod
 
 # Check jobs
-kubectl get jobs -n api-template-prod
+kubectl get jobs -n api-forge-prod
 ```
 
 ### Check Pod Logs
 
 ```bash
 # PostgreSQL logs
-kubectl logs -n api-template-prod deployment/postgres -f
+kubectl logs -n api-forge-prod deployment/postgres -f
 
 # Redis logs
-kubectl logs -n api-template-prod deployment/redis -f
+kubectl logs -n api-forge-prod deployment/redis -f
 
 # Temporal logs
-kubectl logs -n api-template-prod deployment/temporal -f
+kubectl logs -n api-forge-prod deployment/temporal -f
 
 # Application logs
-kubectl logs -n api-template-prod deployment/app -f
+kubectl logs -n api-forge-prod deployment/app -f
 
 # Worker logs
-kubectl logs -n api-template-prod deployment/worker -f
+kubectl logs -n api-forge-prod deployment/worker -f
 
 # Job logs
-kubectl logs -n api-template-prod job/postgres-verifier
-kubectl logs -n api-template-prod job/temporal-schema-setup
-kubectl logs -n api-template-prod job/temporal-namespace-init
+kubectl logs -n api-forge-prod job/postgres-verifier
+kubectl logs -n api-forge-prod job/temporal-schema-setup
+kubectl logs -n api-forge-prod job/temporal-namespace-init
 ```
 
 ### Health Checks
 
 ```bash
 # Port-forward to application
-kubectl port-forward -n api-template-prod svc/app 8000:8000
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
 
 # Test health endpoint
 curl http://localhost:8000/health
 
 # Port-forward to Temporal UI
-kubectl port-forward -n api-template-prod svc/temporal-web 8080:8080
+kubectl port-forward -n api-forge-prod svc/temporal-web 8080:8080
 
 # Access at http://localhost:8080
 ```
@@ -330,13 +330,13 @@ spec:
 
 ```bash
 # Describe pod to see events
-kubectl describe pod -n api-template-prod <pod-name>
+kubectl describe pod -n api-forge-prod <pod-name>
 
 # Check pod logs
-kubectl logs -n api-template-prod <pod-name>
+kubectl logs -n api-forge-prod <pod-name>
 
 # Check previous pod logs (if crashed)
-kubectl logs -n api-template-prod <pod-name> --previous
+kubectl logs -n api-forge-prod <pod-name> --previous
 ```
 
 ### Common Issues
@@ -345,16 +345,16 @@ kubectl logs -n api-template-prod <pod-name> --previous
 ```bash
 # Issue: Cannot pull custom images
 # Solution: Ensure images are built and available
-docker images | grep api-template
+docker images | grep api-forge
 
 # For local testing with kind/minikube
-kind load docker-image api-template-app:latest
+kind load docker-image api-forge-app:latest
 ```
 
 #### 2. CrashLoopBackOff
 ```bash
 # Check logs for errors
-kubectl logs -n api-template-prod deployment/app
+kubectl logs -n api-forge-prod deployment/app
 
 # Common causes:
 # - Missing secrets
@@ -365,22 +365,22 @@ kubectl logs -n api-template-prod deployment/app
 #### 3. Secrets Not Found
 ```bash
 # Verify secrets exist
-kubectl get secrets -n api-template-prod
+kubectl get secrets -n api-forge-prod
 
 # Re-create secrets
-./k8s/scripts/create-secrets.sh api-template-prod
+./k8s/scripts/create-secrets.sh api-forge-prod
 ```
 
 #### 4. Jobs Failing
 ```bash
 # Check job status
-kubectl get jobs -n api-template-prod
+kubectl get jobs -n api-forge-prod
 
 # Check job logs
-kubectl logs -n api-template-prod job/postgres-verifier
+kubectl logs -n api-forge-prod job/postgres-verifier
 
 # Delete and re-run job
-kubectl delete job -n api-template-prod postgres-verifier
+kubectl delete job -n api-forge-prod postgres-verifier
 kubectl apply -f k8s/base/jobs/postgres-verifier.yaml
 ```
 
@@ -388,10 +388,10 @@ kubectl apply -f k8s/base/jobs/postgres-verifier.yaml
 
 ```bash
 # Test PostgreSQL connection
-kubectl exec -it -n api-template-prod deployment/postgres -- psql -U appuser -d appdb
+kubectl exec -it -n api-forge-prod deployment/postgres -- psql -U appuser -d appdb
 
 # Test Redis connection
-kubectl exec -it -n api-template-prod deployment/redis -- redis-cli ping
+kubectl exec -it -n api-forge-prod deployment/redis -- redis-cli ping
 ```
 
 ## 🔄 Updates and Rollbacks
@@ -400,23 +400,23 @@ kubectl exec -it -n api-template-prod deployment/redis -- redis-cli ping
 
 ```bash
 # Update application image
-kubectl set image deployment/app app=api-template-app:1.1.0 -n api-template-prod
+kubectl set image deployment/app app=api-forge-app:1.1.0 -n api-forge-prod
 
 # Watch rollout
-kubectl rollout status deployment/app -n api-template-prod
+kubectl rollout status deployment/app -n api-forge-prod
 ```
 
 ### Rollback
 
 ```bash
 # View rollout history
-kubectl rollout history deployment/app -n api-template-prod
+kubectl rollout history deployment/app -n api-forge-prod
 
 # Rollback to previous version
-kubectl rollout undo deployment/app -n api-template-prod
+kubectl rollout undo deployment/app -n api-forge-prod
 
 # Rollback to specific revision
-kubectl rollout undo deployment/app --to-revision=2 -n api-template-prod
+kubectl rollout undo deployment/app --to-revision=2 -n api-forge-prod
 ```
 
 ## 🧹 Cleanup
@@ -428,7 +428,7 @@ kubectl rollout undo deployment/app --to-revision=2 -n api-template-prod
 kubectl delete -k k8s/base/
 
 # Or delete namespace (removes everything)
-kubectl delete namespace api-template-prod
+kubectl delete namespace api-forge-prod
 ```
 
 ### Preserve Data
@@ -437,8 +437,8 @@ To keep PersistentVolumes after deletion:
 
 ```bash
 # Delete deployments but keep PVCs
-kubectl delete deployment --all -n api-template-prod
-kubectl delete svc --all -n api-template-prod
+kubectl delete deployment --all -n api-forge-prod
+kubectl delete svc --all -n api-forge-prod
 
 # PVCs remain for data persistence
 ```
@@ -449,10 +449,10 @@ kubectl delete svc --all -n api-template-prod
 
 ```bash
 # Scale application
-kubectl scale deployment/app --replicas=3 -n api-template-prod
+kubectl scale deployment/app --replicas=3 -n api-forge-prod
 
 # Auto-scaling with HPA
-kubectl autoscale deployment/app --min=2 --max=10 --cpu-percent=80 -n api-template-prod
+kubectl autoscale deployment/app --min=2 --max=10 --cpu-percent=80 -n api-forge-prod
 ```
 
 **Note**: PostgreSQL and Redis should remain at 1 replica unless using replication.
@@ -462,10 +462,10 @@ kubectl autoscale deployment/app --min=2 --max=10 --cpu-percent=80 -n api-templa
 ### From Within Cluster
 
 Services are accessible via DNS:
-- PostgreSQL: `postgres.api-template-prod.svc.cluster.local:5432`
-- Redis: `redis.api-template-prod.svc.cluster.local:6379`
-- Temporal: `temporal.api-template-prod.svc.cluster.local:7233`
-- App: `app.api-template-prod.svc.cluster.local:8000`
+- PostgreSQL: `postgres.api-forge-prod.svc.cluster.local:5432`
+- Redis: `redis.api-forge-prod.svc.cluster.local:6379`
+- Temporal: `temporal.api-forge-prod.svc.cluster.local:7233`
+- App: `app.api-forge-prod.svc.cluster.local:8000`
 - Worker: No service (uses Temporal client connection)
 
 ### From Outside Cluster
@@ -474,13 +474,13 @@ Use port-forwarding for testing:
 
 ```bash
 # Application
-kubectl port-forward -n api-template-prod svc/app 8000:8000
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
 
 # Temporal UI
-kubectl port-forward -n api-template-prod svc/temporal-web 8080:8080
+kubectl port-forward -n api-forge-prod svc/temporal-web 8080:8080
 
 # PostgreSQL (for debugging only)
-kubectl port-forward -n api-template-prod svc/postgres 5432:5432
+kubectl port-forward -n api-forge-prod svc/postgres 5432:5432
 ```
 
 For production, use Ingress:
@@ -490,7 +490,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: app-ingress
-  namespace: api-template-prod
+  namespace: api-forge-prod
 spec:
   rules:
     - host: api.example.com

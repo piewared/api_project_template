@@ -69,7 +69,7 @@ eval $(minikube docker-env)
 ./k8s/scripts/build-images.sh
 
 # Verify images are in Minikube
-minikube image ls | grep -E "app_data|temporal|api-template"
+minikube image ls | grep -E "app_data|temporal|api-forge"
 
 # 2. Generate and create secrets
 cd infra/secrets && ./generate_secrets.sh && cd ../..
@@ -79,23 +79,23 @@ cd infra/secrets && ./generate_secrets.sh && cd ../..
 kubectl apply -k k8s/base/
 
 # 4. Watch deployment
-kubectl get pods -n api-template-prod -w
+kubectl get pods -n api-forge-prod -w
 
 # 5. Check service status
-kubectl get all -n api-template-prod
+kubectl get all -n api-forge-prod
 ```
 
 ### Access Services
 
 ```bash
 # Get service URLs
-minikube service app -n api-template-prod --url
-minikube service temporal-web -n api-template-prod --url
+minikube service app -n api-forge-prod --url
+minikube service temporal-web -n api-forge-prod --url
 
 # Or use port forwarding
-kubectl port-forward -n api-template-prod svc/app 8000:8000
-kubectl port-forward -n api-template-prod svc/temporal-web 8080:8080
-kubectl port-forward -n api-template-prod svc/postgres 5432:5432
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
+kubectl port-forward -n api-forge-prod svc/temporal-web 8080:8080
+kubectl port-forward -n api-forge-prod svc/postgres 5432:5432
 
 # Access Kubernetes dashboard
 minikube dashboard
@@ -179,10 +179,10 @@ nodes:
 EOF
 
 # Create cluster
-kind create cluster --name api-template --config kind-config.yaml
+kind create cluster --name api-forge --config kind-config.yaml
 
 # Verify
-kubectl cluster-info --context kind-api-template
+kubectl cluster-info --context kind-api-forge
 ```
 
 ### Load Images into kind
@@ -202,14 +202,14 @@ kubectl cluster-info --context kind-api-template
 kubectl apply -k k8s/base/
 
 # Check status
-kubectl get all -n api-template-prod
+kubectl get all -n api-forge-prod
 ```
 
 ### Cleanup
 
 ```bash
 # Delete cluster
-kind delete cluster --name api-template
+kind delete cluster --name api-forge
 ```
 
 ---
@@ -241,7 +241,7 @@ choco install k3d
 
 ```bash
 # Create cluster with port mappings
-k3d cluster create api-template \
+k3d cluster create api-forge \
   --port 8000:8000@loadbalancer \
   --port 8080:8080@loadbalancer \
   --port 5432:5432@loadbalancer \
@@ -256,13 +256,13 @@ k3d cluster create api-template \
 ```bash
 ./k8s/scripts/create-secrets.sh
 kubectl apply -k k8s/base/
-kubectl get all -n api-template-prod
+kubectl get all -n api-forge-prod
 ```
 
 ### Cleanup
 
 ```bash
-k3d cluster delete api-template
+k3d cluster delete api-forge
 ```
 
 ---
@@ -294,10 +294,10 @@ k3d cluster delete api-template
 # Deploy
 ./k8s/scripts/create-secrets.sh
 kubectl apply -k k8s/base/
-kubectl get all -n api-template-prod
+kubectl get all -n api-forge-prod
 
 # Access services via localhost
-kubectl port-forward -n api-template-prod svc/app 8000:8000
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
 ```
 
 ---
@@ -327,38 +327,38 @@ kubesec scan k8s/base/deployments/*.yaml
 kubectl apply -k k8s/base/
 
 # Watch pod startup
-kubectl get pods -n api-template-prod -w
+kubectl get pods -n api-forge-prod -w
 
 # Check events
-kubectl get events -n api-template-prod --sort-by='.lastTimestamp'
+kubectl get events -n api-forge-prod --sort-by='.lastTimestamp'
 
 # View logs from all pods
-kubectl logs -n api-template-prod -l app=postgres --tail=50
-kubectl logs -n api-template-prod -l app=redis --tail=50
-kubectl logs -n api-template-prod -l app=temporal --tail=50
-kubectl logs -n api-template-prod -l app=app --tail=50
+kubectl logs -n api-forge-prod -l app=postgres --tail=50
+kubectl logs -n api-forge-prod -l app=redis --tail=50
+kubectl logs -n api-forge-prod -l app=temporal --tail=50
+kubectl logs -n api-forge-prod -l app=app --tail=50
 ```
 
 ### 3. Test Services
 
 ```bash
 # Check if pods are ready
-kubectl get pods -n api-template-prod
+kubectl get pods -n api-forge-prod
 
 # Test database connection
-kubectl exec -n api-template-prod -it deploy/postgres -- \
+kubectl exec -n api-forge-prod -it deploy/postgres -- \
   psql -U app_owner -d appdb -c "SELECT version();"
 
 # Test Redis connection
-kubectl exec -n api-template-prod -it deploy/redis -- \
-  redis-cli -a $(kubectl get secret redis-secrets -n api-template-prod -o jsonpath='{.data.password}' | base64 -d) ping
+kubectl exec -n api-forge-prod -it deploy/redis -- \
+  redis-cli -a $(kubectl get secret redis-secrets -n api-forge-prod -o jsonpath='{.data.password}' | base64 -d) ping
 
 # Test application health endpoint
-kubectl exec -n api-template-prod -it deploy/app -- \
+kubectl exec -n api-forge-prod -it deploy/app -- \
   curl -s http://localhost:8000/health
 
 # Or port-forward and test from host
-kubectl port-forward -n api-template-prod svc/app 8000:8000 &
+kubectl port-forward -n api-forge-prod svc/app 8000:8000 &
 curl http://localhost:8000/health
 curl http://localhost:8000/docs  # FastAPI OpenAPI docs
 ```
@@ -367,15 +367,15 @@ curl http://localhost:8000/docs  # FastAPI OpenAPI docs
 
 ```bash
 # Check job status
-kubectl get jobs -n api-template-prod
+kubectl get jobs -n api-forge-prod
 
 # View job logs
-kubectl logs -n api-template-prod job/postgres-verifier
-kubectl logs -n api-template-prod job/temporal-schema-setup
-kubectl logs -n api-template-prod job/temporal-namespace-init
+kubectl logs -n api-forge-prod job/postgres-verifier
+kubectl logs -n api-forge-prod job/temporal-schema-setup
+kubectl logs -n api-forge-prod job/temporal-namespace-init
 
 # Rerun a job (delete and reapply)
-kubectl delete job postgres-verifier -n api-template-prod
+kubectl delete job postgres-verifier -n api-forge-prod
 kubectl apply -f k8s/base/jobs/postgres-verifier.yaml
 ```
 
@@ -383,18 +383,18 @@ kubectl apply -f k8s/base/jobs/postgres-verifier.yaml
 
 ```bash
 # Check PVC status
-kubectl get pvc -n api-template-prod
+kubectl get pvc -n api-forge-prod
 
 # Check if volumes are bound
-kubectl describe pvc -n api-template-prod
+kubectl describe pvc -n api-forge-prod
 
 # Write test data to PostgreSQL
-kubectl exec -n api-template-prod -it deploy/postgres -- \
+kubectl exec -n api-forge-prod -it deploy/postgres -- \
   psql -U app_owner -d appdb -c "CREATE TABLE test (id serial, data text);"
 
 # Restart pod and verify data persists
-kubectl rollout restart deployment/postgres -n api-template-prod
-kubectl exec -n api-template-prod -it deploy/postgres -- \
+kubectl rollout restart deployment/postgres -n api-forge-prod
+kubectl exec -n api-forge-prod -it deploy/postgres -- \
   psql -U app_owner -d appdb -c "SELECT * FROM test;"
 ```
 
@@ -402,27 +402,27 @@ kubectl exec -n api-template-prod -it deploy/postgres -- \
 
 ```bash
 # View ConfigMap contents
-kubectl get configmap -n api-template-prod
-kubectl describe configmap postgres-config -n api-template-prod
+kubectl get configmap -n api-forge-prod
+kubectl describe configmap postgres-config -n api-forge-prod
 
 # Verify secrets exist (not their contents!)
-kubectl get secrets -n api-template-prod
+kubectl get secrets -n api-forge-prod
 
 # Check if secrets are mounted correctly
-kubectl exec -n api-template-prod -it deploy/postgres -- ls -la /run/secrets/
-kubectl exec -n api-template-prod -it deploy/app -- ls -la /run/secrets/
+kubectl exec -n api-forge-prod -it deploy/postgres -- ls -la /run/secrets/
+kubectl exec -n api-forge-prod -it deploy/app -- ls -la /run/secrets/
 ```
 
 ### 7. Test Security Contexts
 
 ```bash
 # Verify pods are running as non-root
-kubectl exec -n api-template-prod -it deploy/postgres -- id
-kubectl exec -n api-template-prod -it deploy/redis -- id
-kubectl exec -n api-template-prod -it deploy/app -- id
+kubectl exec -n api-forge-prod -it deploy/postgres -- id
+kubectl exec -n api-forge-prod -it deploy/redis -- id
+kubectl exec -n api-forge-prod -it deploy/app -- id
 
 # Check capabilities
-kubectl exec -n api-template-prod -it deploy/app -- \
+kubectl exec -n api-forge-prod -it deploy/app -- \
   sh -c "cat /proc/1/status | grep Cap"
 ```
 
@@ -430,14 +430,14 @@ kubectl exec -n api-template-prod -it deploy/app -- \
 
 ```bash
 # Simulate pod failure and watch restart
-kubectl exec -n api-template-prod -it deploy/app -- kill 1
+kubectl exec -n api-forge-prod -it deploy/app -- kill 1
 
 # Watch pod restart
-kubectl get pods -n api-template-prod -w
+kubectl get pods -n api-forge-prod -w
 
 # Check probe endpoints manually
-kubectl exec -n api-template-prod -it deploy/postgres -- pg_isready
-kubectl exec -n api-template-prod -it deploy/redis -- redis-cli ping
+kubectl exec -n api-forge-prod -it deploy/postgres -- pg_isready
+kubectl exec -n api-forge-prod -it deploy/redis -- redis-cli ping
 ```
 
 ---
@@ -450,7 +450,7 @@ kubectl exec -n api-template-prod -it deploy/redis -- redis-cli ping
 
 ```bash
 # Check why
-kubectl describe pod <pod-name> -n api-template-prod
+kubectl describe pod <pod-name> -n api-forge-prod
 
 # Common causes:
 # - Insufficient resources
@@ -466,10 +466,10 @@ eval $(minikube docker-env)
 docker images  # Should show your images
 
 # For kind - ensure images are loaded
-kind load docker-image <image-name> --name api-template
+kind load docker-image <image-name> --name api-forge
 
 # For k3d
-k3d image import <image-name> -c api-template
+k3d image import <image-name> -c api-forge
 
 # Or use the automated build script which handles this:
 ./k8s/scripts/build-images.sh
@@ -485,7 +485,7 @@ k3d image import <image-name> -c api-template
 kubectl get storageclass
 
 # Check PVC status
-kubectl describe pvc <pvc-name> -n api-template-prod
+kubectl describe pvc <pvc-name> -n api-forge-prod
 
 # For Minikube, ensure default storage class exists
 minikube addons enable default-storageclass
@@ -496,26 +496,26 @@ minikube addons enable storage-provisioner
 
 ```bash
 # Check service
-kubectl get svc -n api-template-prod
+kubectl get svc -n api-forge-prod
 
 # Check endpoints (should list pod IPs)
-kubectl get endpoints -n api-template-prod
+kubectl get endpoints -n api-forge-prod
 
 # Use port-forward as fallback
-kubectl port-forward -n api-template-prod svc/app 8000:8000
+kubectl port-forward -n api-forge-prod svc/app 8000:8000
 ```
 
 #### 5. Secrets Not Found
 
 ```bash
 # Verify secrets exist
-kubectl get secrets -n api-template-prod
+kubectl get secrets -n api-forge-prod
 
 # Recreate if needed
 ./k8s/scripts/create-secrets.sh
 
 # Check secret keys
-kubectl describe secret postgres-secrets -n api-template-prod
+kubectl describe secret postgres-secrets -n api-forge-prod
 ```
 
 ---
@@ -539,7 +539,7 @@ minikube start --cpus=4 --memory=8192 --disk-size=50g
 
 ./k8s/scripts/create-secrets.sh
 kubectl apply -k k8s/base/
-kubectl get pods -n api-template-prod -w
+kubectl get pods -n api-forge-prod -w
 ```
 
 ### For CI/CD or Quick Tests: **kind**
@@ -550,8 +550,8 @@ curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64
 chmod +x ./kind && sudo mv ./kind /usr/local/bin/kind
 
 # Create and test
-kind create cluster --name api-template
-kind load docker-image app_data_postgres_image:latest --name api-template
+kind create cluster --name api-forge
+kind load docker-image app_data_postgres_image:latest --name api-forge
 # ... load other images
 kubectl apply -k k8s/base/
 ```

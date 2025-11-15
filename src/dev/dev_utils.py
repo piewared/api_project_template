@@ -44,12 +44,12 @@ def check_container_running(container_name: str) -> bool:
 
 def check_postgres_status() -> bool:
     """Check if PostgreSQL is running and accessible."""
-    if not check_container_running("api-template-postgres-dev"):
+    if not check_container_running("api-forge-postgres-dev"):
         return False
 
     try:
         # Use the specific container name directly
-        container_name = "api-template-postgres-dev"
+        container_name = "api-forge-postgres-dev"
 
         # Use docker exec to run pg_isready inside the container
         result = subprocess.run(
@@ -81,12 +81,12 @@ def check_postgres_status() -> bool:
 
 def check_redis_status() -> bool:
     """Check if Redis is running and accessible."""
-    if not check_container_running("api-template-redis-dev"):
+    if not check_container_running("api-forge-redis-dev"):
         return False
 
     try:
         # Use the specific container name directly
-        container_name = "api-template-redis-dev"
+        container_name = "api-forge-redis-dev"
 
         # Use docker exec to run redis-cli ping
         result = subprocess.run(
@@ -107,12 +107,12 @@ def check_redis_status() -> bool:
 
 def check_temporal_status() -> bool:
     """Check if Temporal server is running and accessible."""
-    if not check_container_running("api-template-temporal-dev"):
+    if not check_container_running("api-forge-temporal-dev"):
         return False
 
     try:
         # Use the specific container name directly
-        container_name = "api-template-temporal-dev"
+        container_name = "api-forge-temporal-dev"
 
         # Use docker exec to run tctl cluster health check
         result = subprocess.run(

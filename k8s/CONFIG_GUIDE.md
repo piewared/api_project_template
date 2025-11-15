@@ -89,7 +89,7 @@ If you prefer to run commands directly:
 kubectl apply -k k8s/base/
 
 # Restart app to pick up config changes
-kubectl rollout restart deployment/app -n api-template-prod
+kubectl rollout restart deployment/app -n api-forge-prod
 ```
 
 ## What Goes in .env
@@ -138,7 +138,7 @@ Your app reads config at startup. It won't see changes until it restarts.
 
 **Solution:** Add `--restart` flag to the deploy script, or manually:
 ```bash
-kubectl rollout restart deployment/app -n api-template-prod
+kubectl rollout restart deployment/app -n api-forge-prod
 ```
 
 ### "unable to find file .k8s-sources/.env.k8s"

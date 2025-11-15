@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: app
     app.kubernetes.io/component: application
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
     app.kubernetes.io/version: "1.0.0"
 spec:
   replicas: 1
@@ -23,7 +23,7 @@ spec:
       labels:
         app.kubernetes.io/name: app
         app.kubernetes.io/component: application
-        app.kubernetes.io/part-of: api-template
+        app.kubernetes.io/part-of: api-forge
     spec:
       # Disable automatic service discovery environment variable injection
       # to prevent conflicts with explicitly defined environment variables (e.g., APP_PORT)
@@ -36,7 +36,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: app
-          image: api-template-app:latest
+          image: api-forge-app:latest
           imagePullPolicy: IfNotPresent
           # Load all app environment variables from ConfigMap
           envFrom:

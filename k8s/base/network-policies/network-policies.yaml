@@ -4,11 +4,11 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: postgres-ingress
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   podSelector:
     matchLabels:
@@ -20,7 +20,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/part-of: api-template
+              app.kubernetes.io/part-of: api-forge
       ports:
         - protocol: TCP
           port: 5432
@@ -31,11 +31,11 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: redis-ingress
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: cache
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   podSelector:
     matchLabels:
@@ -47,7 +47,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/part-of: api-template
+              app.kubernetes.io/part-of: api-forge
       ports:
         - protocol: TCP
           port: 6379
@@ -58,11 +58,11 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: temporal-ingress
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: temporal
     app.kubernetes.io/component: workflow-engine
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   podSelector:
     matchLabels:
@@ -74,7 +74,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/part-of: api-template
+              app.kubernetes.io/part-of: api-forge
       ports:
         - protocol: TCP
           port: 7233  # gRPC API
@@ -87,11 +87,11 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: temporal-web-ingress
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: temporal-web
     app.kubernetes.io/component: workflow-ui
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   podSelector:
     matchLabels:
@@ -111,11 +111,11 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: app-ingress
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: app
     app.kubernetes.io/component: api-server
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   podSelector:
     matchLabels:
@@ -136,7 +136,7 @@ spec:
 # kind: NetworkPolicy
 # metadata:
 #   name: default-deny-ingress
-#   namespace: api-template-prod
+#   namespace: api-forge-prod
 # spec:
 #   podSelector: {}
 #   policyTypes:

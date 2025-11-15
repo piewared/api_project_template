@@ -3,11 +3,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-data
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   accessModes:
     - ReadWriteOnce
@@ -22,11 +22,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-backups
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/component: database-backup
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   accessModes:
     - ReadWriteOnce
@@ -40,11 +40,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: redis-data
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: cache
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   accessModes:
     - ReadWriteOnce
@@ -58,11 +58,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: redis-backups
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: cache-backup
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   accessModes:
     - ReadWriteOnce
@@ -76,11 +76,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: temporal-certs
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: temporal
     app.kubernetes.io/component: workflow-engine
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   accessModes:
     - ReadWriteOnce
@@ -94,11 +94,11 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: app-logs
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: app
     app.kubernetes.io/component: application
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
 spec:
   accessModes:
     - ReadWriteOnce

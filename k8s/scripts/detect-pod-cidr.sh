@@ -121,7 +121,7 @@ if [[ "$UPDATE" == "true" ]]; then
   echo "  1. Update pg_hba.conf with this CIDR (if not already)"
   echo "  2. Run: ./k8s/scripts/deploy-config.sh --sync-only"
   echo "  3. Run: kubectl apply -k k8s/base/"
-  echo "  4. Run: kubectl rollout restart deployment postgres -n api-template-prod"
+  echo "  4. Run: kubectl rollout restart deployment postgres -n api-forge-prod"
 fi
 
 echo ""

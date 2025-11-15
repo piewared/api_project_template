@@ -97,7 +97,7 @@ Builds all required Docker images with proper build contexts.
   - `app_data_postgres_image` - PostgreSQL with custom config
   - `app_data_redis_image` - Redis with custom config
   - `my-temporal-server:1.29.0` - Temporal server
-  - `api-template-app:latest` - FastAPI application
+  - `api-forge-app:latest` - FastAPI application
 - Loads images into cluster (Minikube/kind/k3d)
 - Verifies all images exist
 
@@ -117,7 +117,7 @@ Creates Kubernetes secrets from files in `infra/secrets/`.
 - Secrets generated in `infra/secrets/` (run `infra/secrets/generate_secrets.sh` first)
 
 **Arguments**:
-- `[namespace]` - Target namespace (default: `api-template-prod`)
+- `[namespace]` - Target namespace (default: `api-forge-prod`)
 
 **What it does**:
 - Creates namespace if missing
@@ -152,7 +152,7 @@ Deploys all Kubernetes resources in dependency order with health checks.
 - Secrets created (run `create-secrets.sh` first)
 
 **Arguments**:
-- `[namespace]` - Target namespace (default: `api-template-prod`)
+- `[namespace]` - Target namespace (default: `api-forge-prod`)
 
 **What it does**:
 1. **Checks prerequisites** - kubectl, cluster, secrets
@@ -202,7 +202,7 @@ eval $(minikube docker-env)
 ./build-images.sh
 
 # For kind, images should auto-load. If not, manually load:
-kind load docker-image api-template-app:latest
+kind load docker-image api-forge-app:latest
 kind load docker-image my-temporal-server:1.29.0
 kind load docker-image app_data_postgres_image
 kind load docker-image app_data_redis_image
@@ -229,9 +229,9 @@ cd -
 
 **Check pod status**:
 ```bash
-kubectl get pods -n api-template-prod
-kubectl describe pod <pod-name> -n api-template-prod
-kubectl logs <pod-name> -n api-template-prod
+kubectl get pods -n api-forge-prod
+kubectl describe pod <pod-name> -n api-forge-prod
+kubectl logs <pod-name> -n api-forge-prod
 ```
 
 **Common causes**:

@@ -1,7 +1,7 @@
 version: "3.5"
 services:
   postgresql:
-    container_name: api-template-temporal-postgresql
+    container_name: api-forge-temporal-postgresql
     environment:
       POSTGRES_PASSWORD: temporal
       POSTGRES_USER: temporal
@@ -11,9 +11,9 @@ services:
     expose:
       - 5432
     volumes:
-      - api-template-temporal-postgres-data:/var/lib/postgresql/data
+      - api-forge-temporal-postgres-data:/var/lib/postgresql/data
   temporal:
-    container_name: api-template-temporal
+    container_name: api-forge-temporal
     depends_on:
       - postgresql
     environment:
@@ -30,7 +30,7 @@ services:
     ports:
       - 7234:7233
   temporal-ui:
-    container_name: api-template-temporal-ui
+    container_name: api-forge-temporal-ui
     depends_on:
       - temporal
     environment:
@@ -43,16 +43,16 @@ services:
       - 8082:8080
 
 volumes:
-  api-template-temporal-postgres-data:
-    name: api-template-temporal-postgres-data
+  api-forge-temporal-postgres-data:
+    name: api-forge-temporal-postgres-data
 
 networks:
   dev-network:
     external: true
 
 volumes:
-  api-template-temporal-postgres-data:
-    name: api-template-temporal-postgres-data
+  api-forge-temporal-postgres-data:
+    name: api-forge-temporal-postgres-data
 
 networks:
   dev-network:

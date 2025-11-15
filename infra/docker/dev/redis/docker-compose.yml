@@ -20,7 +20,7 @@ services:
 
 volumes:
   redis_data:
-    name: api-template-redis-data
+    name: api-forge-redis-data
 
 networks:
   dev-network:

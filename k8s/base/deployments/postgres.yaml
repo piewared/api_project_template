@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgres
-  namespace: api-template-prod
+  namespace: api-forge-prod
   labels:
     app.kubernetes.io/name: postgres
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: api-template
+    app.kubernetes.io/part-of: api-forge
     app.kubernetes.io/version: "15"
 spec:
   replicas: 1
@@ -20,7 +20,7 @@ spec:
       labels:
         app.kubernetes.io/name: postgres
         app.kubernetes.io/component: database
-        app.kubernetes.io/part-of: api-template
+        app.kubernetes.io/part-of: api-forge
     spec:
       securityContext:
         # Container must start as root to run entrypoint script

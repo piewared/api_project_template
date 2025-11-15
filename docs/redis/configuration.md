@@ -422,14 +422,14 @@ volumes:
 **Backup Strategy**:
 ```bash
 # Manual backup (RDB snapshot)
-docker exec api-template-redis-prod redis-cli BGSAVE
+docker exec api-forge-redis redis-cli BGSAVE
 
 # Copy backup file
-docker cp api-template-redis-prod:/data/dump.rdb ./backup-$(date +%Y%m%d).rdb
+docker cp api-forge-redis:/data/dump.rdb ./backup-$(date +%Y%m%d).rdb
 
 # Restore from backup
-docker cp ./backup-20240315.rdb api-template-redis-prod:/data/dump.rdb
-docker restart api-template-redis-prod
+docker cp ./backup-20240315.rdb api-forge-redis:/data/dump.rdb
+docker restart api-forge-redis
 ```
 
 ## Security Settings
@@ -695,7 +695,7 @@ redis-cli LATENCY DOCTOR
 ```yaml
 redis:
   image: redis:7-alpine
-  container_name: api-template-redis-dev
+  container_name: api-forge-redis-dev
   ports:
     - "6380:6379"  # Offset by 1000 to avoid conflicts
   command: redis-server --appendonly yes
@@ -734,7 +734,7 @@ redis:
 redis:
   build:
     context: ./infra/docker/prod/redis
-  container_name: api-template-redis-prod
+  container_name: api-forge-redis
   ports:
     - "127.0.0.1:6379:6379"  # Bound to localhost only
   secrets:
@@ -922,7 +922,7 @@ redis.exceptions.ConnectionError: Error connecting to Redis
 docker ps | grep redis
 
 # Check port mapping
-docker port api-template-redis-dev
+docker port api-forge-redis-dev
 
 # Test connection
 redis-cli -p 6380 ping
@@ -993,7 +993,7 @@ redis-cli -p 6380 --latency
 redis-cli -p 6380 SLOWLOG GET 10
 
 # Check CPU usage
-docker stats api-template-redis-dev
+docker stats api-forge-redis-dev
 ```
 
 **Solutions**:

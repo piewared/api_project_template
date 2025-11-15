@@ -6,7 +6,7 @@
 set -euo pipefail
 
 # Configuration
-NAMESPACE="${1:-api-template-prod}"
+NAMESPACE="${1:-api-forge-prod}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_BASE="${SCRIPT_DIR}/../base"
 

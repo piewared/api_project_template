@@ -301,19 +301,19 @@ COMMIT;
 **Development:**
 ```bash
 # Apply migration
-docker exec -i api-template-postgres-dev psql -U postgres -d appdb < migrations/002_add_user_phone.sql
+docker exec -i api-forge-postgres-dev psql -U postgres -d appdb < migrations/002_add_user_phone.sql
 ```
 
 **Production:**
 ```bash
 # 1. Backup database first
-docker exec api-template-postgres-prod pg_dump -U appuser appdb > backup.sql
+docker exec api-forge-postgres pg_dump -U appuser appdb > backup.sql
 
 # 2. Apply migration
-docker exec -i api-template-postgres-prod psql -U appuser -d appdb < migrations/002_add_user_phone.sql
+docker exec -i api-forge-postgres psql -U appuser -d appdb < migrations/002_add_user_phone.sql
 
 # 3. Verify
-docker exec api-template-postgres-prod psql -U appuser -d appdb -c "\d usertable"
+docker exec api-forge-postgres psql -U appuser -d appdb -c "\d usertable"
 ```
 
 ### Migration Script (Shell)
@@ -324,7 +324,7 @@ docker exec api-template-postgres-prod psql -U appuser -d appdb -c "\d usertable
 set -euo pipefail
 
 MIGRATIONS_DIR="./migrations"
-DB_CONTAINER="api-template-postgres-prod"
+DB_CONTAINER="api-forge-postgres"
 DB_USER="appuser"
 DB_NAME="appdb"
 
@@ -635,13 +635,13 @@ def upgrade() -> None:
 
 ```bash
 # Create backup
-docker exec api-template-postgres-prod pg_dump -U appuser appdb > backup_$(date +%Y%m%d_%H%M%S).sql
+docker exec api-forge-postgres pg_dump -U appuser appdb > backup_$(date +%Y%m%d_%H%M%S).sql
 
 # Verify backup
 ls -lh backup_*.sql
 
 # Test restore (optional)
-docker exec -i api-template-postgres-dev psql -U postgres -d appdb < backup_latest.sql
+docker exec -i api-forge-postgres-dev psql -U postgres -d appdb < backup_latest.sql
 ```
 
 ### 2. Use Transactional Migrations
@@ -753,7 +753,7 @@ def upgrade() -> None:
 ```bash
 # Create timestamped backup
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-docker exec api-template-postgres-prod pg_dump -U appuser appdb > backup_pre_migration_$TIMESTAMP.sql
+docker exec api-forge-postgres pg_dump -U appuser appdb > backup_pre_migration_$TIMESTAMP.sql
 
 # Verify backup
 ls -lh backup_pre_migration_$TIMESTAMP.sql
@@ -773,7 +773,7 @@ docker-compose -f docker-compose.prod.yml stop app
 alembic upgrade head
 
 # Or manual SQL
-docker exec -i api-template-postgres-prod psql -U appuser -d appdb < migration.sql
+docker exec -i api-forge-postgres psql -U appuser -d appdb < migration.sql
 ```
 
 **4. Verify Migration:**
@@ -782,10 +782,10 @@ docker exec -i api-template-postgres-prod psql -U appuser -d appdb < migration.s
 alembic current
 
 # Verify table structure
-docker exec api-template-postgres-prod psql -U appuser -d appdb -c "\d usertable"
+docker exec api-forge-postgres psql -U appuser -d appdb -c "\d usertable"
 
 # Test basic queries
-docker exec api-template-postgres-prod psql -U appuser -d appdb -c "SELECT COUNT(*) FROM usertable"
+docker exec api-forge-postgres psql -U appuser -d appdb -c "SELECT COUNT(*) FROM usertable"
 ```
 
 **5. Start Application:**
@@ -878,16 +878,16 @@ COMMIT;
 docker-compose -f docker-compose.prod.yml stop app
 
 # 2. Drop database
-docker exec api-template-postgres-prod psql -U postgres -c "DROP DATABASE appdb"
+docker exec api-forge-postgres psql -U postgres -c "DROP DATABASE appdb"
 
 # 3. Create database
-docker exec api-template-postgres-prod psql -U postgres -c "CREATE DATABASE appdb OWNER appowner"
+docker exec api-forge-postgres psql -U postgres -c "CREATE DATABASE appdb OWNER appowner"
 
 # 4. Restore backup
-docker exec -i api-template-postgres-prod psql -U appuser -d appdb < backup_pre_migration.sql
+docker exec -i api-forge-postgres psql -U appuser -d appdb < backup_pre_migration.sql
 
 # 5. Verify
-docker exec api-template-postgres-prod psql -U appuser -d appdb -c "SELECT COUNT(*) FROM usertable"
+docker exec api-forge-postgres psql -U appuser -d appdb -c "SELECT COUNT(*) FROM usertable"
 
 # 6. Start application
 docker-compose -f docker-compose.prod.yml up -d app

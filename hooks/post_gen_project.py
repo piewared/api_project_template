@@ -20,18 +20,19 @@ def copy_infrastructure():
     print(f"📁 Generated project: {project_root}")
     print(f"📁 Package name: {package_name}")
 
-    # CRITICAL INSIGHT: Cookiecutter uses `with work_in(repo_dir)` when running hooks
-    # This means os.getcwd() returns the template repository directory!
-    # See: cookiecutter/hooks.py:155 - with work_in(repo_dir)
+    # DEBUG: Print all environment variables and cwd
+    print(f"📁 Current working directory: {os.getcwd()}")
+    print(f"📁 Environment variables:")
+    for key, value in sorted(os.environ.items()):
+        if "COOKIE" in key.upper() or "TEMPLATE" in key.upper() or "CRUFT" in key.upper():
+            print(f"     {key} = {value}")
+
+    # CRITICAL INSIGHT: We need to find where cookiecutter stores the template location
+    # Try multiple approaches to find the template directory
     
-    # Get the template directory from the current working directory
-    template_dir = Path(os.getcwd()).resolve()
     src_dir = None
     search_paths = []
-
-    print(f"📁 Template directory (from cwd): {template_dir}")
-
-    # Strategy 1: Look in current working directory (the template directory)
+    template_dir = None    # Strategy 1: Look in current working directory (the template directory)
     # This is the most reliable method for both local and remote templates
     potential_src = template_dir / "src"
     if potential_src.exists() and potential_src.is_dir():

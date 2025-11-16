@@ -67,9 +67,10 @@ docker build \
     -f postgres/Dockerfile \
     -t app_data_postgres_image:latest \
     . 2>&1 | grep -E "(Step|Successfully|Error)" || true
+BUILD_STATUS=${PIPESTATUS[0]}
 cd ../../..
 
-if [ $? -eq 0 ]; then
+if [ $BUILD_STATUS -eq 0 ]; then
     print_success "PostgreSQL image built successfully"
 else
     print_error "Failed to build PostgreSQL image"
@@ -83,9 +84,10 @@ docker build \
     -f Dockerfile \
     -t app_data_redis_image:latest \
     . 2>&1 | grep -E "(Step|Successfully|Error)" || true
+BUILD_STATUS=${PIPESTATUS[0]}
 cd ../../../..
 
-if [ $? -eq 0 ]; then
+if [ $BUILD_STATUS -eq 0 ]; then
     print_success "Redis image built successfully"
 else
     print_error "Failed to build Redis image"
@@ -99,9 +101,10 @@ docker build \
     -f Dockerfile \
     -t my-temporal-server:1.29.0 \
     . 2>&1 | grep -E "(Step|Successfully|Error)" || true
+BUILD_STATUS=${PIPESTATUS[0]}
 cd ../../../..
 
-if [ $? -eq 0 ]; then
+if [ $BUILD_STATUS -eq 0 ]; then
     print_success "Temporal image built successfully"
 else
     print_error "Failed to build Temporal image"
@@ -114,8 +117,9 @@ docker build \
     -f Dockerfile \
     -t api-forge-app:latest \
     . 2>&1 | grep -E "(Step|Successfully|Error)" || true
+BUILD_STATUS=${PIPESTATUS[0]}
 
-if [ $? -eq 0 ]; then
+if [ $BUILD_STATUS -eq 0 ]; then
     print_success "FastAPI application image built successfully"
 else
     print_error "Failed to build FastAPI application image"

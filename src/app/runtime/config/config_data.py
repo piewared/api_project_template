@@ -450,7 +450,8 @@ class DatabaseConfig(BaseModel):
             from urllib.parse import quote_plus
             password_to_encode = base_url.password or ""
             encoded_password = quote_plus(password_to_encode)
-            return f"postgresql://{base_url.username}:{encoded_password}@{base_url.host}:{base_url.port}/{base_url.database}"
+            # Add search_path=app to ensure tables are created in the app schema
+            return f"postgresql://{base_url.username}:{encoded_password}@{base_url.host}:{base_url.port}/{base_url.database}?options=-csearch_path%3Dapp"
 
         # Otherwise, use the resolved password from the computed field and
         # the resolved user and database from the URL or config
@@ -469,9 +470,11 @@ class DatabaseConfig(BaseModel):
             # URL-encode password to handle special characters
             encoded_password = quote_plus(resolved_password)
             # Build the connection string manually with encoded password
-            return f"postgresql://{resolved_user}:{encoded_password}@{base_url.host}:{base_url.port}/{resolved_db}"
+            # Add search_path=app to ensure tables are created in the app schema
+            return f"postgresql://{resolved_user}:{encoded_password}@{base_url.host}:{base_url.port}/{resolved_db}?options=-csearch_path%3Dapp"
         else:
-            return f"postgresql://{base_url.username}@{base_url.host}:{base_url.port}/{base_url.database}"  # No password available; return URL as-is
+            # Add search_path=app to ensure tables are created in the app schema
+            return f"postgresql://{base_url.username}@{base_url.host}:{base_url.port}/{base_url.database}?options=-csearch_path%3Dapp"
 
     @computed_field
     @property

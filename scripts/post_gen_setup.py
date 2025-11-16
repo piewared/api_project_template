@@ -267,7 +267,7 @@ def main():
         print(f"\n📁 Your project is ready at: {project_dir}")
         print("\n🚀 Next steps:")
         print(f"   1. cd {project_dir}")
-        print("   2. Copy .env.example to .env and configure your environment")
+        print("   2. cp .env.example .env and configure your environment")
         print("   3. Install dependencies: uv sync")
         print("   4. Deploy:")
         print(f"      • docker compose (Development): uv run {package_name}-cli deploy up dev")

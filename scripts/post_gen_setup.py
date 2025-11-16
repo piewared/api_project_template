@@ -154,6 +154,30 @@ def fix_src_main_imports(project_dir: Path, package_name: str):
         print(f"⚠️  Error processing src_main.py: {e}")
 
 
+def fix_dockerfile(project_dir: Path, package_name: str):
+    """Fix Dockerfile to use the actual package name instead of 'src'."""
+    try:
+        dockerfile = project_dir / "Dockerfile"
+        if not dockerfile.exists():
+            return
+        
+        content = dockerfile.read_text()
+        original_content = content
+        
+        # Replace 'COPY src/ src/' with 'COPY {package_name}/ {package_name}/'
+        content = re.sub(
+            r'COPY\s+(--chown=\S+\s+)?src/\s+src/',
+            rf'COPY \1{package_name}/ {package_name}/',
+            content
+        )
+        
+        if content != original_content:
+            dockerfile.write_text(content)
+            print(f"✅ Fixed Dockerfile to use {package_name}/ instead of src/")
+    except Exception as e:
+        print(f"⚠️  Error processing Dockerfile: {e}")
+
+
 def should_copy_file(file_path: Path, base_dir: Path, gitignore_patterns: list) -> bool:
     """Check if a file should be copied based on gitignore patterns."""
     import fnmatch
@@ -286,7 +310,10 @@ def main():
         # 4. Fix imports in src_main.py
         fix_src_main_imports(project_dir, package_name)
 
-        # 5. Update pyproject.toml
+        # 5. Fix Dockerfile to use package name
+        fix_dockerfile(project_dir, package_name)
+
+        # 6. Update pyproject.toml
         update_pyproject_toml(project_dir, answers)
 
         print("\n✅ Post-generation setup complete!")

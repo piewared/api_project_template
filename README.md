@@ -108,8 +108,14 @@ It may not be ideal if:
 ### 1. Create a project from the template
 
 ```bash
-pip install -U cruft
-cruft create https://github.com/piewared/api-forge
+# Using uv (recommended - faster)
+uv tool install copier
+copier copy gh:piewared/api-forge your-project-name
+
+# Or using pip
+pip install -U copier
+copier copy https://github.com/piewared/api-forge your-project-name
+
 cd your-project-name
 ````
 
@@ -147,6 +153,20 @@ Once services are healthy, open:
 * Temporal UI: `http://localhost:8082`
 
 Keycloak is **dev/test only**. In production, use a managed IdP (see [Configuration & Auth](#configuration--auth)).
+
+### 5. Updating from template (optional)
+
+Copier makes it easy to pull in template updates:
+
+```bash
+# Update your project with the latest template changes
+copier update
+
+# Or specify a particular version/tag
+copier update --vcs-ref=v1.2.3
+```
+
+Copier will intelligently merge template changes with your customizations.
 
 ---
 
@@ -362,5 +382,5 @@ MIT — see [`LICENSE`](LICENSE).
 **Quick create**
 
 ```bash
-cruft create https://github.com/piewared/api-forge
+copier copy gh:piewared/api-forge your-project-name
 ```

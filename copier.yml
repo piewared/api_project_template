@@ -47,12 +47,7 @@ _exclude:
   - ".docker"
   - ".docker/**"
   # Critical: Don't render bundled infrastructure files (they contain Jinja2-like syntax)
-  # Keep the old cookiecutter template directory excluded too
-  - "{% raw %}{{cookiecutter.project_slug}}{% endraw %}/**"
-  - "hooks/**"
-  - "cookiecutter.json"
-  - "scripts/migrate_to_copier.py"
-  - "scripts/sync_to_template.sh"
+  # Development template file
   - "pyproject.toml.template_dev"
 
 # Skip these if they already exist

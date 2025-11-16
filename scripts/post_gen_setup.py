@@ -206,76 +206,6 @@ def copy_infra_secrets(project_dir: Path):
     return True
 
 
-def copy_infrastructure_from_bundle(project_dir: Path, package_name: str):
-    """Copy infrastructure files from bundled _infrastructure directory."""
-    import shutil
-
-    infra_dir = project_dir / "_infrastructure"
-
-    if not infra_dir.exists():
-        print("⚠️  Bundled infrastructure directory not found")
-        print("    Template may not be properly synced")
-        return False
-
-    print("📦 Copying infrastructure from bundled files...")
-
-    # Items to copy
-    items_to_copy = {
-        "k8s": "k8s",
-        "infra": "infra",
-        "examples": "examples",
-        "docs": "docs",
-        "tests": "tests",
-        "docker-compose.dev.yml": "docker-compose.dev.yml",
-        "docker-compose.prod.yml": "docker-compose.prod.yml",
-        "Dockerfile": "Dockerfile",
-        "config.yaml": "config.yaml",
-        ".env.example": ".env.example",
-        ".gitignore": ".gitignore",
-        "README.md": "README.md",
-    }
-
-    for src_name, dest_name in items_to_copy.items():
-        src = infra_dir / src_name
-        dest = project_dir / dest_name
-
-        if not src.exists():
-            continue
-
-        try:
-            if src.is_dir():
-                if dest.exists():
-                    shutil.rmtree(dest)
-                shutil.copytree(src, dest)
-                print(f"  📁 {src_name}/")
-            else:
-                if dest.exists():
-                    dest.unlink()
-                shutil.copy2(src, dest)
-                print(f"  📄 {src_name}")
-        except Exception as e:
-            print(f"  ❌ Failed to copy {src_name}: {e}")
-
-    # Copy src to package_name
-    src_source = infra_dir / "src"
-    if src_source.exists():
-        package_dest = project_dir / package_name
-        if package_dest.exists():
-            shutil.rmtree(package_dest)
-        shutil.copytree(src_source, package_dest)
-        print(f"  📁 src/ → {package_name}/")
-
-    # Clean up _infrastructure directory
-    print("🧹 Cleaning up bundled infrastructure...")
-    try:
-        shutil.rmtree(infra_dir)
-        print("✅ Removed _infrastructure/")
-    except Exception as e:
-        print(f"⚠️  Could not remove _infrastructure/: {e}")
-
-    return True
-
-
 def main():
     """Main setup function."""
     # Get the project directory (where copier copied the template)
@@ -324,11 +254,7 @@ def main():
         # 1. Ensure infra/secrets directory structure
         copy_infra_secrets(project_dir)
 
-        # 2. Copy infrastructure from bundle (legacy - currently not used)
-        if not copy_infrastructure_from_bundle(project_dir, package_name):
-            print("⚠️  Infrastructure setup had issues")
-
-        # 3. Rename package directory
+        # 2. Rename package directory
         rename_package_directory(project_dir, package_name)
 
         # 3. Fix all hardcoded 'src.' imports
@@ -341,10 +267,12 @@ def main():
         print(f"\n📁 Your project is ready at: {project_dir}")
         print("\n🚀 Next steps:")
         print(f"   1. cd {project_dir.name}")
-        print("   2. Copy .env.example to .env and configure")
-        print("   3. Run 'uv sync' to install dependencies")
-        print("   4. Run 'uv run init-db' to initialize database")
-        print("   5. Start development: 'uvicorn main:app --reload'")
+        print("   2. Copy .env.example to .env and configure your environment")
+        print("   3. Install dependencies: uv sync")
+        print("   4. Deploy (auto-initializes database):")
+        print(f"      • Development: uv run {package_name}-cli dev start-server")
+        print(f"      • Kubernetes:  uv run {package_name}-cli deploy up k8s")
+        print(f"\n💡 View all CLI commands: uv run {package_name}-cli --help")
 
     except Exception as e:
         print(f"\n❌ Setup error: {e}")

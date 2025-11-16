@@ -131,6 +131,29 @@ def rename_package_directory(project_dir: Path, package_name: str):
         print(f"⚠️  Neither src/ nor {package_name}/ found")
 
 
+def fix_src_main_imports(project_dir: Path, package_name: str):
+    """Fix imports in src_main.py to use the actual package name."""
+    src_main_file = project_dir / "src_main.py"
+    
+    if not src_main_file.exists():
+        return
+    
+    try:
+        content = src_main_file.read_text()
+        original_content = content
+        
+        # Replace 'from src.' with 'from {package_name}.'
+        content = re.sub(r'\bfrom src\.', f'from {package_name}.', content)
+        # Replace 'import src.' with 'import {package_name}.'
+        content = re.sub(r'\bimport src\.', f'import {package_name}.', content)
+        
+        if content != original_content:
+            src_main_file.write_text(content)
+            print(f"✅ Fixed imports in src_main.py")
+    except Exception as e:
+        print(f"⚠️  Error processing src_main.py: {e}")
+
+
 def should_copy_file(file_path: Path, base_dir: Path, gitignore_patterns: list) -> bool:
     """Check if a file should be copied based on gitignore patterns."""
     import fnmatch
@@ -257,10 +280,13 @@ def main():
         # 2. Rename package directory
         rename_package_directory(project_dir, package_name)
 
-        # 3. Fix all hardcoded 'src.' imports
+        # 3. Fix all hardcoded 'src.' imports in package files
         fix_imports_in_files(project_dir, package_name)
 
-        # 4. Update pyproject.toml
+        # 4. Fix imports in src_main.py
+        fix_src_main_imports(project_dir, package_name)
+
+        # 5. Update pyproject.toml
         update_pyproject_toml(project_dir, answers)
 
         print("\n✅ Post-generation setup complete!")

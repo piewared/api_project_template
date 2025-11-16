@@ -1,0 +1,147 @@
+# Copier template configuration for API Forge
+# Documentation: https://copier.readthedocs.io/
+
+# Minimum Copier version required
+_min_copier_version: "9.0.0"
+
+# Template metadata
+_metadata:
+  template_name: "API Forge"
+  template_description: "Production-ready FastAPI template with hexagonal architecture"
+  template_url: "https://github.com/piewared/api-forge"
+
+# Exclude patterns - don't render these as Jinja2 templates
+_exclude:
+  - "copier.yml"
+  - "copier.yaml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - "**/__pycache__"
+  - ".git"
+  - ".git/**"
+  - ".DS_Store"
+  - "*.db"
+  - ".venv"
+  - ".venv/**"
+  - ".mypy_cache"
+  - ".mypy_cache/**"
+  - ".pytest_cache"
+  - ".pytest_cache/**"
+  - ".ruff_cache"
+  - ".ruff_cache/**"
+  - ".idea"
+  - ".idea/**"
+  - ".vscode"
+  - "uv.lock"
+  - "build"
+  - "build/**"
+  - "data"
+  - "data/**"
+  - "logs"
+  - "logs/**"
+  - "k8s-out"
+  - "k8s-out/**"
+  - "/secrets"
+  - "/secrets/**"
+  - ".docker"
+  - ".docker/**"
+  # Critical: Don't render bundled infrastructure files (they contain Jinja2-like syntax)
+  # Keep the old cookiecutter template directory excluded too
+  - "{% raw %}{{cookiecutter.project_slug}}{% endraw %}/**"
+  - "hooks/**"
+  - "cookiecutter.json"
+  - "scripts/migrate_to_copier.py"
+  - "scripts/sync_to_template.sh"
+  - "pyproject.toml.template_dev"
+
+# Skip these if they already exist
+_skip_if_exists:
+  - ".env"
+  - "database.db"
+
+# Jinja2 extensions for better templating
+_jinja_extensions:
+  - jinja2.ext.do
+  - jinja2.ext.loopcontrols
+
+# Template questions
+project_name:
+  type: str
+  help: "What is your project name?"
+  default: "My API Project"
+  validator: "{% if not project_name %}Project name cannot be empty{% endif %}"
+
+project_slug:
+  type: str
+  help: "Project slug (used for directory name)"
+  default: "{{ project_name|lower|replace(' ', '_')|replace('-', '_') }}"
+  validator: "{% if not project_slug.isidentifier() %}Must be a valid Python identifier{% endif %}"
+
+package_name:
+  type: str
+  help: "Python package name (must be valid Python identifier)"
+  default: "{{ project_slug }}"
+  validator: "{% if not package_name.islower() or not package_name.isidentifier() %}Must be lowercase and a valid Python identifier{% endif %}"
+
+project_description:
+  type: str
+  help: "Short description of your project"
+  default: "A FastAPI service built with hexagonal architecture"
+
+author_name:
+  type: str
+  help: "Author name"
+  default: "Your Name"
+
+author_email:
+  type: str
+  help: "Author email"
+  default: "your.email@example.com"
+  validator: "{% if author_email and '@' not in author_email %}Invalid email format{% endif %}"
+
+version:
+  type: str
+  help: "Initial version"
+  default: "0.1.0"
+
+python_version:
+  type: str
+  help: "Python version (e.g., 3.13)"
+  default: "3.13"
+  choices:
+    - "3.10"
+    - "3.11"
+    - "3.12"
+    - "3.13"
+
+use_redis:
+  type: bool
+  help: "Include Redis for caching and sessions?"
+  default: yes
+
+use_postgres:
+  type: bool
+  help: "Use PostgreSQL instead of SQLite?"
+  default: no
+
+include_example_routes:
+  type: bool
+  help: "Include example routes and endpoints?"
+  default: yes
+
+license:
+  type: str
+  help: "Choose a license"
+  default: "MIT"
+  choices:
+    - "MIT"
+    - "Apache-2.0"
+    - "GPL-3.0"
+    - "BSD-3-Clause"
+    - "None"
+
+# Tasks to run after generation
+_tasks:
+  # Post-generation setup (edits pyproject.toml, renames src, copies infrastructure)
+  - "python3 scripts/post_gen_setup.py ."

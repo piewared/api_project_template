@@ -197,8 +197,11 @@ class RedisConfig(BaseModel):
                 return self.url
             parts = self.url.split("://", 1)
             if len(parts) == 2:
+                from urllib.parse import quote_plus
                 scheme, rest = parts
-                return f"{scheme}://:{self.password}@{rest}"
+                # URL-encode password to handle special characters like /, @, :, etc.
+                encoded_password = quote_plus(self.password)
+                return f"{scheme}://:{encoded_password}@{rest}"
         return self.url
 
     @computed_field
@@ -443,7 +446,11 @@ class DatabaseConfig(BaseModel):
                 )
                 base_url = base_url.set(username=self.user)
 
-            return f"postgresql://{base_url.username}:{base_url.password}@{base_url.host}:{base_url.port}/{base_url.database}"
+            # URL-encode password to handle special characters
+            from urllib.parse import quote_plus
+            password_to_encode = base_url.password or ""
+            encoded_password = quote_plus(password_to_encode)
+            return f"postgresql://{base_url.username}:{encoded_password}@{base_url.host}:{base_url.port}/{base_url.database}"
 
         # Otherwise, use the resolved password from the computed field and
         # the resolved user and database from the URL or config
@@ -458,9 +465,11 @@ class DatabaseConfig(BaseModel):
             base_url = base_url.set(database=resolved_db)
 
         if resolved_password:
-            url_with_password = base_url.set(password=resolved_password)
-            # Build the connection string manually to avoid SQLAlchemy's password masking
-            return f"postgresql://{url_with_password.username}:{url_with_password.password}@{url_with_password.host}:{url_with_password.port}/{url_with_password.database}"
+            from urllib.parse import quote_plus
+            # URL-encode password to handle special characters
+            encoded_password = quote_plus(resolved_password)
+            # Build the connection string manually with encoded password
+            return f"postgresql://{resolved_user}:{encoded_password}@{base_url.host}:{base_url.port}/{resolved_db}"
         else:
             return f"postgresql://{base_url.username}@{base_url.host}:{base_url.port}/{base_url.database}"  # No password available; return URL as-is
 

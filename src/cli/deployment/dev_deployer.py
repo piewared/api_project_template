@@ -5,6 +5,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from src.utils.package_utils import get_package_module_path, get_package_root
 from src.dev.dev_utils import (
     check_container_running,
     check_postgres_status,
@@ -41,6 +42,10 @@ class DevDeployer(BaseDeployer):
         Args:
             **kwargs: Deployment options (force, no_wait)
         """
+        # Check for .env file first
+        if not self.check_env_file():
+            raise typer.Exit(1)
+
         force = kwargs.get("force", False)
         no_wait = kwargs.get("no_wait", False)
         # Check if services are already running
@@ -202,19 +207,23 @@ class DevDeployer(BaseDeployer):
         )
 
         try:
+            # Dynamically detect package name
+            package_name = get_package_module_path()
+            package_root = get_package_root()
+            
             self.run_command(
                 [
                     "uv",
                     "run",
                     "uvicorn",
-                    "src.app.api.http.app:app",
+                    f"{package_name}.app.api.http.app:app",
                     "--host",
                     "0.0.0.0",
                     "--port",
                     "8000",
                     "--reload",
                     "--reload-dir",
-                    "src",
+                    str(package_root),
                     "--log-level",
                     "info",
                 ]

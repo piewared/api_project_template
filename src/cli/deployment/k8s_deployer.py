@@ -32,6 +32,10 @@ class K8sDeployer(BaseDeployer):
         Args:
             **kwargs: Additional deployment options
         """
+        # Check for .env file before deployment
+        if not self.check_env_file():
+            return
+
         namespace = kwargs.get("namespace", self.DEFAULT_NAMESPACE)
 
         # Build images
@@ -59,7 +63,7 @@ class K8sDeployer(BaseDeployer):
         namespace = kwargs.get("namespace", self.DEFAULT_NAMESPACE)
 
         with self.console.status(f"[bold red]Deleting namespace {namespace}..."):
-            self.run_command(["kubectl", "delete", "namespace", namespace])
+            self.run_command(["kubectl", "delete", "namespace", namespace, "--wait=true"])
 
         self.success(f"Namespace {namespace} deleted")
 
@@ -85,13 +89,53 @@ class K8sDeployer(BaseDeployer):
 
         self.success("Docker images built")
 
+    def _generate_secrets_if_needed(self) -> None:
+        """Generate secrets if they don't exist."""
+        secrets_dir = self.project_root / "infra" / "secrets"
+        keys_dir = secrets_dir / "keys"
+
+        # Check if secrets have been generated
+        required_files = [
+            keys_dir / "postgres_password.txt",
+            keys_dir / "session_signing_secret.txt",
+            keys_dir / "csrf_signing_secret.txt",
+        ]
+
+        secrets_exist = all(f.exists() for f in required_files)
+
+        if not secrets_exist:
+            self.console.print("[bold yellow]🔑 Generating secrets (first time setup)...[/bold yellow]")
+
+            generate_script = secrets_dir / "generate_secrets.sh"
+            if not generate_script.exists():
+                self.error(f"Secret generation script not found: {generate_script}")
+                raise RuntimeError("Cannot generate secrets - script missing")
+
+            # Generate secrets and PKI certificates
+            # Note: generate_secrets.sh without flags generates secret keys
+            # The --generate-pki flag is ONLY for certificates, so we combine both
+            with self.create_progress() as progress:
+                task = progress.add_task("Generating secrets and certificates...", total=1)
+                # First generate secrets (passwords, signing keys, etc.)
+                self.run_command(["bash", str(generate_script)])
+                # Then generate PKI certificates
+                self.run_command(["bash", str(generate_script), "--generate-pki"])
+                progress.update(task, completed=1)
+
+            self.success("Secrets and certificates generated successfully")
+        else:
+            self.console.print("[dim]✓ Secrets already exist[/dim]")
+
     def _create_secrets(self, namespace: str) -> None:
         """Create Kubernetes secrets.
 
         Args:
             namespace: Target namespace
         """
-        self.console.print("[bold cyan]🔐 Creating secrets...[/bold cyan]")
+        # Generate secrets if needed
+        self._generate_secrets_if_needed()
+
+        self.console.print("[bold cyan]🔐 Creating Kubernetes secrets...[/bold cyan]")
 
         script_path = self.k8s_scripts / "create-secrets.sh"
         with self.create_progress() as progress:
@@ -126,39 +170,25 @@ class K8sDeployer(BaseDeployer):
         self.console.print("\n[bold cyan]⏳ Waiting for pods to be ready...[/bold cyan]")
         self.console.print("[dim]This may take 2-3 minutes...[/dim]\n")
 
-        # Get list of pods
-        pods_result = self.run_command(
-            [
-                "kubectl",
-                "get",
-                "pods",
-                "-n",
-                namespace,
-                "-o",
-                "jsonpath={.items[*].metadata.name}",
-            ],
-            capture_output=True,
-        )
-
-        if not pods_result.stdout:
-            self.warning("No pods found in namespace")
-            return
-
-        pod_names = pods_result.stdout.strip().split()
-
-        # Check each pod
-        all_ready = True
-        for pod_name in pod_names:
-            is_ready = self.health_checker.check_k8s_pod_ready(
-                pod_name, namespace, timeout=180
+        # Wait for deployment pods only (exclude jobs which complete and won't be "ready")
+        # Using label selector to target only deployment-managed pods
+        try:
+            self.run_command(
+                [
+                    "kubectl",
+                    "wait",
+                    "--for=condition=ready",
+                    "pod",
+                    "-l", "app.kubernetes.io/component in (api,database,cache,workflow-engine,worker,web-ui)",
+                    "-n",
+                    namespace,
+                    "--timeout=180s",
+                ],
+                capture_output=False,
             )
-            if is_ready:
-                self.success(f"Pod {pod_name} is ready")
-            else:
-                self.warning(f"Pod {pod_name} may not be fully ready yet")
-                all_ready = False
-
-        if not all_ready:
+            self.success("All pods are ready")
+        except Exception as e:
+            self.warning(f"Some pods may not be fully ready yet: {e}")
             self.console.print(
                 "\n[yellow]💡 Tip: Check pod status with: "
                 f"kubectl get pods -n {namespace}[/yellow]"

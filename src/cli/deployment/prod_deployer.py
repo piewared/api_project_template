@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -43,6 +44,10 @@ class ProdDeployer(BaseDeployer):
         Args:
             **kwargs: Deployment options (skip_build, no_wait)
         """
+        # Check for .env file first
+        if not self.check_env_file():
+            raise typer.Exit(1)
+
         skip_build = kwargs.get("skip_build", False)
         no_wait = kwargs.get("no_wait", False)
         # Build app image if needed

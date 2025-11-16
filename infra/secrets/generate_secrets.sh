@@ -92,20 +92,23 @@ generate_jwt_secret() {
 
 # Function to generate a database password
 generate_db_password() {
-    # Generate 24-character password with mixed case, numbers, and safe special chars
-    LC_ALL=C tr -dc 'A-Za-z0-9!@#$%^&*()_+-=' < /dev/urandom | head -c 24
+    # Generate 24-character password with alphanumeric only (URL-safe)
+    # Avoids special characters that need URL encoding: / @ : ? # [ ] & = + $ , ; %
+    LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24
 }
 
 # Function to generate CSRF token secret
 generate_csrf_secret() {
     # Generate 32 bytes (256 bits) for CSRF protection
-    openssl rand -base64 32 | tr -d '\n'
+    # Use base64url encoding (URL-safe) by replacing + with - and / with _
+    openssl rand -base64 32 | tr -d '\n' | tr '+/' '-_' | tr -d '='
 }
 
 # Function to generate session signing secret
 generate_session_secret() {
     # Generate 32 bytes (256 bits) for session signing
-    openssl rand -base64 32 | tr -d '\n'
+    # Use base64url encoding (URL-safe) by replacing + with - and / with _
+    openssl rand -base64 32 | tr -d '\n' | tr '+/' '-_' | tr -d '='
 }
 
 # Function to generate backup encryption password
@@ -117,7 +120,8 @@ generate_backup_password() {
 # Function to generate OIDC client secret
 generate_oidc_secret() {
     # Generate 48-character secret for OIDC providers
-    openssl rand -base64 48 | tr -d '\n'
+    # Use base64url encoding (URL-safe) by replacing + with - and / with _
+    openssl rand -base64 48 | tr -d '\n' | tr '+/' '-_' | tr -d '='
 }
 
 # ============================================================================

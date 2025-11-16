@@ -9,127 +9,100 @@ from pathlib import Path
 
 
 def copy_infrastructure():
-    """Copy infrastructure code from template's src/ to the generated project."""
-    project_root = Path(".").absolute()
+    """Copy infrastructure files from bundled _infrastructure directory."""
+    project_root = Path.cwd()
     package_name = "{{cookiecutter.package_name}}"
     project_slug = "{{cookiecutter.project_slug}}"
-    template_path_str = "{{cookiecutter._template}}"
+    infra_dir = project_root / "_infrastructure"
 
-    print("🔧 Merging infrastructure with business logic...")
-    print(f"📁 Template path: {template_path_str}")
-    print(f"📁 Generated project: {project_root}")
+    print("🔧 Copying infrastructure files to project root...")
+    print(f"📁 Project directory: {project_root}")
     print(f"📁 Package name: {package_name}")
 
-    # DEBUG: Print all environment variables and cwd
-    print(f"📁 Current working directory: {os.getcwd()}")
-    print(f"📁 Environment variables:")
-    for key, value in sorted(os.environ.items()):
-        if "COOKIE" in key.upper() or "TEMPLATE" in key.upper() or "CRUFT" in key.upper():
-            print(f"     {key} = {value}")
-
-    # CRITICAL INSIGHT: We need to find where cookiecutter stores the template location
-    # Try multiple approaches to find the template directory
-    
-    src_dir = None
-    search_paths = []
-    template_dir = None    # Strategy 1: Look in current working directory (the template directory)
-    # This is the most reliable method for both local and remote templates
-    potential_src = template_dir / "src"
-    if potential_src.exists() and potential_src.is_dir():
-        search_paths.append(potential_src)
-        print(f"   ✅ Found src/ in template directory: {potential_src}")
-
-    # Strategy 2: Check if this is a local template (direct path fallback)
-    if not template_path_str.startswith(("git@", "https://", "http://")):
-        local_template = Path(template_path_str).resolve()
-        if local_template.exists() and local_template != template_dir:
-            potential_src = local_template / "src"
-            if potential_src.exists():
-                search_paths.append(potential_src)
-                print(f"   ✅ Found src/ in local template path: {potential_src}")
-
-    print(f"🔍 Searching for template src directory...")
-    print(f"   Found {len(search_paths)} potential locations")    # Validate each potential src directory
-    for i, potential_src in enumerate(search_paths):
-        print(f"   [{i + 1}] Checking: {potential_src}")
-
-        if not potential_src.exists() or not potential_src.is_dir():
-            print("       ❌ Not a directory")
-            continue
-
-        # Verify this looks like our template by checking for required structure
-        # Check for new src/app/ structure first
-        app_dir = potential_src / "app"
-        required_dirs = ["api", "core", "runtime"]
-        missing_dirs = [d for d in required_dirs if not (app_dir / d).exists()]
-
-        if not missing_dirs:
-            print("       ✅ Found new src/app/ structure")
-            # Keep the src directory as our source to preserve folder structure
-            # potential_src stays as the src directory
-        else:
-            print(f"       ❌ Missing required directories in app/: {missing_dirs}")
-            continue
-
-        # Additional validation: check for key files
-        key_files = [
-            "app/api/http/app.py",
-            "app/runtime/context.py",
-            "app/entities/__init__.py",
-        ]
-
-        missing_files = [f for f in key_files if not (potential_src / f).exists()]
-
-        if missing_files:
-            print(f"       ❌ Missing key files: {missing_files}")
-            continue
-
-        print("       ✅ Valid template src directory found!")
-        src_dir = potential_src
-        break
-
-    if src_dir is None:
-        print("❌ Infrastructure source directory not found!")
-        print(
-            "❌ This means the generated project will be missing core infrastructure."
-        )
-        print("❌ The project may not work correctly without manual setup.")
-        print("⚠️  Possible solutions:")
-        print("   1. Use a local template: cruft create /path/to/local/template")
-        print("   2. Manual setup may be required")
-        print("   3. Check cookiecutter/cruft version compatibility")
-        print("   4. Ensure the template repository has the correct structure")
+    # Check if bundled infrastructure exists
+    if not infra_dir.exists():
+        print("❌ Bundled infrastructure directory not found!")
+        print("❌ This means the template was not properly synced.")
+        print("❌ Template maintainers: Please run ./scripts/sync_to_template.sh")
         return False
 
-    # Copy all infrastructure code to the package
-    package_dir = project_root / package_name
-    package_dir.mkdir(exist_ok=True)
+    print(f"📦 Found bundled infrastructure at: {infra_dir}")
 
-    for item in src_dir.iterdir():
-        target = package_dir / item.name
-        if item.is_dir():
+    # Items to copy from _infrastructure to project root (directories and non-config files)
+    directory_items = ["k8s", "infra", "examples", "docs", "tests"]
+    other_files = [
+        "docker-compose.dev.yml",
+        "docker-compose.prod.yml",
+        "Dockerfile",
+        "dev.sh",
+    ]
+
+    copied_count = 0
+    
+    # Copy directories
+    for item_name in directory_items:
+        source = infra_dir / item_name
+        target = project_root / item_name
+
+        if not source.exists():
+            print(f"⚠️  Skipping {item_name} (not found in bundled infrastructure)")
+            continue
+
+        try:
+            print(f"📁 Copying {item_name}/")
             if target.exists():
-                # Merge directories (business logic takes precedence)
-                merge_directories(item, target)
-            else:
-                # Copy new directory
-                shutil.copytree(item, target)
-        else:
-            if not target.exists():  # Don't overwrite business files
-                shutil.copy2(item, target)
+                shutil.rmtree(target)
+            shutil.copytree(source, target)
+            copied_count += 1
+        except Exception as e:
+            print(f"❌ Failed to copy {item_name}: {e}")
+    
+    # Copy src directory to package_name
+    src_source = infra_dir / "src"
+    if src_source.exists():
+        try:
+            target = project_root / package_name
+            print(f"📁 Copying src/ → {package_name}/")
+            if target.exists():
+                shutil.rmtree(target)
+            shutil.copytree(src_source, target)
+            copied_count += 1
+            
+            # Fix imports in the package directory
+            fix_imports_in_directory(target, package_name)
+            print(f"✅ Fixed imports in {package_name}/")
+        except Exception as e:
+            print(f"❌ Failed to copy src: {e}")
+    
+    # Copy other files (non-config)
+    for item_name in other_files:
+        source = infra_dir / item_name
+        target = project_root / item_name
 
-    # Fix imports in the copied files
-    fix_imports_in_directory(package_dir, package_name)
+        if not source.exists():
+            continue
 
-    print("✅ Infrastructure and business logic merged successfully!")
+        try:
+            print(f"📄 Copying {item_name}")
+            if target.exists():
+                target.unlink()
+            shutil.copy2(source, target)
+            copied_count += 1
+        except Exception as e:
+            print(f"❌ Failed to copy {item_name}: {e}")
 
-    # Copy and process configuration files from source
-    # Get template path from the src directory we found
-    template_root = src_dir.parent if src_dir else None
-    if template_root:
-        copy_config_files(template_root, project_root, package_name, project_slug)
-    else:
-        print("⚠️  Warning: Could not locate template root for config file copying")
+    print(f"✅ Copied {copied_count} infrastructure items")
+
+    # Process configuration files with template variables (before cleaning up infra_dir)
+    copy_config_files(infra_dir, project_root, package_name, project_slug)
+
+    # Clean up the bundled infrastructure directory
+    print("🧹 Cleaning up bundled infrastructure...")
+    try:
+        shutil.rmtree(infra_dir)
+        print("✅ Removed _infrastructure/ directory")
+    except Exception as e:
+        print(f"⚠️  Warning: Could not remove _infrastructure/: {e}")
 
     return True
 
@@ -370,8 +343,6 @@ def remove_conditional_files():
 
 def setup_cruft_tracking():
     """Set up Cruft tracking with the current template commit."""
-    template_url = "{{cookiecutter._template}}"
-
     # Try to get the current git commit SHA from the template
     try:
         # This assumes the template is in a git repository
@@ -427,7 +398,6 @@ def setup_git_repository():
 
 def create_virtual_environment():
     """Create Python virtual environment and install dependencies."""
-    project_slug = "{{cookiecutter.project_slug}}"
     python_version = "{{cookiecutter.python_version}}"
 
     print(f"🐍 Setting up Python {python_version} environment...")
@@ -626,7 +596,7 @@ def print_next_steps():
 
     print(f"\n📁 Project location: ./{project_slug}")
 
-    print(f"\n🚀 Next steps:")
+    print("\n🚀 Next steps:")
     print(f"   1. cd {project_slug}")
     print("   2. Copy .env.example to .env and configure your settings")
     print("   3. Run 'uv run init-db' to initialize the database")
@@ -643,17 +613,17 @@ def print_next_steps():
         print("   - Update REDIS_URL in your .env file")
         print("   - Without Redis, the app will use in-memory rate limiting")
 
-    print(f"\n📚 Development commands:")
+    print("\n📚 Development commands:")
     print("   - Run tests: pytest")
     print("   - Type checking: mypy .")
     print("   - Linting: ruff check .")
     print("   - Format code: ruff format .")
 
-    print(f"\n🏗️  Add your domain logic:")
+    print("\n🏗️  Add your domain logic:")
     print(f"   - Domain entities: {package_name}/app/entities/service/__init__.py")
     print(f"   - Business services: {package_name}/app/service/__init__.py")
     print(f"   - API routes: {package_name}/app/api/routers/business.py")
-    print(f"   - Tests: tests/")
+    print("   - Tests: tests/")
 
     print("\n📖 Template updates:")
     print("   - Check for updates: cruft check")
@@ -667,36 +637,47 @@ def print_next_steps():
 def main():
     """Run post-generation setup."""
     print("🔧 Setting up your new project...")
+    print("🎯 MARKER: Using updated post_gen_project.py file!")
 
     try:
         # Copy infrastructure and merge with business logic
+        print("📦 Step 1: Copying infrastructure...")
         if not copy_infrastructure():
             print("❌ Failed to copy infrastructure")
             sys.exit(1)
 
         # Update main app to include business routes
+        print("📝 Step 2: Updating main app...")
         update_main_app()
 
         # Clean up conditional files
+        print("🧹 Step 3: Cleaning up conditional files...")
         remove_conditional_files()
 
         # Set up Cruft tracking
+        print("📌 Step 4: Setting up Cruft tracking...")
         setup_cruft_tracking()
 
         # Set up git repository
+        print("🎯 Step 5: Setting up git repository...")
         setup_git_repository()
 
         # Set up Python environment
+        print("🐍 Step 6: Setting up Python environment...")
         create_virtual_environment()
 
         # Copy development environment configuration
+        print("🔧 Step 7: Copying development environment...")
         copy_development_environment()
 
         # Print next steps
         print_next_steps()
 
     except Exception as e:
+        import traceback
         print(f"❌ Setup error: {e}")
+        print("Traceback:")
+        traceback.print_exc()
         print("The project was created but some setup steps failed.")
         print("Check the README.md for manual setup instructions.")
         sys.exit(1)

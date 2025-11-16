@@ -71,6 +71,49 @@ class BaseDeployer(ABC):
             check=check,
         )
 
+    def check_env_file(self) -> bool:
+        """Check if .env file exists and provide helpful guidance if not.
+
+        Returns:
+            True if .env file exists, False otherwise
+        """
+        env_file = self.project_root / ".env"
+        env_example = self.project_root / ".env.example"
+
+        if not env_file.exists():
+            self.error("❌ .env file not found!")
+            self.console.print()
+            self.console.print("[bold yellow]📝 Setup Required:[/bold yellow]")
+            self.console.print()
+
+            if env_example.exists():
+                self.console.print(
+                    "  1. Copy the example environment file:\n"
+                    f"     [cyan]cp .env.example .env[/cyan]\n"
+                )
+            else:
+                self.console.print(
+                    "  1. Create a .env file in the project root:\n"
+                    f"     [cyan]touch .env[/cyan]\n"
+                )
+
+            self.console.print(
+                "  2. Edit .env and configure the following:\n"
+                "     • Database credentials (if using PostgreSQL)\n"
+                "     • Redis settings (if using Redis)\n"
+                "     • OIDC provider secrets (Keycloak/Google/Microsoft)\n"
+                "     • Session signing secrets\n"
+                "     • CSRF signing secret\n"
+            )
+            self.console.print()
+            self.console.print(
+                "[dim]💡 Tip: For development, you can use the defaults from .env.example[/dim]"
+            )
+            self.console.print()
+            return False
+
+        return True
+
     def create_progress(self, transient: bool = True) -> Progress:
         """Create a progress indicator.
 

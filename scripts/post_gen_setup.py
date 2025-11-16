@@ -266,12 +266,13 @@ def main():
         print("\n✅ Post-generation setup complete!")
         print(f"\n📁 Your project is ready at: {project_dir}")
         print("\n🚀 Next steps:")
-        print(f"   1. cd {project_dir.name}")
+        print(f"   1. cd {project_dir}")
         print("   2. Copy .env.example to .env and configure your environment")
         print("   3. Install dependencies: uv sync")
-        print("   4. Deploy (auto-initializes database):")
-        print(f"      • Development: uv run {package_name}-cli dev start-server")
-        print(f"      • Kubernetes:  uv run {package_name}-cli deploy up k8s")
+        print("   4. Deploy:")
+        print(f"      • docker compose (Development): uv run {package_name}-cli deploy up dev")
+        print(f"      • docker compose (Production):  uv run {package_name}-cli deploy up prod")
+        print(f"      • Kubernetes (Production):  uv run {package_name}-cli deploy up k8s")
         print(f"\n💡 View all CLI commands: uv run {package_name}-cli --help")
 
     except Exception as e:

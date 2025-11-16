@@ -276,6 +276,15 @@ async def startup() -> None:
     # Initialize application-wide dependencies here
     # e.g. database connections, caches, etc.
 
+    logger.info("Initializing database schema")
+    try:
+        from src.app.runtime.init_db import init_db
+        init_db()
+        logger.info("Database schema initialized successfully")
+    except Exception as e:
+        logger.exception("Failed to initialize database schema")
+        raise
+
     logger.info("Starting application dependencies initialization")
     try:
         jwks_cache = JWKSCacheInMemory()

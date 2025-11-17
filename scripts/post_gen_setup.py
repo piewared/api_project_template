@@ -195,9 +195,16 @@ def fix_worker_deployment(project_dir: Path, package_name: str):
             content
         )
         
+        # Replace '/app/src/worker/health_check.py' with '/app/{package_name}/worker/health_check.py'
+        content = re.sub(
+            r'/app/src/worker/',
+            rf'/app/{package_name}/worker/',
+            content
+        )
+        
         if content != original_content:
             worker_yaml.write_text(content)
-            print(f"✅ Fixed worker deployment to use {package_name}.worker.main")
+            print(f"✅ Fixed worker deployment to use {package_name}.worker paths")
     except Exception as e:
         print(f"⚠️  Error processing worker deployment: {e}")
 

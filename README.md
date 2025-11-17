@@ -7,17 +7,31 @@
 ![Tests](https://img.shields.io/badge/tests-pytest-success)
 ![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
 
-Build scalable, production-ready REST APIs with **FastAPI**, a **BFF-style OIDC session layer**, and a full **Docker dev stack** (PostgreSQL, Redis, Temporal, Keycloak for dev/test).
+Build your next SaaS backend, internal API gateway, or microservice using a pre-configured, production-oriented 
+FastAPI template powered by FastAPI, SQLAlchemy, Redis, Temporal, and PostgreSQL. The stack includes practical 
+starting points for authentication, security, and deployment to both local and cloud environments.
 
-A **project CLI** lets you start/stop environments, deploy to Docker Compose or Kubernetes, and generate CRUD entities from the domain model.
+**api-forge** provides a consistent project architecture, optional authentication patterns, and a Dockerized development environment that closely mirrors production—helping you start new projects with a solid foundation.
 
-> In **production**, use a managed IdP (Identity Provider) such as Azure AD, Okta, Auth0, Google, AWS Cognito, etc.
+Manage development, testing, and deployment through a unified project CLI. Start the full dev stack, run tests, scaffold new entities, or deploy to Docker Compose and Kubernetes environments—all with consistent, predictable commands.
+
+Designed for teams building production-ready FastAPI services with modern Python tooling.
+
+### **Included Stack**
+
+* **FastAPI** – high-performance Python web framework
+* **SQLAlchemy** and **SQLModel** – ORM and typed models for data persistence
+* **Pydantic** – data validation and type safety
+* **PostgreSQL** – production-ready relational database
+* **Redis** – caching, sessions, and rate limiting
+* **Temporal** – background workflows and reliable task orchestration
+* **Docker** – containerized development and deployment
+* **Kubernetes** – scalable cloud deployment support
 
 ---
 
 ## Table of Contents
 
-- [Overview](#overview)
 - [Features at a Glance](#features-at-a-glance)
 - [Who Is This For?](#who-is-this-for)
 - [Requirements](#requirements)
@@ -29,18 +43,6 @@ A **project CLI** lets you start/stop environments, deploy to Docker Compose or 
 - [More Documentation](#more-documentation)
 - [License](#license)
 - [Support](#support)
-
----
-
-## Overview
-
-This template gives you a batteries-included starting point for FastAPI services:
-
-- OIDC-based **backend-for-frontend (BFF)** with secure session cookies
-- Clean, layered architecture (entities → repositories → services → API)
-- A Dockerized **dev environment** that mirrors production
-- A unified **CLI** to run dev/prod/k8s deployments
-- First-class **testing**, typing, and linting
 
 ---
 
@@ -64,6 +66,8 @@ This template gives you a batteries-included starting point for FastAPI services
 - Pre-seeded Keycloak realm/users for local auth flows
 - Structured logging with request tracing
 - Entity code generation: create new CRUD entities with one command
+
+> In **production**, use a managed IdP (Identity Provider) such as Azure AD, Okta, Auth0, Google, AWS Cognito, etc.
 
 ### Architecture & Quality
 

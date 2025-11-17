@@ -79,6 +79,11 @@ Visit http://localhost:8000/docs for interactive API documentation.
 - **[Kubernetes Deployment](./fastapi-kubernetes-deployment.md)** - Deploy to production Kubernetes
 - **[Docker Compose Production](./fastapi-production-deployment-docker-compose.md)** - Deploy with Docker Compose, TLS, and mTLS
 
+### Client Examples
+
+- **[Python OIDC Client](./examples-python-oidc-client.md)** - Build Python clients that authenticate with your API
+- **[JavaScript OIDC Client](./examples-javascript-oidc-client.md)** - Build web applications that integrate with your API
+
 ## Project Structure
 
 ```

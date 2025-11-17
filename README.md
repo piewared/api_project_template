@@ -110,7 +110,7 @@ It may not be ideal if:
 ```bash
 # Using uv (recommended - faster)
 uv tool install copier
-copier copy gh:piewared/api-forge your-project-name
+copier copy --trust gh:piewared/api-forge your-project-name
 
 # Or using pip
 pip install -U copier
@@ -118,6 +118,8 @@ copier copy https://github.com/piewared/api-forge your-project-name
 
 cd your-project-name
 ````
+
+> ⚠️ Security note: Copier requires the use of `--trust` for templates that do more than simple file copying. The template is fully open source, so you can review the repository (for example, the `copier.yml` file and any tasks/hooks) before running the copier command.
 
 ### 2. Install dependencies & project
 
@@ -382,5 +384,6 @@ MIT — see [`LICENSE`](LICENSE).
 **Quick create**
 
 ```bash
-copier copy gh:piewared/api-forge your-project-name
+copier copy --trust gh:piewared/api-forge your-project-name
 ```
+> ⚠️ Security note: Copier requires the use of `--trust` for templates that do more than simple file copying. The template is fully open source, so you can review the repository (for example, the `copier.yml` file and any tasks/hooks) before running the copier command.

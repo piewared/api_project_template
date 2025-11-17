@@ -803,7 +803,7 @@ uv run bandit -r src/
 
 **Configuration Checklist**:
 - [ ] Set `APP_ENVIRONMENT=production`
-- [ ] Generate secrets: `./infra/secrets/generate_secrets.sh --generate-pki`
+- [ ] Generate secrets: `./infra/secrets/generate_secrets.sh`
 - [ ] Configure production OIDC provider
 - [ ] Set explicit CORS origins (no wildcards)
 - [ ] Enable HTTPS with valid TLS certificates

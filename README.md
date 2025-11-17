@@ -355,15 +355,31 @@ Deleting volumes in `dev_env/` will wipe local data (e.g. `dev_env/postgres-data
 
 ---
 
-## More Documentation
+## 📚 Documentation
 
-* **Dev environment**: `dev_env/README.md`
-* **Keycloak (dev)**: `dev_env/keycloak.md`
-* **PostgreSQL**: `dev_env/postgres.md`
-* **Redis**: `dev_env/redis.md`
-* **Temporal**: `dev_env/temporal.md`
-* **Client examples**: `docs/clients/`
-* **Troubleshooting**: `docs/troubleshooting.md`
+Comprehensive guides for using and deploying API Forge:
+
+### Getting Started
+- **[Complete Documentation Guide](./docs/index.md)** - Start here for a full overview, quick start, and project structure
+
+### Core Concepts
+- **[Authentication & OIDC](./docs/fastapi-auth-oidc-bff.md)** - Session-based authentication with BFF pattern, OIDC providers (Google, Microsoft, Keycloak), login flows, and frontend integration
+- **[Sessions & Cookies](./docs/fastapi-sessions-and-cookies.md)** - HttpOnly cookies, CSRF protection, SameSite attributes, client fingerprinting, and session rotation
+- **[Clean Architecture](./docs/fastapi-clean-architecture-overview.md)** - Entity-Repository-Service-API layering, separation of concerns, dependency injection, and testing strategies
+
+### Development
+- **[Docker Development Environment](./docs/fastapi-docker-dev-environment.md)** - Local development with PostgreSQL, Redis, Temporal, and Keycloak in Docker Compose
+- **[Temporal Workflows](./docs/fastapi-temporal-workflows.md)** - Async background tasks, workflow design, activities, worker setup, and monitoring
+- **[Testing Strategy](./docs/fastapi-testing-strategy.md)** - Unit tests, integration tests, fixtures, pytest configuration, and CI/CD integration
+
+### Deployment
+- **[Kubernetes Deployment](./docs/fastapi-kubernetes-deployment.md)** - Production K8s deployment with secrets, ConfigMaps, health checks, HPA, and monitoring
+- **[Docker Compose Production](./docs/fastapi-production-deployment-docker-compose.md)** - Production deployment with TLS/mTLS, secret management, and security hardening
+
+### Additional Resources
+- **Dev environment**: `dev_env/README.md`
+- **Client examples**: `docs/clients/`
+- **Troubleshooting**: `docs/troubleshooting.md`
 
 ---
 

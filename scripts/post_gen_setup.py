@@ -202,6 +202,30 @@ def fix_worker_deployment(project_dir: Path, package_name: str):
         print(f"⚠️  Error processing worker deployment: {e}")
 
 
+def fix_worker_registry(project_dir: Path, package_name: str):
+    """Fix worker registry.py to use the actual package name instead of 'src'."""
+    try:
+        registry_file = project_dir / package_name / "app" / "worker" / "registry.py"
+        if not registry_file.exists():
+            return
+        
+        content = registry_file.read_text()
+        original_content = content
+        
+        # Replace hardcoded "src.app.worker.activities" and "src.app.worker.workflows"
+        content = re.sub(
+            r'"src\.app\.worker\.(activities|workflows)"',
+            rf'"{package_name}.app.worker.\1"',
+            content
+        )
+        
+        if content != original_content:
+            registry_file.write_text(content)
+            print(f"✅ Fixed worker registry to use {package_name}.app.worker paths")
+    except Exception as e:
+        print(f"⚠️  Error processing worker registry: {e}")
+
+
 def should_copy_file(file_path: Path, base_dir: Path, gitignore_patterns: list) -> bool:
     """Check if a file should be copied based on gitignore patterns."""
     import fnmatch
@@ -340,7 +364,10 @@ def main():
         # 6. Fix worker deployment to use package name
         fix_worker_deployment(project_dir, package_name)
 
-        # 7. Update pyproject.toml
+        # 7. Fix worker registry autodiscovery paths
+        fix_worker_registry(project_dir, package_name)
+
+        # 8. Update pyproject.toml
         update_pyproject_toml(project_dir, answers)
 
         print("\n✅ Post-generation setup complete!")

@@ -178,6 +178,30 @@ def fix_dockerfile(project_dir: Path, package_name: str):
         print(f"⚠️  Error processing Dockerfile: {e}")
 
 
+def fix_worker_deployment(project_dir: Path, package_name: str):
+    """Fix worker deployment to use the actual package name instead of 'src'."""
+    try:
+        worker_yaml = project_dir / "k8s" / "base" / "deployments" / "worker.yaml"
+        if not worker_yaml.exists():
+            return
+        
+        content = worker_yaml.read_text()
+        original_content = content
+        
+        # Replace 'src.worker.main' with '{package_name}.worker.main'
+        content = re.sub(
+            r'"src\.worker\.main"',
+            rf'"{package_name}.worker.main"',
+            content
+        )
+        
+        if content != original_content:
+            worker_yaml.write_text(content)
+            print(f"✅ Fixed worker deployment to use {package_name}.worker.main")
+    except Exception as e:
+        print(f"⚠️  Error processing worker deployment: {e}")
+
+
 def should_copy_file(file_path: Path, base_dir: Path, gitignore_patterns: list) -> bool:
     """Check if a file should be copied based on gitignore patterns."""
     import fnmatch
@@ -313,7 +337,10 @@ def main():
         # 5. Fix Dockerfile to use package name
         fix_dockerfile(project_dir, package_name)
 
-        # 6. Update pyproject.toml
+        # 6. Fix worker deployment to use package name
+        fix_worker_deployment(project_dir, package_name)
+
+        # 7. Update pyproject.toml
         update_pyproject_toml(project_dir, answers)
 
         print("\n✅ Post-generation setup complete!")

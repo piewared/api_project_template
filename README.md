@@ -7,11 +7,10 @@
 ![Tests](https://img.shields.io/badge/tests-pytest-success)
 ![Coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
 
-Build your next SaaS backend, internal API gateway, or microservice using a pre-configured, production-oriented **FastAPI template** powered by **FastAPI**, **SQLAlchemy**, **Redis**, **Temporal**, and **PostgreSQL**. The stack provides practical starting points for authentication, security, and deployment to both local and cloud environments.
+A batteries-included FastAPI template for building scalable, production-oriented Python APIs. It features PostgreSQL, SQLAlchemy, SQLModel, Pydantic, Redis, and Temporal, along with optional OIDC authentication. A Dockerized development environment and a unified project CLI help streamline local development and cloud deployment.
 
-**api-forge** offers a consistent architecture, optional OIDC-based authentication patterns, and a Dockerized development environment that closely mirrors production—helping you start new projects quickly and confidently.
+Build your next SaaS backend, internal API gateway, or microservice with a pre-configured FastAPI stack and practical starting points for authentication, security, and modern deployment workflows.
 
-A **unified project CLI** streamlines development, testing, and deployment. Start the full dev stack, run tests, scaffold new entities, or deploy to **Docker Compose** and **Kubernetes** environments—all with consistent, predictable commands.
 
 ### **Included Stack**
 

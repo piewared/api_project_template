@@ -69,6 +69,9 @@ spec:
             # Override/add specific values
             - name: TZ
               value: UTC
+            # Point to mounted cert directory for permission checks
+            - name: CERT_DIR
+              value: /etc/postgresql/ssl
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -94,6 +97,15 @@ spec:
             - name: verify-script
               mountPath: /scripts
               readOnly: true
+            # Mount TLS certificates for permission verification
+            - name: postgres-tls-cert
+              mountPath: /etc/postgresql/ssl/server.crt
+              subPath: server.crt
+              readOnly: true
+            - name: postgres-tls-key
+              mountPath: /etc/postgresql/ssl/server.key
+              subPath: server.key
+              readOnly: true
       volumes:
         - name: postgres-app-user-pw
           secret:
@@ -111,3 +123,19 @@ spec:
           configMap:
             name: postgres-verifier-config
             defaultMode: 0755
+        # Mount TLS certificates from secret (match postgres deployment permissions)
+        - name: postgres-tls-cert
+          secret:
+            secretName: postgres-tls
+            items:
+              - key: server.crt
+                path: server.crt
+                mode: 0644
+        - name: postgres-tls-key
+          secret:
+            secretName: postgres-tls
+            defaultMode: 0400
+            items:
+              - key: server.key
+                path: server.key
+                mode: 0400

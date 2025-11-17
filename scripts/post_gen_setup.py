@@ -34,7 +34,7 @@ def update_pyproject_toml(project_dir: Path, answers: dict):
         'api-forge-init-db = "src.app.runtime.init_db:init_db"':
             f'{answers["project_slug"]}-init-db = "{answers["package_name"]}.app.runtime.init_db:init_db"',
         'api-forge-cli = "src.cli:app"':
-            f'{answers["project_slug"]}-cli = "{answers["package_name"]}.cli.__main__:app"',
+            f'api-forge-cli = "{answers["package_name"]}.cli.__main__:app"',
         'packages = ["src"]':
             f'packages = ["{answers["package_name"]}"]',
         'target-version = "py313"':
@@ -384,10 +384,10 @@ def main():
         print("   2. cp .env.example .env and configure your environment")
         print("   3. Install dependencies: uv sync")
         print("   4. Deploy:")
-        print(f"      • docker compose (Development): uv run {package_name}-cli deploy up dev")
-        print(f"      • docker compose (Production):  uv run {package_name}-cli deploy up prod")
-        print(f"      • Kubernetes (Production):  uv run {package_name}-cli deploy up k8s")
-        print(f"\n💡 View all CLI commands: uv run {package_name}-cli --help")
+        print("      • docker compose (Development): uv run api-forge-cli deploy up dev")
+        print("      • docker compose (Production):  uv run api-forge-cli deploy up prod")
+        print("      • Kubernetes (Production):  uv run api-forge-cli deploy up k8s")
+        print("\n💡 View all CLI commands: uv run api-forge-cli --help")
 
     except Exception as e:
         print(f"\n❌ Setup error: {e}")
